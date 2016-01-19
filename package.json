@@ -25,7 +25,8 @@
   },
   "homepage": "https://github.com/dial-once/node-rabbit-layer#readme",
   "dependencies": {
+    "amqplib": "0.4.0",
+    "winston": "2.1.1"
   },
-  "devDependencies": {
-  }
+  "devDependencies": {}
 }
