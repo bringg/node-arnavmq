@@ -1,0 +1,31 @@
+{
+  "name": "rabbit-layer",
+  "version": "0.0.0",
+  "description": "RabbitLayer is a rabbitmq wrapper",
+  "keywords": [
+    "rabbitmq",
+    "broker",
+    "amqp"
+  ],
+  "main": "index.js",
+  "scripts": {
+    "test": "jshint . && mocha --recursive test",
+    "start": "node index.js",
+    "cover": "istanbul cover _mocha -- --recursive test",
+    "doc": "./node_modules/.bin/jsdoc -d ./docs --readme README.md --package package.json --template node_modules/minami lib/*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dial-once/node-rabbit-layer.git"
+  },
+  "author": "khatal.yacine@gmail.com",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/dial-once/node-rabbit-layer/issues"
+  },
+  "homepage": "https://github.com/dial-once/node-rabbit-layer#readme",
+  "dependencies": {
+  },
+  "devDependencies": {
+  }
+}
