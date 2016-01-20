@@ -8,9 +8,9 @@ var enableDisableLog = function (_isLogEnabled) {
   }
 };
 
-var log = function (_type, _message, _metadata) {
+var log = function (_type) {
   if (isLogEnabled) {
-    winston[_type](_message, _metadata || '');
+    winston[_type].apply(null, Array.prototype.slice.call(arguments, 1));
   }
 };
 
