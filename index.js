@@ -2,7 +2,7 @@
 var defaultConfig = {
   isLogEnabled: true,
   amqpUrl: process.env.AMQP_URL || 'amqp://localhost',
-  prefetch: 1,
+  prefetch: process.env.AMQP_PREFETCH || 1,
   isRequeueEnabled: true
 };
 
