@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Home - Documentation</title>
+
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="https://code.ionicframework.com/ionicons/2.0.1/css/ionicons.min.css">
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Namespaces</h3><ul><li><a href="Consumer.html">Consumer</a><ul class='methods'><li data-type='method'><a href="Consumer.html#.connect">connect</a></li><li data-type='method'><a href="Consumer.html#.consume">consume</a></li><li data-type='method'><a href="Consumer.html#.createChannel">createChannel</a></li><li data-type='method'><a href="Consumer.html#.disconnect">disconnect</a></li><li data-type='method'><a href="Consumer.html#.reconnect">reconnect</a></li><li data-type='method'><a href="Consumer.html#.recreateChannel">recreateChannel</a></li></ul></li><li><a href="Producer.html">Producer</a><ul class='methods'><li data-type='method'><a href="Producer.html#.connect">connect</a></li><li data-type='method'><a href="Producer.html#.createChannel">createChannel</a></li><li data-type='method'><a href="Producer.html#.disconnect">disconnect</a></li><li data-type='method'><a href="Producer.html#.produce">produce</a></li><li data-type='method'><a href="Producer.html#.reconnect">reconnect</a></li><li data-type='method'><a href="Producer.html#.recreateChannel">recreateChannel</a></li></ul></li></ul>
+</nav>
+
+<div id="main">
+    
+
+    
+
+
+
+    
+
+
+
+
+
+
+
+
+
+    
+
+
+    <section class="readme">
+        <article><h1>BunnyMq</h1><p>BunnyMq is a RabbitMq wrapper build on top of <a href="https://github.com/squaremo/amqp.node">amqp.node</a> to ease process of sending/receiving messages.</p>
+<p><img src="./medias/bunny.gif" alt="mongoat gif"></p>
+<h2>Features</h2><ul>
+<li>Consume message from named queue</li>
+<li>Produce message to named queue</li>
+<li>Publish/Subscribe (comming soon)</li>
+<li>Routing keys (comming soon)</li>
+</ul>
+<h2>Installation</h2><pre class="prettyprint source"><code>npm install bunnymq</code></pre><h2>Basic usage</h2><h3>Consumer</h3><p>Consumer also called subscriber, is responsible of handling message from the queue with which is binded.</p>
+<pre class="prettyprint source lang-javascript"><code>var consumer = require('bunnymq')().consumer;
+
+consumer.connect('amqp://localhost')
+.then(function (_channel) {
+    consumer.consume('queueName', function (_msg) {
+        // do something with _msg, the mgs will be acknowledged
+
+        // if you throw an error, the msg will be requeued
+        // ex: throw new Error('any kind of error');
+    }); 
+});</code></pre><p>NB: you can use consumer.consume without making a connect, it will be called internally:</p>
+<pre class="prettyprint source lang-javascript"><code>var consumer = require('bunnymq')().consumer;
+
+consumer.consume('queueName', function (_msg) {
+});</code></pre><h3>Producer</h3><p>Producer also called publisher, is responsible of sending message to the queue with which is binded.</p>
+<pre class="prettyprint source lang-javascript"><code>var producer = require('bunnymq')().producer;
+
+producer.connect('amqp://localhost')
+.then(function (_channel) {
+    producer.produce('queueName', message); // message can be of any type 
+});</code></pre><p>NB: you can use producer.produce without making a connect, it will be called internally:</p>
+<pre class="prettyprint source lang-javascript"><code>var consumer = require('bunnymq')().consumer;
+
+consumer.consume('queueName', function (_msg) {
+});</code></pre><h2>Resources</h2><ul>
+<li>http://www.rabbitmq.com/getstarted.html</li>
+<li>https://www.cloudamqp.com/blog/2015-05-18-part1-rabbitmq-for-beginners-what-is-rabbitmq.html</li>
+<li>http://spring.io/blog/2010/06/14/understanding-amqp-the-protocol-used-by-rabbitmq/</li>
+</ul>
+<h2>Tests</h2><ol>
+<li>Ensure that you have an instance of a rabbitMq server running locally</li>
+<li>Run tests <code>npm test</code></li>
+</ol>
+<p>Or to show up code coverage <code>npm run cover</code>
+it will generate <code>./coverage</code> folder</p>
+<h2>Contribution</h2><p>Please read our <a href="CONTRIBUTING.md">Contributing Guidlines</a> before submitting a pull request or an issue !</p>
+<h2>License</h2><p>The MIT License <a href="LICENSE">MIT</a></p>
+<p>Copyright (c) 2015 Dial Once</p></article>
+    </section>
+
+
+
+
+
+
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.3.3</a> on Thu Jan 21 2016 23:26:12 GMT+0100 (CET) using the Minami theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/linenumber.js"></script>
+</body>
+</html>
