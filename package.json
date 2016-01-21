@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "assert": "1.3.0",
-    "minami": "^1.1.1",
+    "minami": "1.1.1",
     "node-uuid": "1.4.7"
   }
 }
