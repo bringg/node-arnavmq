@@ -9,9 +9,9 @@
   ],
   "main": "index.js",
   "scripts": {
-    "test": "jshint . && mocha --recursive test",
+    "test": "jshint . && mocha --recursive test --timeout=5000",
     "start": "node index.js",
-    "cover": "istanbul cover _mocha -- --recursive test",
+    "cover": "jshint . && istanbul cover _mocha -- --recursive test --timeout=5000",
     "doc": "./node_modules/.bin/jsdoc -d ./docs --readme README.md --package package.json --template node_modules/minami lib/*"
   },
   "repository": {
