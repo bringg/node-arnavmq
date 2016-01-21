@@ -1,4 +1,6 @@
-# BunnyMq  
+# BunnyMq
+BunnyMq is a RabbitMq wrapper build on top of [amqp.node](https://github.com/squaremo/amqp.node) to ease process of sending/receiving messages.
+
 ![mongoat gif](./medias/bunny.gif)
 
 ## Features
