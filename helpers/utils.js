@@ -1,7 +1,7 @@
 
 
 module.exports.isValidUrl = function(_url) {
-  if (_url && typeof _url === 'string' && _url.indexOf('amqp://') === 0) {
+  if (_url && typeof _url === 'string' && (_url.indexOf('amqp://') === 0 || _url.indexOf('amqps://') === 0)) {
     return true;
   }
 
