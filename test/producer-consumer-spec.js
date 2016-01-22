@@ -28,127 +28,124 @@ describe('Producer/Consumer msg delevering:', function() {
   });
 
   it('should be able to consume message sended by producer to queue [test-queue-0]', function (done) {
-    consumer.consume(fixtures.queues[0], function (_msg) {
-      assert(typeof _msg === 'string');
-      --letters;
-      if (!letters) return done();
-
-      return true;
-    })
-    .then(function (_queue) {
-      assert(_queue === fixtures.queues[0]);
-      assert(_queue !== fixtures.queues[1]);
-      assert(_queue !== fixtures.queues[2]);
+    producer.produce(fixtures.queues[0], { msg: uuid.v4() })
+    .then(function (response) {
+      assert(response === true);
+      ++letters;
     })
     .then(function () {
-      return producer.produce(fixtures.queues[0], { msg: uuid.v4() });
+      return consumer.consume(fixtures.queues[0], function (_msg) {
+        assert(typeof _msg === 'object');
+      });
     })
-    .then(function (_queue) {
-      ++letters;
-      assert(_queue === fixtures.queues[0]);
-      assert(_queue !== fixtures.queues[1]);
-      assert(_queue !== fixtures.queues[2]);
-    });
+    .then(function (response) {
+      assert(response === true);
+      --letters;
+    })
+    .then(done);
   });
 
   it('should not be able to consume message sended by producer to queue [test-queue-1]', function (done) {
-    consumer.consume(fixtures.queues[0], function (_msg) {
-      assert(typeof _msg === 'string');
-      --letters;
-      if (!letters) return done();
-
-      return true;
-    })
-    .then(function (_queue) {
-      assert(_queue === fixtures.queues[0]);
-      assert(_queue !== fixtures.queues[1]);
-      assert(_queue !== fixtures.queues[2]);
-    })
-    .then(function () {
-      return producer.produce(fixtures.queues[1], { msg: uuid.v4() });
-    })
-    .then(function (_queue) {
+    producer.produce(fixtures.queues[1], { msg: uuid.v4() })
+    .then(function (response) {
+      assert(response === true);
       ++letters;
-      assert(_queue !== fixtures.queues[0]);
-      assert(_queue === fixtures.queues[1]);
-      assert(_queue !== fixtures.queues[2]);
+      setTimeout(done, 2000);
     })
     .then(function () {
-      setTimeout(done, 2000);
-    });
+      return consumer.consume(fixtures.queues[0], function (_msg) {
+        assert(typeof _msg === 'object');
+      });
+    })
+    .then(function (response) {
+      assert(response === true);
+      --letters;
+    })
+    .then(done);
   });
 
   it('should be able to consume message sended by producer to queue [test-queue-1], and the message of the previous test case', function (done) {
-    consumer.consume(fixtures.queues[1], function (_msg) {
-      assert(typeof _msg === 'string');
-      --letters;
-      if (!letters) return done();
-
-      return true;
-    })
-    .then(function (_queue) {
-      assert(_queue !== fixtures.queues[0]);
-      assert(_queue === fixtures.queues[1]);
-      assert(_queue !== fixtures.queues[2]);
+    producer.produce(fixtures.queues[1], { msg: uuid.v4() })
+    .then(function (response) {
+      assert(response === true);
+      ++letters;
     })
     .then(function () {
-      return producer.produce(fixtures.queues[1], { msg: uuid.v4() });
+      /*jshint unused: false*/
+      return new Promise(function (resolve, reject) {
+        consumer.consume(fixtures.queues[1], function (_msg) {
+          assert(typeof _msg === 'object');
+          --letters;
+          if (!letters) return resolve(true);
+        });
+      });
     })
-    .then(function (_queue) {
-      ++letters;
-      assert(_queue !== fixtures.queues[0]);
-      assert(_queue === fixtures.queues[1]);
-      assert(_queue !== fixtures.queues[2]);
-    });
+    .then(function (response) {
+      assert(response === true);
+    })
+    .then(function () {
+      return consumer.disconnect();
+    })
+    .then(function () {
+      return producer.disconnect();
+    })
+    .then(done);
   });
 
   it('should be able to consume all message populated by producer to all queues [test-queue-0, test-queue-1, test-queue-2]', function (done) {
     producer.produce(fixtures.queues[2], { msg: uuid.v4() })
-    .then(function (_queue) {
+    .then(function (response) {
+      assert(response === true);
       ++letters;
-      assert(_queue !== fixtures.queues[0]);
-      assert(_queue !== fixtures.queues[1]);
-      assert(_queue === fixtures.queues[2]);
     })
     .then(function () {
       return producer.produce(fixtures.queues[1], { msg: uuid.v4() });
     })
-    .then(function (_queue) {
+    .then(function (response) {
+      assert(response === true);
       ++letters;
-      assert(_queue !== fixtures.queues[0]);
-      assert(_queue === fixtures.queues[1]);
-      assert(_queue !== fixtures.queues[2]);
     })
     .then(function () {
       return producer.produce(fixtures.queues[0], { msg: uuid.v4() });
     })
-    .then(function (_queue) {
+    .then(function (response) {
+      assert(response === true);
       ++letters;
-      assert(_queue === fixtures.queues[0]);
-      assert(_queue !== fixtures.queues[1]);
-      assert(_queue !== fixtures.queues[2]);
     })
     .then(function () {
       return consumer.consume(fixtures.queues[2], function (_msg) {
-        assert(typeof _msg === 'string');
-        --letters;
-        if (!letters) {
-          setTimeout(function () {
-            consumer.disconnect();
-            producer.disconnect();
-
-            done();
-          }, 1000);
-        }
-
-        return true;
+        assert(typeof _msg === 'object');
       });
     })
-    .then(function (_queue) {
-      assert(_queue !== fixtures.queues[0]);
-      assert(_queue !== fixtures.queues[1]);
-      assert(_queue === fixtures.queues[2]);
-    });
+    .then(function (response) {
+      assert(response === true);
+      --letters;
+    })
+    .then(function () {
+      return consumer.consume(fixtures.queues[1], function (_msg) {
+        assert(typeof _msg === 'object');
+      });
+    })
+    .then(function (response) {
+      assert(response === true);
+      --letters;
+    })
+    .then(function () {
+      return consumer.consume(fixtures.queues[0], function (_msg) {
+        assert(typeof _msg === 'object');
+      });
+    })
+    .then(function (response) {
+      assert(response === true);
+      --letters;
+    })
+    .then(function () {
+      return consumer.disconnect();
+    })
+    .then(function () {
+      return producer.disconnect();
+    })
+    .then(done);
   });
 });
 
@@ -172,37 +169,36 @@ describe('Producer/Consumer msg requeueing:', function () {
   it('should be able to consume message, but throw error so the message is requeued again on queue [test-queue-0]', function (done) {
     var attempt = 3;
 
-    consumer.consume(fixtures.queues[0], function (_msg) {
-      assert(typeof _msg === 'string');
-
-      --attempt;
-      if (!attempt) {
-        --letters;
-        setTimeout(function () {
-          consumer.disconnect();
-          producer.disconnect();
-
-          done();
-        }, 1000);
-
-        return true;
-      }
-
-      throw new Error('Any kind of error');
-    })
-    .then(function (_queue) {
-      assert(_queue === fixtures.queues[0]);
-      assert(_queue !== fixtures.queues[1]);
-      assert(_queue !== fixtures.queues[2]);
+    producer.produce(fixtures.queues[0], { msg: uuid.v4() })
+    .then(function (response) {
+      assert(response === true);
+      ++letters;
     })
     .then(function () {
-      return producer.produce(fixtures.queues[0], { msg: uuid.v4() });
+      /*jshint unused: false*/
+      return new Promise(function (resolve, reject) {
+        consumer.consume(fixtures.queues[0], function (_msg) {
+          assert(typeof _msg === 'object');
+
+          --attempt;
+          if (!attempt) {
+            return resolve(true);
+          } else {
+            throw new Error('Any kind of error');
+          }
+        });
+      });
     })
-    .then(function (_queue) {
-      ++letters;
-      assert(_queue === fixtures.queues[0]);
-      assert(_queue !== fixtures.queues[1]);
-      assert(_queue !== fixtures.queues[2]);
-    });
+    .then(function (response) {
+      assert(response === true);
+      --letters;
+    })
+    .then(function () {
+      return consumer.disconnect();
+    })
+    .then(function () {
+      return producer.disconnect();
+    })
+    .then(done);
   });
 });
