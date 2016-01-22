@@ -1,6 +1,6 @@
 var producer = require('../../index')().producer;
 
-producer.connect('amqp://localhost')
+producer.connect()
 .then(function (_channel) {
   producer.produce('queueName', { message: 'hello world!' });
 });
