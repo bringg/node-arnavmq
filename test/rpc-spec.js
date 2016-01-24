@@ -24,21 +24,19 @@ describe('Producer/Consumer RPC messaging:', function() {
     .then(done);
   });
 
-  it('should be able to create a consumer that returns a message if called as RPC [rpc-queue-0]', function (done) {
-    consumer.consume(fixtures.queues[0], function () {
+  it('should be able to create a consumer that returns a message if called as RPC [rpc-queue-0]', function () {
+    return consumer.consume(fixtures.queues[0], function () {
       return 'Power Ranger Red';
     })
     .then(function(created) {
-      assert.equal(created, true);
-    })
-    .then(done);
+      assert(created === true);
+    });
   });
 
-  it('should be able to produce a RPC message and get a response [rpc-queue-0]', function (done) {
-    producer.produce(fixtures.queues[0], { msg: uuid.v4() })
+  it('should be able to produce a RPC message and get a response [rpc-queue-0]', function () {
+    return producer.produce(fixtures.queues[0], { msg: uuid.v4() }, { rpc: true })
     .then(function (response) {
       assert.equal(response, 'Power Ranger Red');
-    })
-    .then(done);
+    });
   });
 });
