@@ -27,4 +27,5 @@ build/Release
 node_modules
 .env
 
-sonar-project.proerties
+# documentation
+docs

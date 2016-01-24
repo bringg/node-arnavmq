@@ -1,31 +1,38 @@
 {
-  "name": "rabbit-layer",
-  "version": "0.0.0",
-  "description": "RabbitLayer is a rabbitmq wrapper",
+  "name": "bunnymq",
+  "version": "1.0.1",
+  "description": "BunnyMq is a RabbitMq wrapper",
   "keywords": [
     "rabbitmq",
     "broker",
-    "amqp"
+    "amqp",
+    "taskQueue",
+    "message",
+    "publish/subscribe"
   ],
   "main": "index.js",
   "scripts": {
-    "test": "jshint . && mocha --recursive test",
+    "test": "jshint . && mocha --recursive test --timeout=5000",
     "start": "node index.js",
-    "cover": "istanbul cover _mocha -- --recursive test",
-    "doc": "./node_modules/.bin/jsdoc -d ./docs --readme README.md --package package.json --template node_modules/minami lib/*"
+    "cover": "jshint . && istanbul cover _mocha -- --recursive test --timeout=5000",
+    "doc": "jsdoc -d ./docs --readme README.md --package package.json --template node_modules/minami lib/*"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dial-once/node-rabbit-layer.git"
+    "url": "git+https://github.com/dial-once/node-bunnymq.git"
   },
   "author": "khatal.yacine@gmail.com",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/dial-once/node-rabbit-layer/issues"
+    "url": "https://github.com/dial-once/node-bunnymq/issues"
   },
-  "homepage": "https://github.com/dial-once/node-rabbit-layer#readme",
+  "homepage": "https://github.com/dial-once/node-bunnymq#readme",
   "dependencies": {
+    "amqplib": "0.4.0"
   },
   "devDependencies": {
+    "assert": "1.3.0",
+    "minami": "1.1.1",
+    "node-uuid": "1.4.7"
   }
 }
