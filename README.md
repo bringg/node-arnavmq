@@ -1,7 +1,7 @@
 # BunnyMq
 BunnyMq is a RabbitMq wrapper build on top of [amqp.node](https://github.com/squaremo/amqp.node) to ease process of sending/receiving messages.
 
-![mongoat gif](./medias/bunny.gif)
+![bunny gif](./medias/bunny.gif)
 
 ## Features
 - Consume message from named queue
@@ -67,13 +67,13 @@ consumer.consume('queueName', function (_msg) {
 ## Env vars
 
 ### Logging
-You can enable logs for the module by setting the env var ```BUNNYMQ_DEBUG``` to any value. If you have winston installed, it will use it, otherwise it will fallback to console.
+You can enable logs for the module by setting the env var ```AMQP_DEBUG``` to any value. If you have winston installed, it will use it, otherwise it will fallback to console.
 
 ### Prefetch
-You can set the env var ```BUNNYMQ_PREFETCH``` to the prefetch number you want.
+You can set the env var ```AMQP_PREFETCH``` to the prefetch number you want.
 
 ### Connection
-You can set the env var ```BUNNYMQ_URL``` to a valid amqp or ampqs url.
+You can set the env var ```AMQP_URL``` to a valid amqp or ampqs url.
 
 ## Config
 You can specify a config object as below:
@@ -94,8 +94,8 @@ If you don't specify a config object, BunnyMq will use the default one which loo
 
 // index.js file
 var defaultConfig = {
-  amqpUrl: process.env.BUNNYMQ_URL || 'amqp://localhost', // use env var or fallback url 
-  prefetch: process.env.BUNNYMQ_PREFETCH || 1, // use env var or fallback to 1
+  amqpUrl: process.env.AMQP_URL || 'amqp://localhost', // use env var or fallback url 
+  prefetch: process.env.AMQP_PREFETCH || 1, // use env var or fallback to 1
   isRequeueEnabled: true
 };
 
@@ -112,11 +112,13 @@ module.exports = function(config) {
 
 NB: the priority is always given to the config then the env vars then fallback to default values, so if you want to use env vars you can use them directly without specifying the config object or use a config object which looks like the default one.
 
-## Resources    
+## Documentation & resources
+To generate documentattion, just run ``` npm run docs```, it will create a docs folder.
+
+You can also find more about RabbitMq in the links below:
  - http://www.rabbitmq.com/getstarted.html
  - https://www.cloudamqp.com/blog/2015-05-18-part1-rabbitmq-for-beginners-what-is-rabbitmq.html
  - http://spring.io/blog/2010/06/14/understanding-amqp-the-protocol-used-by-rabbitmq/
-
 
 ## Tests
 1. Ensure that you have an instance of a rabbitMq server running locally
