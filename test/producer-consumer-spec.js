@@ -70,8 +70,7 @@ describe('Producer/Consumer msg delevering:', function() {
       ++letters;
     })
     .then(function () {
-      /*jshint unused: false*/
-      return new Promise(function (resolve, reject) {
+      return new Promise(function (resolve) {
         consumer.consume(fixtures.queues[1], function (_msg) {
           assert(typeof _msg === 'object');
           --letters;
@@ -139,7 +138,7 @@ describe('Producer/Consumer msg delevering:', function() {
       --letters;
     })
     .then(function () {
-      return new Promise(function(resolve, reject) {
+      return new Promise(function(resolve) {
         setTimeout(function() {
           consumer.disconnect().then(resolve);
         }, 500);
