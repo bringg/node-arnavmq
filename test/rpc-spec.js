@@ -4,7 +4,7 @@ var consumer = require('../index')().consumer;
 var uuid = require('node-uuid');
 
 var fixtures = {
-  queues: ['test-queue-0']
+  queues: ['rpc-queue-0']
 };
 
 describe('Producer/Consumer RPC messaging:', function() {
@@ -24,20 +24,20 @@ describe('Producer/Consumer RPC messaging:', function() {
     .then(done);
   });
 
-  it('should be able to create a consumer that returns true if called as RPC [test-queue-0]', function (done) {
+  it('should be able to create a consumer that returns a message if called as RPC [rpc-queue-0]', function (done) {
     consumer.consume(fixtures.queues[0], function () {
-      return true;
+      return 'Power Ranger Red';
     })
     .then(function(created) {
-      assert(created, true);
+      assert.equal(created, true);
     })
     .then(done);
   });
 
-  it('should be able to produce a RPC message and get a response [test-queue-0]', function (done) {
+  it('should be able to produce a RPC message and get a response [rpc-queue-0]', function (done) {
     producer.produce(fixtures.queues[0], { msg: uuid.v4() })
     .then(function (response) {
-      assert(response, true);
+      assert.equal(response, 'Power Ranger Red');
     })
     .then(done);
   });
