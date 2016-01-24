@@ -50,7 +50,6 @@ describe('Producer/Consumer msg delevering:', function() {
     .then(function (response) {
       assert(response === true);
       ++letters;
-      setTimeout(done, 2000);
     })
     .then(function () {
       return consumer.consume(fixtures.queues[0], function (_msg) {
