@@ -140,7 +140,11 @@ describe('Producer/Consumer msg delevering:', function() {
       --letters;
     })
     .then(function () {
-      return consumer.disconnect();
+      return new Promise(function(resolve, reject) {
+        setTimeout(function() {
+          consumer.disconnect().then(resolve);
+        }, 500);
+      });
     })
     .then(function () {
       return producer.disconnect();
