@@ -22,7 +22,7 @@ Consumer also called subscriber, is responsible of handling message from the que
 ```javascript
 var consumer = require('bunnymq')().consumer;
 
-consumer.connect('amqp://localhost')
+consumer.connect('amqp://localhost') // you can passe url or use it in config or env var as explained below in section env vars the default is 'amqp://localhost'
 .then(function (_channel) {
     consumer.consume('queueName', function (_msg) {
         // do something with _msg, the mgs will be acknowledged
@@ -64,8 +64,53 @@ consumer.consume('queueName', function (_msg) {
 });
 ```
 
-## Logging
-You can enable logs for the module by setting the env var BUNNYMQ_DEBUG to any value. If you have winston installed, it will use it, otherwise it will fallback to console.
+## Env vars
+
+### Logging
+You can enable logs for the module by setting the env var ```BUNNYMQ_DEBUG``` to any value. If you have winston installed, it will use it, otherwise it will fallback to console.
+
+### Prefetch
+You can set the env var ```BUNNYMQ_PREFETCH``` to the prefetch number you want.
+
+### Connection
+You can set the env var ```BUNNYMQ_URL``` to a valid amqp or ampqs url.
+
+## Config
+You can specify a config object as below:
+
+```javascript
+  var BunnyMq = require('bunnymq')({
+    amqpUrl: 'amqp://localhost', // use your amqp or amqps url
+    prefetch: 1, // use your prefetch number
+    isRequeueEnabled: true // to allow requeueing 
+  });
+
+  var consumer = BunnyMq.consumer;  
+  var producer = BunnyMq.producer;  
+```
+
+If you don't specify a config object, BunnyMq will use the default one which looks like:
+```javascript
+
+// index.js file
+var defaultConfig = {
+  amqpUrl: process.env.BUNNYMQ_URL || 'amqp://localhost', // use env var or fallback url 
+  prefetch: process.env.BUNNYMQ_PREFETCH || 1, // use env var or fallback to 1
+  isRequeueEnabled: true
+};
+
+module.exports = function(config) {
+  require('./lib/boot/logger');
+
+  return {
+    producer: require('./lib/producer')(config || defaultConfig),
+    consumer: require('./lib/consumer')(config || defaultConfig)
+  };
+};
+
+```
+
+NB: the priority is always given to the config then the env vars then fallback to default values, so if you want to use env vars you can use them directly without specifying the config object or use a config object which looks like the default one.
 
 ## Resources    
  - http://www.rabbitmq.com/getstarted.html
