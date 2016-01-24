@@ -1,7 +1,7 @@
 
 var defaultConfig = {
-  amqpUrl: process.env.BUNNYMQ_URL || 'amqp://localhost',
-  prefetch: process.env.BUNNYMQ_PREFETCH || 1,
+  amqpUrl: process.env.AMQP_URL || 'amqp://localhost',
+  prefetch: process.env.AMQP_PREFETCH || 1,
   isRequeueEnabled: true
 };
 
