@@ -64,6 +64,9 @@ consumer.consume('queueName', function (_msg) {
 });
 ```
 
+## Logging
+You can enable logs for the module by setting the env var BUNNYMQ_DEBUG to any value. If you have winston installed, it will use it, otherwise it will fallback to console.
+
 ## Resources    
  - http://www.rabbitmq.com/getstarted.html
  - https://www.cloudamqp.com/blog/2015-05-18-part1-rabbitmq-for-beginners-what-is-rabbitmq.html
