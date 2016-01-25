@@ -50,7 +50,6 @@ describe('Producer/Consumer msg delevering:', function() {
     .then(function (response) {
       assert(response === true);
       ++letters;
-      setTimeout(done, 2000);
     })
     .then(function () {
       return consumer.consume(fixtures.queues[0], function (_msg) {
@@ -71,8 +70,7 @@ describe('Producer/Consumer msg delevering:', function() {
       ++letters;
     })
     .then(function () {
-      /*jshint unused: false*/
-      return new Promise(function (resolve, reject) {
+      return new Promise(function (resolve) {
         consumer.consume(fixtures.queues[1], function (_msg) {
           assert(typeof _msg === 'object');
           --letters;
@@ -140,7 +138,11 @@ describe('Producer/Consumer msg delevering:', function() {
       --letters;
     })
     .then(function () {
-      return consumer.disconnect();
+      return new Promise(function(resolve) {
+        setTimeout(function() {
+          consumer.disconnect().then(resolve);
+        }, 500);
+      });
     })
     .then(function () {
       return producer.disconnect();

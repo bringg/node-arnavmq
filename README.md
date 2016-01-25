@@ -64,6 +64,19 @@ consumer.consume('queueName', function (_msg) {
 });
 ```
 
+## RPC Support
+You can create RPC requests easily be adding an option to the current message:
+```javascript
+consumer.consume('queueName', function() {
+  return 'hello world!'; //you can also return a promise if you want
+});
+
+producer.produce('queueName', { message: 'content' }, { rpc: true })
+.then(function(consumerResponse) {
+  console.log(consumerResponse); // prints hello world!
+});
+```
+
 ## Env vars
 
 ### Logging
