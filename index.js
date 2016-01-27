@@ -1,6 +1,6 @@
 
 var defaultConfig = {
-  amqpUrl: process.env.AMQP_URL || 'amqp://localhost',
+  amqpUrl: process.env.AMQP_URL,
   prefetch: process.env.AMQP_PREFETCH || 1,
   isRequeueEnabled: true
 };
