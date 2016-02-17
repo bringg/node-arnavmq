@@ -5,7 +5,7 @@ var consumer = require('../index')().consumer;
 var uuid = require('node-uuid');
 
 var fixtures = {
-  queues: ['test-queue-0', 'test-queue-1', 'test-queue-2']
+  queues: ['test-queue-0', 'test-queue-1', 'test-queue-2', 'test-queue-3']
 };
 
 var letters = 0;
@@ -171,7 +171,7 @@ describe('Producer/Consumer msg requeueing:', function () {
   it('should be able to consume message, but throw error so the message is requeued again on queue [test-queue-0]', function (done) {
     var attempt = 3;
 
-    producer.produce(fixtures.queues[0], { msg: uuid.v4() })
+    producer.produce(fixtures.queues[3], { msg: uuid.v4() })
     .then(function (response) {
       assert(response === true);
       ++letters;
@@ -179,7 +179,7 @@ describe('Producer/Consumer msg requeueing:', function () {
     .then(function () {
       /*jshint unused: false*/
       return new Promise(function (resolve, reject) {
-        consumer.consume(fixtures.queues[0], function (_msg) {
+        consumer.consume(fixtures.queues[3], function (_msg) {
           assert(typeof _msg === 'object');
 
           --attempt;
