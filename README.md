@@ -1,5 +1,5 @@
 # BunnyMq
-BunnyMq is [amqp.node](https://github.com/squaremo/amqp.node) wrapper to ease common AMQP usages
+BunnyMq is a [amqp.node](https://github.com/squaremo/amqp.node) wrapper to ease common AMQP usages
 
 ![bunny gif](./medias/bunny.gif)
 
@@ -9,6 +9,7 @@ BunnyMq is [amqp.node](https://github.com/squaremo/amqp.node) wrapper to ease co
 - RPC
 - Auto connect/reconnect/queue messages
 - Handle errors / requeing
+- Messages types caring using AMQP headers for content type
 
 ## Installation
 ```
@@ -16,6 +17,13 @@ npm install bunnymq
 ```
 
 ## Basic usage
+### Producer
+Producer (publisher), can send messages to a named queue.
+
+```javascript
+var consumer = require('bunnymq')().producer;
+producer.produce('queueName', 'Hello World!');
+```
 
 ### Consumer
 Consumer (subscriber), can handle messages from a named queue.
@@ -24,17 +32,8 @@ Consumer (subscriber), can handle messages from a named queue.
 var consumer = require('bunnymq')().consumer;
 
 consumer.consume('queueName', function (_msg) {
-});
-```
-
-
-### Producer
-Producer (publisher), can send messages to a named queue.
-
-```javascript
-var consumer = require('bunnymq')().consumer;
-
-consumer.consume('queueName', function (_msg) {
+  //_msg is the exact item sent by a producer as payload
+  //if it is an object, it is already parsed as object
 });
 ```
 
