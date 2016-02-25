@@ -1,7 +1,7 @@
 require('./lib/boot/logger');
 
 var defaultConfig = {
-  amqpUrl: process.env.AMQP_URL,
+  amqpUrl: 'amqp://admin:dialonce@rabbitmq-master.dialonce-europe-dev.dialonce.svc.tutum.io',
   prefetch: process.env.AMQP_PREFETCH || 1,
   isRequeueEnabled: true
 };
