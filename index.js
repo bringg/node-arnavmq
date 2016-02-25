@@ -8,6 +8,10 @@ var defaultConfig = {
 module.exports = function(config) {
   require('./lib/boot/logger');
 
+  if (typeof defaultConfig.prefetch !== 'number') {
+    defaultConfig.prefetch = parseInt(prefetch);
+  }
+
   return {
     producer: require('./lib/producer')(config || defaultConfig),
     consumer: require('./lib/consumer')(config || defaultConfig)
