@@ -28,7 +28,7 @@
   },
   "homepage": "https://github.com/dial-once/node-bunnymq#readme",
   "dependencies": {
-    "amqplib": "^0.4.0",
+    "amqplib": "^0.4.1",
     "node-uuid": "^1.4.7"
   },
   "devDependencies": {
