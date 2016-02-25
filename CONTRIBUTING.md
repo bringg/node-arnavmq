@@ -1,9 +1,9 @@
 # Contributing Guidlines
 
 ## Coding rules
-- Our code is currently built around Node v0.12.7, please use nvm to ensure you use the same version.
+- Our code is currently built around Node v5.6.0, please use nvm to ensure you use the same version.
 
-- Use promises when doing async stuff, based on bluebird library and ensuring it respect the ES6 standards. Once Node.js version is > 0.12.6 on prod env we will drop bluebird.
+- Use promises when doing async stuff
 
 - Comment your code using the jsdoc standard, version your packages using semver.
 
