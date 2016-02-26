@@ -155,29 +155,22 @@ describe('Producer/Consumer msg requeueing:', function () {
   it('should be able to consume message, but throw error so the message is requeued again on queue [test-queue-0]', function (done) {
     var attempt = 3;
 
-    producer.produce(fixtures.queues[3], { msg: uuid.v4() })
-    .then(function (response) {
-      assert(response === true);
-      ++letters;
+    consumer.consume(fixtures.queues[3], function (_msg) {
+      assert(typeof _msg === 'object');
+
+      --attempt;
+      if (!attempt) {
+        return true;
+      } else {
+        throw new Error('Any kind of error');
+      }
     })
     .then(function () {
-      /*jshint unused: false*/
-      return new Promise(function (resolve, reject) {
-        consumer.consume(fixtures.queues[3], function (_msg) {
-          assert(typeof _msg === 'object');
-
-          --attempt;
-          if (!attempt) {
-            return resolve(true);
-          } else {
-            throw new Error('Any kind of error');
-          }
-        });
+      producer.produce(fixtures.queues[3], { msg: uuid.v4() })
+      .then(function (response) {
+        assert(response === true);
+        ++letters;
       });
-    })
-    .then(function (response) {
-      assert(response === true);
-      --letters;
     })
     .then(done);
   });
