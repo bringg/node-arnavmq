@@ -81,12 +81,6 @@ describe('Producer/Consumer msg delevering:', function() {
     .then(function (response) {
       assert(response === true);
     })
-    .then(function () {
-      return consumer.disconnect();
-    })
-    .then(function () {
-      return producer.disconnect();
-    })
     .then(done);
   });
 
@@ -137,16 +131,6 @@ describe('Producer/Consumer msg delevering:', function() {
       assert(response === true);
       --letters;
     })
-    .then(function () {
-      return new Promise(function(resolve) {
-        setTimeout(function() {
-          consumer.disconnect().then(resolve);
-        }, 500);
-      });
-    })
-    .then(function () {
-      return producer.disconnect();
-    })
     .then(done);
   });
 });
@@ -171,35 +155,22 @@ describe('Producer/Consumer msg requeueing:', function () {
   it('should be able to consume message, but throw error so the message is requeued again on queue [test-queue-0]', function (done) {
     var attempt = 3;
 
-    producer.produce(fixtures.queues[3], { msg: uuid.v4() })
-    .then(function (response) {
-      assert(response === true);
-      ++letters;
-    })
-    .then(function () {
-      /*jshint unused: false*/
-      return new Promise(function (resolve, reject) {
-        consumer.consume(fixtures.queues[3], function (_msg) {
-          assert(typeof _msg === 'object');
+    consumer.consume(fixtures.queues[3], function (_msg) {
+      assert(typeof _msg === 'object');
 
-          --attempt;
-          if (!attempt) {
-            return resolve(true);
-          } else {
-            throw new Error('Any kind of error');
-          }
-        });
+      --attempt;
+      if (!attempt) {
+        return true;
+      } else {
+        throw new Error('Any kind of error');
+      }
+    })
+    .then(function () {
+      producer.produce(fixtures.queues[3], { msg: uuid.v4() })
+      .then(function (response) {
+        assert(response === true);
+        ++letters;
       });
-    })
-    .then(function (response) {
-      assert(response === true);
-      --letters;
-    })
-    .then(function () {
-      return consumer.disconnect();
-    })
-    .then(function () {
-      return producer.disconnect();
     })
     .then(done);
   });

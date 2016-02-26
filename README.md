@@ -56,8 +56,8 @@ You can specify a config object in the BunnyMQ main function, properties not set
 ```javascript
   var BunnyMq = require('bunnymq')({
     amqpUrl: 'amqp://localhost', // default
-    prefetch: 1, // default
-    isRequeueEnabled: true // default
+    amqpPrefetch: 1, // default
+    amqpRequeue: true // default
   });
 ```
 

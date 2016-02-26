@@ -36,14 +36,4 @@ describe('Producer/Consumer RPC messaging:', function() {
       assert.equal(response.powerRangerColor, 'Pink');
     });
   });
-
-  it('should be able to disconnect, produce a RPC message and get a response [rpc-queue-0]', function () {
-    return producer.disconnect()
-    .then(function() {
-      return producer.produce(fixtures.queues[0], { msg: uuid.v4() }, { rpc: true });
-    })
-    .then(function (response) {
-      assert.equal(response, 'Power Ranger Red');
-    });
-  });
 });
