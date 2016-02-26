@@ -93,5 +93,3 @@ Please read our [Contributing Guidlines](CONTRIBUTING.md)
 
 ## License
 The MIT License [MIT](LICENSE)
-
-Copyright (c) 2015 Dial Once
