@@ -1,9 +1,4 @@
-var consumer = require('../../index')({
-  isLogEnabled: true,
-  amqpUrl: 'amqp://localhost',
-  prefetch: process.env.AMQP_PREFETCH || 1,
-  isRequeueEnabled: true
-}).consumer;
+var consumer = require('../../index')().consumer;
 
 consumer.connect()
 .then(function (_channel) {
