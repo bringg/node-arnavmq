@@ -1,7 +1,9 @@
 # BunnyMq
 BunnyMq is a [amqp.node](https://github.com/squaremo/amqp.node) wrapper to ease common AMQP usages
 
-![bunny gif](./medias/bunny.gif)
+[![npm](https://img.shields.io/npm/v/bunnymq.svg)]()  [![CircleCI](https://circleci.com/gh/dial-once/node-bunnymq.svg?style=shield&circle-token=:circle-ci-badge-token)](https://circleci.com/gh/dial-once/node-bunnymq) [![Codacy](https://img.shields.io/codacy/00c2c1ce21524f5c9f6cf9d1182b6a79.svg)]()   [![npm](https://img.shields.io/npm/dt/bunnymq.svg)]()
+
+[![NPM](https://nodei.co/npm/bunnymq.png?downloads=true&downloadRank=true&stars=true)](https://nodei.co/npm/bunnymq/)[![NPM](https://nodei.co/npm-dl/bunnymq.png)](https://nodei.co/npm/bunnymq/)
 
 ## Features
 - Consumer
@@ -93,3 +95,6 @@ Please read our [Contributing Guidlines](CONTRIBUTING.md)
 
 ## License
 The MIT License [MIT](LICENSE)
+
+
+![bunny gif](./medias/bunny.gif)
