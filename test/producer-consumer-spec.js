@@ -81,12 +81,6 @@ describe('Producer/Consumer msg delevering:', function() {
     .then(function (response) {
       assert(response === true);
     })
-    .then(function () {
-      return consumer.disconnect();
-    })
-    .then(function () {
-      return producer.disconnect();
-    })
     .then(done);
   });
 
@@ -137,16 +131,6 @@ describe('Producer/Consumer msg delevering:', function() {
       assert(response === true);
       --letters;
     })
-    .then(function () {
-      return new Promise(function(resolve) {
-        setTimeout(function() {
-          consumer.disconnect().then(resolve);
-        }, 500);
-      });
-    })
-    .then(function () {
-      return producer.disconnect();
-    })
     .then(done);
   });
 });
@@ -194,12 +178,6 @@ describe('Producer/Consumer msg requeueing:', function () {
     .then(function (response) {
       assert(response === true);
       --letters;
-    })
-    .then(function () {
-      return consumer.disconnect();
-    })
-    .then(function () {
-      return producer.disconnect();
     })
     .then(done);
   });
