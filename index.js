@@ -2,7 +2,7 @@ require('./lib/boot/logger');
 
 var defaultConfig = {
   amqpUrl: process.env.AMQP_URL || 'amqp://localhost',
-  amqpPrefetch: process.env.AMQP_PREFETCH || 1,
+  amqpPrefetch: process.env.AMQP_PREFETCH || 10,
   amqpRequeue: true
 };
 
@@ -11,9 +11,9 @@ module.exports = function(config) {
     if (config.hasOwnProperty(key) && defaultConfig.hasOwnProperty(key)) {
       defaultConfig[key] = config[key];
     }
-
-    defaultConfig.amqpPrefetch = parseInt(defaultConfig.amqpPrefetch);
   }
+
+  defaultConfig.amqpPrefetch = parseInt(defaultConfig.amqpPrefetch);
 
   return {
     producer: require('./lib/producer')(defaultConfig),
