@@ -2,7 +2,7 @@ require('./lib/boot/logger');
 
 var defaultConfig = {
   amqpUrl: process.env.AMQP_URL || 'amqp://localhost',
-  amqpPrefetch: process.env.AMQP_PREFETCH || 10,
+  amqpPrefetch: process.env.AMQP_PREFETCH || 0,
   amqpRequeue: true
 };
 
