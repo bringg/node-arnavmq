@@ -9,7 +9,7 @@ interval = setInterval(function () {
   });
 
   ++i;
-  if (i >= 20) {
+  if (i >= 100) {
     interval = clearInterval(interval);
   }
-}, 1000);
+}, 500);
