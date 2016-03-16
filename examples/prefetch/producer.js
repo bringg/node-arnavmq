@@ -15,19 +15,3 @@ interval = setInterval(function () {
     interval = clearInterval(interval);
   }
 }, 500);
-
-// producer.connect()
-// .then(function (_res) {
-//   // console.log('result:', _res);
-// });
-
-// producer.connect()
-// .then(function (_res) {
-//   console.log('result:', _res);
-// });
-
-// producer.connect()
-// .then(function (_res) {
-//   console.log('result:', _res);
-// });
-
