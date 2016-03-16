@@ -11,21 +11,6 @@ var fixtures = {
 var letters = 0;
 
 describe('Producer/Consumer msg delevering:', function() {
-  before(function (done) {
-    return consumer.connect()
-    .then(function (_channel) {
-      assert(_channel !== undefined);
-      assert(_channel !== null);
-    })
-    .then(function () {
-      return producer.connect();
-    })
-    .then(function (_channel) {
-      assert(_channel !== undefined);
-      assert(_channel !== null);
-    })
-    .then(done);
-  });
 
   it('should be able to consume message sended by producer to queue [test-queue-0]', function (done) {
     producer.produce(fixtures.queues[0], { msg: uuid.v4() })
@@ -136,21 +121,6 @@ describe('Producer/Consumer msg delevering:', function() {
 });
 
 describe('Producer/Consumer msg requeueing:', function () {
-  before(function (done) {
-    return consumer.connect()
-    .then(function (_channel) {
-      assert(_channel !== undefined);
-      assert(_channel !== null);
-    })
-    .then(function () {
-      return producer.connect();
-    })
-    .then(function (_channel) {
-      assert(_channel !== undefined);
-      assert(_channel !== null);
-    })
-    .then(done);
-  });
 
   it('should be able to consume message, but throw error so the message is requeued again on queue [test-queue-0]', function (done) {
     var attempt = 3;
