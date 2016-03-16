@@ -3,7 +3,8 @@ require('./lib/boot/logger');
 var defaultConfig = {
   amqpUrl: process.env.AMQP_URL || 'amqp://localhost',
   amqpPrefetch: process.env.AMQP_PREFETCH || 5,
-  amqpRequeue: true
+  amqpRequeue: true,
+  amqpTimeout: 1000
 };
 
 module.exports = function(config) {
