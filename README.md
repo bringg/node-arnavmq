@@ -23,7 +23,7 @@ npm install bunnymq
 Producer (publisher), can send messages to a named queue.
 
 ```javascript
-var consumer = require('bunnymq')().producer;
+var producer = require('bunnymq')().producer;
 producer.produce('queueName', 'Hello World!');
 ```
 
@@ -59,7 +59,8 @@ You can specify a config object in the BunnyMQ main function, properties not set
   var BunnyMq = require('bunnymq')({
     amqpUrl: 'amqp://localhost', // default
     amqpPrefetch: 1, // default
-    amqpRequeue: true // default
+    amqpRequeue: true, // default
+    amqpTimeout: 1000 // default timeout (in milliseconds) used to reconnect
   });
 ```
 
