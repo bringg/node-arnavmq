@@ -1,6 +1,6 @@
 {
   "name": "bunnymq",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "BunnyMq is a RabbitMq wrapper",
   "keywords": [
     "rabbitmq",
