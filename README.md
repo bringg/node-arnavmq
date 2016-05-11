@@ -1,13 +1,17 @@
 # BunnyMq
-BunnyMq is a RabbitMq wrapper build on top of [amqp.node](https://github.com/squaremo/amqp.node) to ease process of sending/receiving messages.
+BunnyMq is a [amqp.node](https://github.com/squaremo/amqp.node) wrapper to ease common AMQP usages
 
-![bunny gif](./medias/bunny.gif)
+[![npm](https://img.shields.io/npm/v/bunnymq.svg)]()  [![CircleCI](https://circleci.com/gh/dial-once/node-bunnymq.svg?style=shield&circle-token=:circle-ci-badge-token)](https://circleci.com/gh/dial-once/node-bunnymq) [![Codacy](https://img.shields.io/codacy/00c2c1ce21524f5c9f6cf9d1182b6a79.svg)]()   [![npm](https://img.shields.io/npm/dt/bunnymq.svg)]()
+
+[![NPM](https://nodei.co/npm/bunnymq.png?downloads=true&downloadRank=true&stars=true)](https://nodei.co/npm/bunnymq/)
 
 ## Features
-- Consume message from named queue
-- Produce message to named queue
-- Publish/Subscribe (comming soon)
-- Routing keys (comming soon)
+- Consumer
+- Producer
+- RPC
+- Auto connect/reconnect/queue messages
+- Handle errors / requeing
+- Messages types caring using AMQP headers for content type
 
 ## Installation
 ```
@@ -15,52 +19,23 @@ npm install bunnymq
 ```
 
 ## Basic usage
-
-### Consumer
-Consumer also called subscriber, is responsible of handling message from the queue with which is binded.
-
-```javascript
-var consumer = require('bunnymq')().consumer;
-
-consumer.connect('amqp://localhost') // you can passe url or use it in config or env var as explained below in section env vars the default is 'amqp://localhost'
-.then(function (_channel) {
-    consumer.consume('queueName', function (_msg) {
-        // do something with _msg, the mgs will be acknowledged
-        
-        // if you throw an error, the msg will be requeued
-        // ex: throw new Error('any kind of error');
-    }); 
-});
-```
-
-NB: you can use consumer.consume without making a connect, it will be called internally:
-
-```javascript
-var consumer = require('bunnymq')().consumer;
-
-consumer.consume('queueName', function (_msg) {
-});
-```
-
-
 ### Producer
-Producer also called publisher, is responsible of sending message to the queue with which is binded.
+Producer (publisher), can send messages to a named queue.
 
 ```javascript
 var producer = require('bunnymq')().producer;
-
-producer.connect('amqp://localhost')
-.then(function (_channel) {
-    producer.produce('queueName', message); // message can be of any type 
-});
+producer.produce('queueName', 'Hello World!');
 ```
 
-NB: you can use producer.produce without making a connect, it will be called internally:
+### Consumer
+Consumer (subscriber), can handle messages from a named queue.
 
 ```javascript
 var consumer = require('bunnymq')().consumer;
 
 consumer.consume('queueName', function (_msg) {
+  //_msg is the exact item sent by a producer as payload
+  //if it is an object, it is already parsed as object
 });
 ```
 
@@ -68,7 +43,7 @@ consumer.consume('queueName', function (_msg) {
 You can create RPC requests easily be adding an option to the current message:
 ```javascript
 consumer.consume('queueName', function() {
-  return 'hello world!'; //you can also return a promise if you want
+  return 'hello world!'; //you can also return a promise if you want to do async stuff
 });
 
 producer.produce('queueName', { message: 'content' }, { rpc: true })
@@ -77,51 +52,28 @@ producer.produce('queueName', { message: 'content' }, { rpc: true })
 });
 ```
 
+## Config
+You can specify a config object in the BunnyMQ main function, properties not set are using default value:
+
+```javascript
+  var BunnyMq = require('bunnymq')({
+    amqpUrl: 'amqp://localhost', // default
+    amqpPrefetch: 1, // default
+    amqpRequeue: true, // default
+    amqpTimeout: 1000 // default timeout (in milliseconds) used to reconnect
+  });
+```
+
 ## Env vars
 
 ### Logging
 You can enable logs for the module by setting the env var ```AMQP_DEBUG``` to any value. If you have winston installed, it will use it, otherwise it will fallback to console.
 
 ### Prefetch
-You can set the env var ```AMQP_PREFETCH``` to the prefetch number you want.
+You can set the env var ```AMQP_PREFETCH``` to set the prefetch value of all underlying AMQP queues.
 
 ### Connection
 You can set the env var ```AMQP_URL``` to a valid amqp or ampqs url.
-
-## Config
-You can specify a config object as below:
-
-```javascript
-  var BunnyMq = require('bunnymq')({
-    amqpUrl: 'amqp://localhost', // use your amqp or amqps url
-    prefetch: 1, // use your prefetch number
-    isRequeueEnabled: true // to allow requeueing 
-  });
-
-  var consumer = BunnyMq.consumer;  
-  var producer = BunnyMq.producer;  
-```
-
-If you don't specify a config object, BunnyMq will use the default one which looks like:
-```javascript
-
-// index.js file
-var defaultConfig = {
-  amqpUrl: process.env.AMQP_URL || 'amqp://localhost', // use env var or fallback url 
-  prefetch: process.env.AMQP_PREFETCH || 1, // use env var or fallback to 1
-  isRequeueEnabled: true
-};
-
-module.exports = function(config) {
-  require('./lib/boot/logger');
-
-  return {
-    producer: require('./lib/producer')(config || defaultConfig),
-    consumer: require('./lib/consumer')(config || defaultConfig)
-  };
-};
-
-```
 
 NB: the priority is always given to the config then the env vars then fallback to default values, so if you want to use env vars you can use them directly without specifying the config object or use a config object which looks like the default one.
 
@@ -134,16 +86,16 @@ You can also find more about RabbitMq in the links below:
  - http://spring.io/blog/2010/06/14/understanding-amqp-the-protocol-used-by-rabbitmq/
 
 ## Tests
-1. Ensure that you have an instance of a rabbitMq server running locally
+1. Ensure that you have a RabbitMQ server running
 2. Run tests ``` npm test```
-
-Or to show up code coverage ``` npm run cover ```
-it will generate ``` ./coverage ``` folder
+3. Coverage is done with ``npm run cover``
 
 ## Contribution
-Please read our [Contributing Guidlines](CONTRIBUTING.md) before submitting a pull request or an issue !
+If you want to contribute, you are very welcome!
+Please read our [Contributing Guidlines](CONTRIBUTING.md)
 
 ## License
 The MIT License [MIT](LICENSE)
 
-Copyright (c) 2015 Dial Once
+
+![bunny gif](./medias/bunny.gif)

@@ -60,3 +60,6 @@ node_modules
 
 #dotenv
 .env
+
+# generated doc output
+docs/
