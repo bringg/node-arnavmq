@@ -30,6 +30,42 @@ describe('Producer/Consumer msg delevering:', function() {
     .then(done);
   });
 
+  it('should be able to consume message sended by producer to queue [test-queue-0] (no message)', function (done) {
+    producer.produce(fixtures.queues[0])
+    .then(function (response) {
+      assert(response === true);
+      ++letters;
+    })
+    .then(function () {
+      return consumer.consume(fixtures.queues[0], function (_msg) {
+        assert(_msg === undefined);
+      });
+    })
+    .then(function (response) {
+      assert(response === true);
+      --letters;
+    })
+    .then(done);
+  });
+
+  it('should be able to consume message sended by producer to queue [test-queue-0] (null message)', function (done) {
+    producer.produce(fixtures.queues[0], null)
+    .then(function (response) {
+      assert(response === true);
+      ++letters;
+    })
+    .then(function () {
+      return consumer.consume(fixtures.queues[0], function (_msg) {
+        assert(_msg === null);
+      });
+    })
+    .then(function (response) {
+      assert(response === true);
+      --letters;
+    })
+    .then(done);
+  });
+
   it('should not be able to consume message sended by producer to queue [test-queue-1]', function (done) {
     producer.produce(fixtures.queues[1], { msg: uuid.v4() })
     .then(function (response) {
