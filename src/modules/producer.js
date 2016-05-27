@@ -49,6 +49,14 @@ function maybeAnswer(queue) {
   };
 }
 
+function publishOrSendToQueue(queue, msg, options) {
+  if (!options.routingKey) {
+    return this.channel.sendToQueue(queue, msg, options);
+  } else {
+    return this.channel.publish(queue, options.routingKey, msg, options);
+  }
+}
+
 /**
  * Send message with or without rpc protocol, and check if RPC queues are created
  * @param  {string} queue   the queue to send `msg` on
@@ -73,7 +81,7 @@ function checkRpc (queue, msg, options) {
       //reply to us if you receive this message!
       options.replyTo = amqpRPCQueues[queue].queue;
 
-      this.channel.sendToQueue(queue, msg, options);
+      publishOrSendToQueue.call(this, queue, msg, options);
 
       //defered promise that will resolve when response is received
       amqpRPCQueues[queue][corrId] = Promise.defer();
@@ -81,7 +89,7 @@ function checkRpc (queue, msg, options) {
     });
   }
 
-  return this.channel.sendToQueue(queue, msg, options);
+  return publishOrSendToQueue.call(this, queue, msg, options);
 }
 
 /**
