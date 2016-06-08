@@ -1,9 +1,15 @@
 # BunnyMq
 BunnyMq is a [amqp.node](https://github.com/squaremo/amqp.node) wrapper to ease common AMQP usages
 
-[![npm](https://img.shields.io/npm/v/bunnymq.svg)]()  [![CircleCI](https://circleci.com/gh/dial-once/node-bunnymq.svg?style=shield&circle-token=:circle-ci-badge-token)](https://circleci.com/gh/dial-once/node-bunnymq) [![Codacy](https://img.shields.io/codacy/00c2c1ce21524f5c9f6cf9d1182b6a79.svg)]()   [![npm](https://img.shields.io/npm/dt/bunnymq.svg)]()
+# node-bunnymq
 
-[![NPM](https://nodei.co/npm/bunnymq.png?downloads=true&downloadRank=true&stars=true)](https://nodei.co/npm/bunnymq/)
+[![Circle CI](https://circleci.com/gh/dial-once/node-bunnymq/tree/develop.svg?style=shield)](https://circleci.com/gh/dial-once/node-bunnymq)
+[![Coverage](http://badges.dialonce.io/?resource=node-bunnymq&metrics=coverage)](http://sonar.dialonce.io/overview/coverage?id=node-bunnymq)
+[![Sqale](http://badges.dialonce.io/?resource=node-bunnymq&metrics=sqale_rating)](http://sonar.dialonce.io/overview/debt?id=node-bunnymq)
+[![npm](https://img.shields.io/npm/v/bunnymq.svg)]()
+[![npm](https://img.shields.io/npm/dt/bunnymq.svg)]()
+
+[![npm](https://nodei.co/npm/bunnymq.png?downloads=true&downloadRank=true&stars=true)](https://nodei.co/npm/bunnymq/)
 
 ## Features
 - Consumer
@@ -86,16 +92,10 @@ You can also find more about RabbitMq in the links below:
  - http://spring.io/blog/2010/06/14/understanding-amqp-the-protocol-used-by-rabbitmq/
 
 ## Tests
-1. Ensure that you have a RabbitMQ server running
-2. Run tests ``` npm test```
-3. Coverage is done with ``npm run cover``
+1. make test
 
 ## Contribution
 If you want to contribute, you are very welcome!
-Please read our [Contributing Guidlines](CONTRIBUTING.md)
 
 ## License
 The MIT License [MIT](LICENSE)
-
-
-![bunny gif](./medias/bunny.gif)

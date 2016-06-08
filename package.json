@@ -10,7 +10,7 @@
     "message",
     "publish/subscribe"
   ],
-  "main": "index.js",
+  "main": "src/index.js",
   "scripts": {
     "test": "jshint . && mocha --recursive test --timeout=5000",
     "start": "node index.js",

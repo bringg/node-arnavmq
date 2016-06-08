@@ -1,6 +1,6 @@
 var assert = require('assert');
-var producer = require('../index')().producer;
-var consumer = require('../index')().consumer;
+var producer = require('../src/index')().producer;
+var consumer = require('../src/index')().consumer;
 var uuid = require('node-uuid');
 
 var fixtures = {

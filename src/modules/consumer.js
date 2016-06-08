@@ -4,8 +4,8 @@
  * @namespace Consumer
  */
 var amqp = require('amqplib'),
-  utils = require('./helpers/utils'),
-  parsers = require('./helpers/message-parsers');
+  utils = require('./utils'),
+  parsers = require('./message-parsers');
 
 var amqpConnection, amqpChannel, amqpConfig;
 var amqpReconnect = false;

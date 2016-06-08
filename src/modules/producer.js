@@ -4,9 +4,9 @@
  * @namespace Consumer
  */
 var amqp = require('amqplib'),
-  utils = require('./helpers/utils'),
+  utils = require('./utils'),
   uuid = require('node-uuid'),
-  parsers = require('./helpers/message-parsers');
+  parsers = require('./message-parsers');
 
 var amqpConnection, amqpChannel, amqpConfig;
 var amqpRPCQueues = {};
