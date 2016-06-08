@@ -1,166 +1,71 @@
-'use strict';
-
 /**
  * @namespace Consumer
  */
-var amqp = require('amqplib'),
-  utils = require('./utils'),
-  parsers = require('./message-parsers');
+var parsers = require('./message-parsers'),
+  utils = require('./utils');
 
-var amqpConnection, amqpChannel, amqpConfig;
-var amqpReconnect = false;
-var amqpQueues = [];
-
-/**
- * Connect method used to connect the global connection object, when disconnected (not set). To be used inside a promise chain.
- * @return {Promise} When not connected, connects and returns a promise that resolve with the amqp connection object as parameter
- * @return {object} When connected, return the amqp connection object directly
- *
- * @example
- * return Promise.resolve()
- *   .then(connect)
- *   .then((conn) => {
- *     //conn is an amqp connection object
- *   });
- */
-var connect = () => {
-  if (!amqpConnection) {
-    amqpChannel = null;
-    amqpConnection = new Promise((resolve, reject) => {
-      let amqpUrl = utils.getValidUrl([amqpConfig.amqpUrl, process.env.AMQP_URL, 'amqp://localhost']);
-
-      amqp.connect(amqpUrl, { clientProperties: { hostname: process.env.HOSTNAME } })
-      .then((_connection) => {
-
-        _connection.on('close', (err) => {
-          Logger.error(err);
-          amqpConnection = null;
-          amqpChannel = null;
-        });
-
-        _connection.on('error', Logger.error);
-
-        amqpConnection = _connection;
-        resolve(amqpConnection);
-      })
-      .catch((err) => {
-        amqpConnection = null;
-        reject(err);
-      });
-    });
-  }
-
-  return amqpConnection;
-};
-
-/**
- * createChannel method used to create a channel once connected. To be used inside a promise chain.
- * @return {Promise} When channel not created, returns a promise that resolve with the amqp channel object as parameter once channel is created
- * @return {object} When channel is created, return the channel object directly
- * 
- * @example
- * return Promise.resolve()
- *   .then(connect)
- *   .then(createChannel)
- *   .then((channel) => {
- *     //channel is an amqp channel object
- *   });
- */
-var createChannel = () => {
-  if (!amqpChannel) {
-    amqpChannel = new Promise((resolve, reject) => {
-      amqpConnection.createChannel()
-        .then((_channel) => {
-          _channel.prefetch(amqpConfig.amqpPrefetch);
-
-          Logger.info('[BMQ-CONSUMER] Is now connected and ready to consume messages');
-
-          _channel.on('close', (err) => {
-            if (err) Logger.error('ERROR:', err);
-            amqpChannel = null;
-          });
-
-          _channel.on('error', Logger.error);
-
-          amqpChannel = _channel;
-          resolve(amqpChannel);
-
-          if (amqpReconnect) {
-            amqpReconnect = false;
-            for (var i = 0, l = amqpQueues.length; i < l; ++i) {
-              consume(amqpQueues[i].queue, amqpQueues[i].options, amqpQueues[i].callback);
-            }
-          }
-        })
-        .catch((err) => {
-          amqpChannel = null;
-          reject(err);
-        });
-    });
-  }
-
-  return amqpChannel;
-};
-
-var checkRpc = (msg, queue) => {
-  return function (_content) {
+function checkRpc (msg, queue) {
+  return (_content) => {
     if (msg.properties.replyTo) {
       var options = { correlationId: msg.properties.correlationId };
-      Logger.info('[BMQ-CONSUMER][' + queue + '][' + msg.properties.replyTo + '] >', _content);
-      amqpChannel.sendToQueue(msg.properties.replyTo, parsers.out(_content, options), options);
+      this.conn.config.transport.info('bmq:consumer', '[' + queue + '][' + msg.properties.replyTo + '] >', _content);
+      this.channel.sendToQueue(msg.properties.replyTo, parsers.out(_content, options), options);
     }
 
     return msg;
   };
-};
+}
 
-var consume = (queue, options, callback) => {
+function consume (queue, options, callback) {
   if (typeof options === 'function') {
     callback = options;
     options = { persistent: true, durable: true };
   }
 
-  queue += process.env.LOCAL_QUEUE || '';
+  queue += this.conn.config.consumerSuffix;
 
+  return this.conn.get()
+  .then((_channel) => {
+    this.channel = _channel;
 
-  return Promise.resolve()
-  .then(connect)
-  .then(createChannel)
-  .then(() => {
-    return amqpChannel.assertQueue(queue, options)
+    this.channel.addListener('close', () => {
+      consume.call(this, queue, options, callback);
+    });
+
+    return this.channel.assertQueue(queue, options)
     .then((_queue) => {
-      utils.pushIfNotExist(amqpQueues, { queue: queue, options: options, callback: callback });
 
-      Logger.info('[BMQ-CONSUMER] Consume from queue:', _queue.queue);
-      amqpChannel.consume(_queue.queue, (_msg) => {
-        Logger.info('[BMQ-CONSUMER][' + _queue.queue + '] < ' + _msg.content.toString());
+      this.conn.config.transport.info('bmq:consumer', 'init', _queue.queue);
+
+      this.channel.consume(_queue.queue, (_msg) => {
+        this.conn.config.transport.info('bmq:consumer', '[' + _queue.queue + '] < ' + _msg.content.toString());
 
         Promise.resolve(parsers.in(_msg))
         .then(callback)
-        .then(checkRpc(_msg, _queue.queue))
-        .then(function () {
-          amqpChannel.ack(_msg);
+        .then(checkRpc.call(this, _msg, _queue.queue))
+        .then(() => {
+          this.channel.ack(_msg);
         })
         .catch((_err) => {
-          Logger.error('[BMQ-CONSUMER] Error on queue: ' + _queue.queue, _err);
-          amqpChannel.reject(_msg, amqpConfig.amqpRequeue);
+          this.conn.config.transport.error('bmq:consumer', _err);
+          this.channel.reject(_msg, this.conn.config.requeue);
         });
       }, { noAck: false });
 
       return true;
     });
   })
-  .catch((err) => {
-    Logger.error('[BMQ-CONSUMER]', err);
-    return utils.timeoutPromise(amqpConfig.amqpTimeout)
-    .then(() => {
-      amqpReconnect = true;
-      return consume(queue, options, callback);
-    });
+  .catch(() => {
+    utils.timeoutPromise(this.conn.config.timeout)
+      .then(() => {
+        consume.call(this, queue, options, callback);
+      });
   });
-};
+}
 
-module.exports = (config) => {
-  amqpConfig = config;
-  return { consume: consume };
+module.exports = function(_conn) {
+  return {
+    conn: _conn,
+    consume: consume
+  };
 };

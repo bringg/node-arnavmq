@@ -1,23 +1,23 @@
-require('./boot/logger');
+var uuid = require('node-uuid'),
+  utils = require('./modules/utils'),
+  conn = require('./modules/connection'),
+  retrocompat = require('./modules/retrocompat-config');
 
-var defaultConfig = {
-  amqpUrl: process.env.AMQP_URL || 'amqp://localhost',
-  amqpPrefetch: process.env.AMQP_PREFETCH || 5,
-  amqpRequeue: true,
-  amqpTimeout: 1000
-};
+module.exports = function(_config) {
+  retrocompat(_config);
 
-module.exports = function(config) {
-  for (var key in config) {
-    if (config.hasOwnProperty(key) && defaultConfig.hasOwnProperty(key)) {
-      defaultConfig[key] = config[key];
-    }
-  }
-
-  defaultConfig.amqpPrefetch = parseInt(defaultConfig.amqpPrefetch) || 5;
+  var config = utils.mergeObjects({
+    host: 'amqp://localhost',
+    prefetch: 5,
+    requeue: true,
+    timeout: 1000,
+    consumerSuffix: '',
+    hostname: process.env.HOSTNAME || process.env.USER || uuid.v4(),
+    transport: utils.emptyLogger
+  }, _config);
 
   return {
-    producer: require('./modules/producer')(defaultConfig),
-    consumer: require('./modules/consumer')(defaultConfig)
+    producer: require('./modules/producer')(conn(config)),
+    consumer: require('./modules/consumer')(conn(config))
   };
 };

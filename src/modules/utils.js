@@ -1,29 +1,29 @@
 'use strict';
 
-module.exports.getValidUrl = (urls) => {
-  for (var i = 0, l = urls.length; i < l; ++i) {
-    var url = urls[i];
-    if (url && typeof url === 'string' && (url.indexOf('amqp://') === 0 || url.indexOf('amqps://') === 0)) {
-      return url;
-    }
-  }
-
-  return 'amqp://localhost';
-};
-
-module.exports.pushIfNotExist = (array, value) => {
-  for (var i = 0, l = array.length; i < l; ++i) {
-    if (array[i].queue === value.queue) {
-      return array;
-    }
-  }
-
-  array.push(value);
-  return array;
-};
-
 module.exports.timeoutPromise = (timer) => {
   return new Promise((resolve) => {
     setTimeout(resolve, timer);
   });
+};
+
+/**
+ * Merge second object into first object (modify first object in memory, NO COPY)
+ * @param  {object} first  the first object that will receive content from second parameter
+ * @param  {object} second the second object to merge in first parameter
+ * @return {object}        merge result
+ */
+module.exports.mergeObjects = (first, second) => {
+  for (var attrname in second) {
+    first[attrname] = second[attrname];
+  }
+  return first;
+};
+
+
+module.exports.emptyLogger = {
+  info: () => {},
+  debug: () => {},
+  warn: () => {},
+  error: () => {},
+  log: () => {}
 };
