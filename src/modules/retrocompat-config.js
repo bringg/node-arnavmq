@@ -39,10 +39,12 @@ function envVars(config) {
 /**
  * Retrocompatibility module to keep backward compat over configuration / env vars
  * @param  {object} config A BunnyMQ configuration object
- * @return {[type]}        [description]
+ * @return {object}        Updated config object
  */
 module.exports = function(config) {
   config = config || {};
   envVars(config);
   oldConfigNames(config);
+
+  return config;
 };

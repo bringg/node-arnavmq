@@ -3,12 +3,12 @@ var uuid = require('node-uuid'),
   conn = require('./modules/connection'),
   retrocompat = require('./modules/retrocompat-config');
 
-module.exports = function(_config) {
+module.exports = function(config) {
   //we want to keep retrocompatibility with older configuration format for a while (until 3.0.0)
   //everything in here is deprecated
-  retrocompat(_config);
+  retrocompat(config);
 
-  var config = utils.mergeObjects({
+  config = utils.mergeObjects({
     host: 'amqp://localhost',
     //number of fetched messages, at once
     prefetch: 5,
@@ -21,7 +21,7 @@ module.exports = function(_config) {
     hostname: process.env.HOSTNAME || process.env.USER || uuid.v4(),
     //the transport to use to debug. if provided, bunnymq will show some logs
     transport: utils.emptyLogger
-  }, _config);
+  }, config);
 
   return {
     producer: require('./modules/producer')(conn(config)),

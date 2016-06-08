@@ -15,7 +15,7 @@ function checkRpc (msg, queue) {
    */
   return (_content) => {
     if (msg.properties.replyTo) {
-      var options = { correlationId: msg.properties.correlationId };
+      var options = { correlationId: msg.properties.correlationId, persistent: true, durable: true };
       this.conn.config.transport.info('bmq:consumer', '[' + queue + '][' + msg.properties.replyTo + '] >', _content);
       this.channel.sendToQueue(msg.properties.replyTo, parsers.out(_content, options), options);
     }

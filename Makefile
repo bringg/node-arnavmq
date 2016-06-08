@@ -14,11 +14,7 @@ init:
 	sed -i 's/{service-name}/$(NAME)/g' sonar-project.properties
 	sed -i 's/{service-name}/$(NAME)/g' README.md
 cover:
-	make lint && \
-	docker stop rabbitmq-bunnymq && docker rm rabbitmq-bunnymq; true && \
-	docker run -d --name=rabbitmq-bunnymq -p 5672:5672 rabbitmq:3.6 && sleep 2 && \
-	istanbul cover _mocha -- test --recursive && \
-	docker stop rabbitmq-bunnymq
+	istanbul cover _mocha -- test --recursive
 sonar:
 	sed '/sonar.projectVersion/d' ./sonar-project.properties > tmp && mv tmp sonar-project.properties
 	echo sonar.projectVersion=`cat package.json | python -c "import json,sys;obj=json.load(sys.stdin);print obj['version'];"` >> sonar-project.properties

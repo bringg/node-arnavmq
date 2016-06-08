@@ -24,15 +24,16 @@ module.exports.mergeObjects = (first, second) => {
   return first;
 };
 
+function empty() {}
 
 /**
  * Default logger to prevent any printing in the terminal
  * @type {Object} - empty logger overwriting the console object methods
  */
 module.exports.emptyLogger = {
-  info: () => {},
-  debug: () => {},
-  warn: () => {},
-  error: () => {},
-  log: () => {}
+  info: empty,
+  debug: empty,
+  warn: empty,
+  error: empty,
+  log: empty
 };

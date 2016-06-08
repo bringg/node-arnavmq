@@ -10,24 +10,35 @@ var amqpRPCQueues = {};
  * @return {Promise}       Resolves when answer response queue is ready to receive messages
  */
 function createRpcQueue(queue) {
-  if (amqpRPCQueues[queue].queue) return Promise.resolve();
+  let rpcQueue = amqpRPCQueues[queue];
+  if (rpcQueue.queue) return Promise.resolve(queue);
 
   //we create the callback queue using base queue name + appending config hostname and :res for clarity
   //ie. if hostname is gateway-http and queue is service-oauth, response queue will be service-oauth:gateway-http:res
   //it is important to have different hostname or no hostname on each module sending message or there will be conflicts
   var resQueue = queue + ':' + this.conn.config.hostname + ':res';
-  return this.channel.assertQueue(resQueue, { durable: true, exclusive: true })
-  .then((_queue) => {
-    amqpRPCQueues[queue].queue = _queue.queue;
+  rpcQueue.queue = this.conn.get().then((channel) => {
+    return channel.assertQueue(resQueue, { durable: true, exclusive: true })
+      .then((_queue) => {
+        rpcQueue.queue = _queue.queue;
 
-    //if channel is closed, we want to make sure we cleanup the queue so future calls will recreate it
-    this.conn.addListener('close', () => { amqpRPCQueues[queue].queue = null; });
+        //if channel is closed, we want to make sure we cleanup the queue so future calls will recreate it
+        this.conn.addListener('close', () => { delete rpcQueue.queue; createRpcQueue.call(this, queue); });
 
-    return this.channel.consume(_queue.queue, maybeAnswer.call(this, queue), { noAck: true });
-  })
-  .then(() => {
-    return queue;
-  });
+        return channel.consume(_queue.queue, maybeAnswer.call(this, queue), { noAck: true });
+      })
+      .then(() => {
+        return queue;
+      });
+    })
+    .catch(() => {
+      delete rpcQueue.queue;
+      return utils.timeoutPromise(this.conn.config.timeout).then(() => {
+        return createRpcQueue.call(this, queue);
+      });
+    });
+
+  return rpcQueue.queue;
 }
 
 /**
@@ -36,16 +47,22 @@ function createRpcQueue(queue) {
  * @return {function}       function executed by an amqp.node channel consume callback method
  */
 function maybeAnswer(queue) {
-  return (_msg) => {
+  var rpcQueue = amqpRPCQueues[queue];
+
+  return (msg) => {
     //check the correlation ID sent by the initial message using RPC
-    var corrIdA = _msg.properties.correlationId;
+    var corrIdA = msg.properties.correlationId;
     //if we found one, we execute the callback and delete it because it will never be received again anyway
-    if (amqpRPCQueues[queue][corrIdA] !== undefined) {
-      _msg = parsers.in(_msg);
-      amqpRPCQueues[queue][corrIdA].resolve(_msg);
-      this.conn.config.transport.info('amqp:producer', '[' + queue + '] < ', _msg);
-      delete amqpRPCQueues[queue][corrIdA];
-    }
+    Promise.resolve(parsers.in(msg))
+      .then((_msg) => {
+        this.conn.config.transport.info('amqp:producer', '[' + queue + '] < ', _msg);
+        return _msg;
+      })
+      .then(rpcQueue[corrIdA].resolve)
+      .then(() => {
+        delete rpcQueue[corrIdA];
+      })
+      .catch(this.conn.config.transport.error);
   };
 }
 

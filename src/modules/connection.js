@@ -10,24 +10,29 @@ var connections = {};
 function getConnection() {
   let url = this.config.url;
   let hostname = this.config.hostname;
+  let connection = connections[url];
 
   //cache handling, if connection already opened, return it
-  if (connections[url] && connections[url].conn) {
-    return Promise.resolve(connections[url].conn);
+  if (connection && connection.conn) {
+    return Promise.resolve(connection.conn);
   }
 
   //prepare the connection internal object, and reset channel if connection has been closed
-  connections[url] = { conn: null, channel: null };
-
-  return amqp.connect(url, { clientProperties: { hostname: hostname } })
+  connection = connections[url] = { conn: null, channel: null };
+  connection.conn = amqp.connect(url, { clientProperties: { hostname: hostname } })
     .then((conn) => {
         //on connection close, delete connection
-        conn.on('close', () => { delete connections[url].conn; });
+        conn.on('close', () => { delete connection.conn; });
         conn.on('error', this.config.transport.error);
 
-        connections[url].conn = conn;
+        connection.conn = conn;
         return conn;
+    })
+    .catch(() => {
+      connection.conn = null;
     });
+
+  return connection.conn;
 }
 
 /**
@@ -38,23 +43,26 @@ function getConnection() {
 function getChannel() {
   let url = this.config.url;
   let prefetch = this.config.prefetch;
+  let connection = connections[url];
 
   //cache handling, if channel already opened, return it
-  if (connections[url] && connections[url].chann) {
-    return Promise.resolve(connections[url].chann);
+  if (connection && connection.chann) {
+    return Promise.resolve(connection.chann);
   }
 
-  return connections[url].conn.createChannel()
+  connection.chann = connection.conn.createChannel()
     .then((channel) => {
       channel.prefetch(prefetch);
 
       //on error we remove the channel so the next call will recreate it (auto-reconnect are handled by connection users)
-      channel.on('close', () => { delete connections[url].chann; });
+      channel.on('close', () => { delete connection.chann; });
       channel.on('error', this.config.transport.error);
 
-      connections[url].chann = channel;
+      connection.chann = channel;
       return channel;
     });
+
+  return connection.chann;
 }
 
 /**
