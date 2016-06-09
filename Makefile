@@ -17,7 +17,7 @@ cover:
 	make lint && \
 	docker stop rabbitmq-bunnymq && docker rm rabbitmq-bunnymq; true && \
 	docker run -d --name=rabbitmq-bunnymq -p 5672:5672 rabbitmq:3.6 && sleep 2 && \
-	mocha test --recursive && \
+	istanbul cover _mocha -- test --recursive && \
 	docker stop rabbitmq-bunnymq
 sonar:
 	sed '/sonar.projectVersion/d' ./sonar-project.properties > tmp && mv tmp sonar-project.properties

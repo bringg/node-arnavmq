@@ -1,7 +1,5 @@
-/*jshint maxcomplexity:false*/
-module.exports = function(config) {
-  config = config || {};
-
+//deprecated configuration property names
+function oldConfigNames(config) {
   if (config.amqpUrl) {
     config.host = config.amqpUrl;
   }
@@ -17,6 +15,13 @@ module.exports = function(config) {
   if(config.amqpTimeout) {
     config.timeout = config.amqpTimeout;
   }
+}
+
+//deprecated env vars to configure the module
+function envVars(config) {
+  if (process.env.AMQP_URL) {
+    config.host = process.env.AMQP_URL;
+  }
 
   if (process.env.LOCAL_QUEUE) {
     config.consumerSuffix = process.env.LOCAL_QUEUE;
@@ -29,4 +34,15 @@ module.exports = function(config) {
       config.transport = console;
     }
   }
+}
+
+/**
+ * Retrocompatibility module to keep backward compat over configuration / env vars
+ * @param  {object} config A BunnyMQ configuration object
+ * @return {[type]}        [description]
+ */
+module.exports = function(config) {
+  config = config || {};
+  envVars(config);
+  oldConfigNames(config);
 };
