@@ -1,5 +1,7 @@
 var amqp = require('amqplib'),
-  assert = require('assert');
+  assert = require('assert'),
+  packageVersion = require('../../package.json').version,
+  startedAt = new Date();
 
 var connections = {};
 
@@ -19,8 +21,9 @@ function getConnection() {
 
   //prepare the connection internal object, and reset channel if connection has been closed
   connection = connections[url] = { conn: null, channel: null };
-  connection.conn = amqp.connect(url, { clientProperties: { hostname: hostname } })
-    .then((conn) => {
+  connection.conn = amqp.connect(url, { clientProperties:
+      { hostname: hostname, bunnymq: packageVersion, startedAt: startedAt, connectedAt: new Date() }
+    }).then((conn) => {
         //on connection close, delete connection
         conn.on('close', () => { delete connection.conn; });
         conn.on('error', this.config.transport.error);
