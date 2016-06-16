@@ -8,20 +8,18 @@
     "amqp",
     "taskQueue",
     "message",
-    "publish/subscribe"
+    "publish",
+    "subscribe"
   ],
-  "main": "index.js",
+  "main": "src/index.js",
   "scripts": {
-    "test": "jshint . && mocha --recursive test --timeout=5000",
-    "start": "node index.js",
-    "cover": "jshint . && istanbul cover _mocha -- --recursive test --timeout=5000",
-    "doc": "jsdoc -d ./docs --readme README.md --package package.json --template node_modules/minami lib/*"
+    "doc": "jsdoc -d ./docs --readme README.md --package package.json --template node_modules/minami src/*"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dial-once/node-bunnymq.git"
   },
-  "author": "khatal.yacine@gmail.com",
+  "author": "Dial Once",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/dial-once/node-bunnymq/issues"

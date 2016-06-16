@@ -1,9 +1,12 @@
-# BunnyMq
-BunnyMq is a [amqp.node](https://github.com/squaremo/amqp.node) wrapper to ease common AMQP usages
+# node-bunnymq
 
-[![npm](https://img.shields.io/npm/v/bunnymq.svg)]()  [![CircleCI](https://circleci.com/gh/dial-once/node-bunnymq.svg?style=shield&circle-token=:circle-ci-badge-token)](https://circleci.com/gh/dial-once/node-bunnymq) [![Codacy](https://img.shields.io/codacy/00c2c1ce21524f5c9f6cf9d1182b6a79.svg)]()   [![npm](https://img.shields.io/npm/dt/bunnymq.svg)]()
+[![Circle CI](https://circleci.com/gh/dial-once/node-bunnymq/tree/develop.svg?style=shield)](https://circleci.com/gh/dial-once/node-bunnymq)
+[![Coverage](http://badges.dialonce.io/?resource=node-bunnymq&metrics=coverage)](http://sonar.dialonce.io/overview/coverage?id=node-bunnymq)
+[![Sqale](http://badges.dialonce.io/?resource=node-bunnymq&metrics=sqale_rating)](http://sonar.dialonce.io/overview/debt?id=node-bunnymq)
+[![npm](https://img.shields.io/npm/v/bunnymq.svg)]()
+[![npm](https://img.shields.io/npm/dt/bunnymq.svg)]()
 
-[![NPM](https://nodei.co/npm/bunnymq.png?downloads=true&downloadRank=true&stars=true)](https://nodei.co/npm/bunnymq/)
+[![npm](https://nodei.co/npm/bunnymq.png?downloads=true&downloadRank=true&stars=true)](https://nodei.co/npm/bunnymq/)
 
 ## Features
 - Consumer
@@ -12,6 +15,7 @@ BunnyMq is a [amqp.node](https://github.com/squaremo/amqp.node) wrapper to ease 
 - Auto connect/reconnect/queue messages
 - Handle errors / requeing
 - Messages types caring using AMQP headers for content type
+- Connexions are handled for you: only 1/host, no matter how much you require BunnyMQ
 
 ## Installation
 ```
@@ -19,21 +23,21 @@ npm install bunnymq
 ```
 
 ## Basic usage
-### Producer
+### Publisher
 Producer (publisher), can send messages to a named queue.
 
 ```javascript
-var producer = require('bunnymq')().producer;
-producer.produce('queueName', 'Hello World!');
+var producer = require('bunnymq')({ host: 'amqp://localhost' }).producer;
+producer.produce('queue:name', 'Hello World!');
 ```
 
-### Consumer
+### Subscriber
 Consumer (subscriber), can handle messages from a named queue.
 
 ```javascript
-var consumer = require('bunnymq')().consumer;
+var consumer = require('bunnymq')({ host: 'amqp://localhost' }).consumer;
 
-consumer.consume('queueName', function (_msg) {
+consumer.consume('queue:name', function (_msg) {
   //_msg is the exact item sent by a producer as payload
   //if it is an object, it is already parsed as object
 });
@@ -42,43 +46,49 @@ consumer.consume('queueName', function (_msg) {
 ## RPC Support
 You can create RPC requests easily be adding an option to the current message:
 ```javascript
-consumer.consume('queueName', function() {
+consumer.consume('queue:name', function() {
   return 'hello world!'; //you can also return a promise if you want to do async stuff
 });
 
-producer.produce('queueName', { message: 'content' }, { rpc: true })
+producer.produce('queue:name', { message: 'content' }, { rpc: true })
 .then(function(consumerResponse) {
   console.log(consumerResponse); // prints hello world!
 });
 ```
 
+## Routing keys
+You can send publish commands with routing keys (thanks to @nekrasoft)
+```javascript
+producer.produce('queue:name', { message: 'content' }, { routingKey: 'my-routing-key' });
+```
+
 ## Config
-You can specify a config object in the BunnyMQ main function, properties not set are using default value:
+You can specify a config object, properties and default values are:
 
 ```javascript
-  var BunnyMq = require('bunnymq')({
-    amqpUrl: 'amqp://localhost', // default
-    amqpPrefetch: 1, // default
-    amqpRequeue: true, // default
-    amqpTimeout: 1000 // default timeout (in milliseconds) used to reconnect
+  var bunnymq = require('bunnymq')({
+    host: 'amqp://localhost',
+    //number of fetched messages at once on the channel
+    prefetch: 5,
+    //requeue put back message into the broker if consumer crashes/trigger exception
+    requeue: true,
+    //time between two reconnect (ms)
+    timeout: 1000,
+    consumerSuffix: '',
+    //generate a hostname so we can track this connection on the broker (rabbitmq management plugin)
+    hostname: process.env.HOSTNAME || process.env.USER || uuid.v4(),
+    //the transport to use to debug. if provided, bunnymq will show some logs
+    transport: utils.emptyLogger
   });
 ```
 
+You can override any or no of the property above.
+
 ## Env vars
-
-### Logging
-You can enable logs for the module by setting the env var ```AMQP_DEBUG``` to any value. If you have winston installed, it will use it, otherwise it will fallback to console.
-
-### Prefetch
-You can set the env var ```AMQP_PREFETCH``` to set the prefetch value of all underlying AMQP queues.
-
-### Connection
-You can set the env var ```AMQP_URL``` to a valid amqp or ampqs url.
-
-NB: the priority is always given to the config then the env vars then fallback to default values, so if you want to use env vars you can use them directly without specifying the config object or use a config object which looks like the default one.
+Deprecated as of 2.1.0, don't use env vars to configure the module, see Config section.
 
 ## Documentation & resources
-To generate documentattion, just run ``` npm run docs```, it will create a docs folder.
+To generate documentation, just run ``` npm run docs```, it will create a docs folder.
 
 You can also find more about RabbitMq in the links below:
  - http://www.rabbitmq.com/getstarted.html
@@ -86,16 +96,12 @@ You can also find more about RabbitMq in the links below:
  - http://spring.io/blog/2010/06/14/understanding-amqp-the-protocol-used-by-rabbitmq/
 
 ## Tests
-1. Ensure that you have a RabbitMQ server running
-2. Run tests ``` npm test```
-3. Coverage is done with ``npm run cover``
+Requirements:
+  - docker
+  - npm
+  - make
 
-## Contribution
-If you want to contribute, you are very welcome!
-Please read our [Contributing Guidlines](CONTRIBUTING.md)
+Run `make deps` once and then `make test` to launch the test suite.
 
 ## License
 The MIT License [MIT](LICENSE)
-
-
-![bunny gif](./medias/bunny.gif)

@@ -29,3 +29,11 @@ node_modules
 
 # documentation
 docs
+samples
+test
+.gitignore
+.jshintignore
+.npmignore
+CONTRIBUTING.md
+Makefile
+sonar-project.properties

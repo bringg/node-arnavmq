@@ -1,183 +1,115 @@
-
 var assert = require('assert');
-var producer = require('../index')().producer;
-var consumer = require('../index')().consumer;
+var producer = require('../src/index')().producer;
+var consumer = require('../src/index')().consumer;
+var utils = require('../src/modules/utils');
 var uuid = require('node-uuid');
+var docker = require('./docker');
 
 var fixtures = {
-  queues: ['test-queue-0', 'test-queue-1', 'test-queue-2', 'test-queue-3']
+  queues: ['test-queue-0', 'test-queue-1', 'test-queue-2', 'test-queue-3'],
+  routingKey: 'queue-routing-key'
 };
 
 var letters = 0;
 
-describe('Producer/Consumer msg delevering:', function() {
-
-  it('should be able to consume message sended by producer to queue [test-queue-0]', function (done) {
-    producer.produce(fixtures.queues[0], { msg: uuid.v4() })
-    .then(function (response) {
-      assert(response === true);
-      ++letters;
-    })
-    .then(function () {
-      return consumer.consume(fixtures.queues[0], function (_msg) {
-        assert(typeof _msg === 'object');
-      });
-    })
-    .then(function (response) {
-      assert(response === true);
-      --letters;
-    })
-    .then(done);
+describe('producer/consumer', function() {
+  before(function() {
+    this.timeout(20000);
+    return docker.start();
   });
 
-  it('should be able to consume message sended by producer to queue [test-queue-0] (no message)', function (done) {
-    producer.produce(fixtures.queues[0])
-    .then(function (response) {
-      assert(response === true);
-      ++letters;
-    })
-    .then(function () {
-      return consumer.consume(fixtures.queues[0], function (_msg) {
-        assert(_msg === undefined);
-      });
-    })
-    .then(function (response) {
-      assert(response === true);
-      --letters;
-    })
-    .then(done);
+  after(() => {
+    return docker.stop();
   });
 
-  it('should be able to consume message sended by producer to queue [test-queue-0] (null message)', function (done) {
-    producer.produce(fixtures.queues[0], null)
-    .then(function (response) {
-      assert(response === true);
-      ++letters;
-    })
-    .then(function () {
-      return consumer.consume(fixtures.queues[0], function (_msg) {
-        assert(_msg === null);
-      });
-    })
-    .then(function (response) {
-      assert(response === true);
-      --letters;
-    })
-    .then(done);
-  });
-
-  it('should not be able to consume message sended by producer to queue [test-queue-1]', function (done) {
-    producer.produce(fixtures.queues[1], { msg: uuid.v4() })
-    .then(function (response) {
-      assert(response === true);
-      ++letters;
-    })
-    .then(function () {
-      return consumer.consume(fixtures.queues[0], function (_msg) {
-        assert(typeof _msg === 'object');
-      });
-    })
-    .then(function (response) {
-      assert(response === true);
-      --letters;
-    })
-    .then(done);
-  });
-
-  it('should be able to consume message sended by producer to queue [test-queue-1], and the message of the previous test case', function (done) {
-    producer.produce(fixtures.queues[1], { msg: uuid.v4() })
-    .then(function (response) {
-      assert(response === true);
-      ++letters;
-    })
-    .then(function () {
-      return new Promise(function (resolve) {
-        consumer.consume(fixtures.queues[1], function (_msg) {
-          assert(typeof _msg === 'object');
-          --letters;
-          if (!letters) return resolve(true);
+  describe('msg delevering', function() {
+    before(() => {
+      return consumer.consume(fixtures.queues[0], function () {
+        letters--;
+      }).then(() => {
+        return consumer.consume(fixtures.queues[1], function () {
+          letters--;
         });
       });
-    })
-    .then(function (response) {
-      assert(response === true);
-    })
-    .then(done);
-  });
+    });
 
-  it('should be able to consume all message populated by producer to all queues [test-queue-0, test-queue-1, test-queue-2]', function (done) {
-    producer.produce(fixtures.queues[2], { msg: uuid.v4() })
-    .then(function (response) {
-      assert(response === true);
-      ++letters;
-    })
-    .then(function () {
-      return producer.produce(fixtures.queues[1], { msg: uuid.v4() });
-    })
-    .then(function (response) {
-      assert(response === true);
-      ++letters;
-    })
-    .then(function () {
-      return producer.produce(fixtures.queues[0], { msg: uuid.v4() });
-    })
-    .then(function (response) {
-      assert(response === true);
-      ++letters;
-    })
-    .then(function () {
-      return consumer.consume(fixtures.queues[2], function (_msg) {
-        assert(typeof _msg === 'object');
-      });
-    })
-    .then(function (response) {
-      assert(response === true);
-      --letters;
-    })
-    .then(function () {
-      return consumer.consume(fixtures.queues[1], function (_msg) {
-        assert(typeof _msg === 'object');
-      });
-    })
-    .then(function (response) {
-      assert(response === true);
-      --letters;
-    })
-    .then(function () {
-      return consumer.consume(fixtures.queues[0], function (_msg) {
-        assert(typeof _msg === 'object');
-      });
-    })
-    .then(function (response) {
-      assert(response === true);
-      --letters;
-    })
-    .then(done);
-  });
-});
+    it('should be able to consume message sended by producer to queue [test-queue-0]', function () {
+      letters++;
+      return producer.produce(fixtures.queues[0], { msg: uuid.v4() })
+        .then(() => utils.timeoutPromise(300))
+        .then(() => assert.equal(letters, 0));
+    });
 
-describe('Producer/Consumer msg requeueing:', function () {
+    it('should be able to consume message sended by producer to queue [test-queue-0] (no message)', function () {
+      letters++;
+      return producer.produce(fixtures.queues[0])
+        .then(() => utils.timeoutPromise(300))
+        .then(() => assert.equal(letters, 0));
+    });
 
-  it('should be able to consume message, but throw error so the message is requeued again on queue [test-queue-0]', function (done) {
-    var attempt = 3;
+    it('should be able to consume message sended by producer to queue [test-queue-0] (null message)', function () {
+      letters++;
+      return producer.produce(fixtures.queues[0], null)
+        .then(() => utils.timeoutPromise(300))
+        .then(() => assert.equal(letters, 0));
+    });
 
-    consumer.consume(fixtures.queues[3], function (_msg) {
-      assert(typeof _msg === 'object');
+    it('should not be able to consume message sended by producer to queue [test-queue-1]', function () {
+      letters++;
+      return producer.produce(fixtures.queues[1], null)
+        .then(() => utils.timeoutPromise(300))
+        .then(() => assert.equal(letters, 0));
+    });
 
-      --attempt;
-      if (!attempt) {
-        return true;
-      } else {
-        throw new Error('Any kind of error');
+    it('should be able to consume all message populated by producer to all queues [test-queue-0, test-queue-1, test-queue-2]', function () {
+      var count = 100;
+      var messages = [];
+      letters += 200;
+
+      for(let i = 0; i < count; i++) {
+        messages.push(producer.produce(fixtures.queues[0], null));
+        messages.push(producer.produce(fixtures.queues[1], null));
       }
-    })
-    .then(function () {
-      producer.produce(fixtures.queues[3], { msg: uuid.v4() })
-      .then(function (response) {
-        assert(response === true);
-        ++letters;
+
+      return Promise.all(messages)
+        .then(() => utils.timeoutPromise(500))
+        .then(() => assert.equal(letters, 0));
+    });
+
+  });
+
+  describe('msg requeueing', function() {
+    it('should be able to consume message, but throw error so the message is requeued again on queue [test-queue-0]', function (done) {
+      var attempt = 3;
+
+      consumer.consume(fixtures.queues[3], function (_msg) {
+        assert(typeof _msg === 'object');
+
+        --attempt;
+        if (!attempt) {
+          return done();
+        } else {
+          throw new Error('Any kind of error');
+        }
+      })
+      .then(function () {
+        producer.produce(fixtures.queues[3], { msg: uuid.v4() })
+        .then(function (response) {
+          assert(response === true);
+          ++letters;
+        });
       });
-    })
-    .then(done);
+    });
+  });
+
+  describe('routing keys', function () {
+    it('should be able to send a message to a rounting key exchange', function() {
+      return consumer.consume(fixtures.routingKey, function (message) {
+        assert.equal(message.content, 'ok');
+      })
+      .then(() => {
+        return producer.produce(fixtures.rountingKey, { content: 'ok' }, { routingKey: 'route' });
+      });
+    });
   });
 });
