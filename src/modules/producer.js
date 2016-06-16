@@ -10,8 +10,12 @@ var amqpRPCQueues = {};
  * @return {Promise}       Resolves when answer response queue is ready to receive messages
  */
 function createRpcQueue(queue) {
+  if (!amqpRPCQueues[queue]) {
+    amqpRPCQueues[queue] = {};
+  }
+
   let rpcQueue = amqpRPCQueues[queue];
-  if (rpcQueue.queue) return Promise.resolve(queue);
+  if (rpcQueue.queue) return Promise.resolve(rpcQueue.queue);
 
   //we create the callback queue using base queue name + appending config hostname and :res for clarity
   //ie. if hostname is gateway-http and queue is service-oauth, response queue will be service-oauth:gateway-http:res
@@ -82,10 +86,6 @@ function checkRpc (queue, msg, options) {
   options.persistent = true;
 
   if (options.rpc) {
-    if (!amqpRPCQueues[queue]) {
-      amqpRPCQueues[queue] = {};
-    }
-
     return createRpcQueue.call(this, queue)
     .then(() => {
       //generates a correlationId (random uuid) so we know which callback to execute on received response
