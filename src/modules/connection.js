@@ -10,7 +10,7 @@ var connections = {};
  * @return {Promise} A promise that resolve with an amqp.node connection object
  */
 function getConnection() {
-  let url = this.config.url;
+  let url = this.config.host;
   let hostname = this.config.hostname;
   let connection = connections[url];
 
@@ -31,8 +31,9 @@ function getConnection() {
         connection.conn = conn;
         return conn;
     })
-    .catch(() => {
+    .catch((e) => {
       connection.conn = null;
+      throw e;
     });
 
   return connection.conn;
@@ -44,7 +45,7 @@ function getConnection() {
  * @return {Promise} A promise that resolve with an amqp.node channel object
  */
 function getChannel() {
-  let url = this.config.url;
+  let url = this.config.host;
   let prefetch = this.config.prefetch;
   let connection = connections[url];
 
@@ -73,10 +74,7 @@ function getChannel() {
  * @return {Promise} A promise that resolve with an amqp.node channel object
  */
 function get() {
-  return getConnection.call(this)
-    .then(() => {
-      return getChannel.call(this);
-    });
+  return getConnection.call(this).then(() => getChannel.call(this));
 }
 
 /**
