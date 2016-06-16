@@ -10,14 +10,14 @@ var parsers = require('./message-parsers'),
 function checkRpc (msg, queue) {
   /**
    * When message contains a replyTo property, we try to send the answer back
-   * @param  {any} _content the received message:
+   * @param  {any} content the received message:
    * @return {any}          object, string, number... the current received message
    */
-  return (_content) => {
+  return (content) => {
     if (msg.properties.replyTo) {
       var options = { correlationId: msg.properties.correlationId, persistent: true, durable: true };
-      this.conn.config.transport.info('bmq:consumer', '[' + queue + '][' + msg.properties.replyTo + '] >', _content);
-      this.channel.sendToQueue(msg.properties.replyTo, parsers.out(_content, options), options);
+      this.conn.config.transport.info('bmq:consumer', '[' + queue + '][' + msg.properties.replyTo + '] >', content);
+      this.channel.sendToQueue(msg.properties.replyTo, parsers.out(content, options), options);
     }
 
     return msg;
@@ -57,21 +57,21 @@ function consume (queue, options, callback) {
 
       this.conn.config.transport.info('bmq:consumer', 'init', _queue.queue);
 
-      this.channel.consume(_queue.queue, (_msg) => {
-        this.conn.config.transport.info('bmq:consumer', '[' + _queue.queue + '] < ' + _msg.content.toString());
+      this.channel.consume(_queue.queue, (msg) => {
+        this.conn.config.transport.info('bmq:consumer', '[' + _queue.queue + '] < ' + msg.content.toString());
 
         //main answer management chaining
         //receive message, parse it, execute callback, check if should answer, ack/reject message
-        Promise.resolve(parsers.in(_msg))
+        Promise.resolve(parsers.in(msg))
         .then(callback)
-        .then(checkRpc.call(this, _msg, _queue.queue))
+        .then(checkRpc.call(this, msg, _queue.queue))
         .then(() => {
-          this.channel.ack(_msg);
+          this.channel.ack(msg);
         })
-        .catch((_err) => {
+        .catch((err) => {
           //if something bad happened in the callback, reject the message so we can requeue it (or not)
-          this.conn.config.transport.error('bmq:consumer', _err);
-          this.channel.reject(_msg, this.conn.config.requeue);
+          this.conn.config.transport.error('bmq:consumer', err);
+          this.channel.reject(msg, this.conn.config.requeue);
         });
       }, { noAck: false });
 
@@ -87,9 +87,6 @@ function consume (queue, options, callback) {
   });
 }
 
-module.exports = function(_conn) {
-  return {
-    conn: _conn,
-    consume: consume
-  };
+module.exports = function(conn) {
+  return { conn, consume };
 };

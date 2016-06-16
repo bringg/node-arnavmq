@@ -1,18 +1,16 @@
 /**
  * Incoming message parser - parse message based on headers
- * @param  {object} _msg An amqp.node incoming message
+ * @param  {object} msg An amqp.node incoming message
  * @return {any}      a string, object, number to send. Something stringifiable
  */
-module.exports.in = (_msg) => {
+module.exports.in = (msg) => {
   //if sender put a json header, we parse it to avoid the pain for the consumer
-  if (_msg.properties.contentType === 'application/json') {
-    try {
-      return JSON.parse(_msg.content.toString());
-    } catch(e) {}
+  if (msg.properties.contentType === 'application/json') {
+    return JSON.parse(msg.content.toString());
   }
 
-  if (_msg.content.length) {
-    return _msg.content.toString();
+  if (msg.content.length) {
+    return msg.content.toString();
   } else {
     return undefined;
   }

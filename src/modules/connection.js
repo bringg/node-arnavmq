@@ -92,7 +92,6 @@ function addListener(on, func) {
 
 module.exports = (config) => {
   assert(config.hostname);
-  assert(config.hostname);
 
   return {
     config: config,

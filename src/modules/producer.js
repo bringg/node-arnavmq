@@ -27,9 +27,7 @@ function createRpcQueue(queue) {
 
         return channel.consume(_queue.queue, maybeAnswer.call(this, queue), { noAck: true });
       })
-      .then(() => {
-        return queue;
-      });
+      .then(() => rpcQueue.queue);
     })
     .catch(() => {
       delete rpcQueue.queue;
@@ -51,18 +49,16 @@ function maybeAnswer(queue) {
 
   return (msg) => {
     //check the correlation ID sent by the initial message using RPC
-    var corrIdA = msg.properties.correlationId;
-    //if we found one, we execute the callback and delete it because it will never be received again anyway
-    Promise.resolve(parsers.in(msg))
-      .then((_msg) => {
-        this.conn.config.transport.info('amqp:producer', '[' + queue + '] < ', _msg);
-        return _msg;
-      })
-      .then(rpcQueue[corrIdA].resolve)
-      .then(() => {
-        delete rpcQueue[corrIdA];
-      })
-      .catch(this.conn.config.transport.error);
+    var corrId = msg.properties.correlationId;
+
+    try {
+      //if we found one, we execute the callback and delete it because it will never be received again anyway
+      rpcQueue[corrId].resolve(parsers.in(msg));
+      this.conn.config.transport.info('bmq:producer', '[' + queue + '] < answer');
+      delete rpcQueue[corrId];
+    } catch(e) {
+      this.conn.config.transport.error(e);
+    }
   };
 }
 
@@ -117,6 +113,10 @@ function checkRpc (queue, msg, options) {
  * @return {Promise}         checkRpc response
  */
 function produce(queue, msg, options) {
+  //default options are persistent and durable because we do not want to miss any outgoing message
+  //unless user specify it
+  options = Object.assign({ persistent: true, durable: true }, options);
+
   return this.conn.get()
   .then((_channel) => {
     this.channel = _channel;
@@ -124,17 +124,13 @@ function produce(queue, msg, options) {
     //undefined can't be serialized/buffered :p
     if (!msg) msg = null;
 
-    //default options are persistent and durable because we do not want to miss any outgoing message
-    //unless user specify it
-    options = options || { persistent: true, durable: true };
-
-    this.conn.config.transport.info('amqp:producer', '[' + queue + '] > ', msg);
+    this.conn.config.transport.info('bmq:producer', '[' + queue + '] > ', msg);
 
     return checkRpc.call(this, queue, parsers.out(msg, options), options);
   })
   .catch((err) => {
     //add timeout between retries because we don't want to overflow the CPU
-    this.conn.config.transport.error('amqp:producer', err);
+    this.conn.config.transport.error('bmq:producer', err);
     return utils.timeoutPromise(this.conn.config.timeout)
     .then(() => {
       return produce.call(this, queue, msg, options);
@@ -142,9 +138,6 @@ function produce(queue, msg, options) {
   });
 }
 
-module.exports = function(_conn) {
-  return {
-    conn: _conn,
-    produce: produce
-  };
+module.exports = function(conn) {
+  return { conn, produce };
 };
