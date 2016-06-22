@@ -41,7 +41,7 @@ function consume (queue, options, callback) {
 
   //consumer gets a suffix if one is set on the configuration, to suffix all queues names
   //ex: service-something with suffix :ci becomes service-suffix:ci etc.
-  queue += this.conn.config.consumerSuffix;
+  var suffixedQueue = queue + this.conn.config.consumerSuffix;
 
   return this.conn.get()
   .then((_channel) => {
@@ -52,7 +52,7 @@ function consume (queue, options, callback) {
       consume.call(this, queue, options, callback);
     });
 
-    return this.channel.assertQueue(queue, options)
+    return this.channel.assertQueue(suffixedQueue, options)
     .then((_queue) => {
 
       this.conn.config.transport.info('bmq:consumer', 'init', _queue.queue);
