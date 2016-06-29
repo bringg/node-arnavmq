@@ -9,15 +9,15 @@
 [![npm](https://nodei.co/npm/bunnymq.png?downloads=true&downloadRank=true&stars=true)](https://nodei.co/npm/bunnymq/)
 
 ## Features
-- Consumer
-- Producer
-- RPC
+- Subscriber (consumer)
+- Publisher (producer)
+- RPC (get answers from subscriber automatically)
 - Auto connect/reconnect/queue messages
-- Handle errors / requeing
-- Messages types caring using AMQP headers for content type
-- Connexions are handled for you: only 1/host, no matter how much you require BunnyMQ
+- Handle errors / requeing when message callback fails
+- Messages types caring using AMQP headers for content type (send as objects and receive as objects)
 
 ## Installation
+**bunnymq requires nodejs 6 or harmony flags!** because it uses es6 features outside strict mode.
 ```
 npm install bunnymq
 ```
