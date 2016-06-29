@@ -22,7 +22,7 @@ function getConnection() {
   //prepare the connection internal object, and reset channel if connection has been closed
   connection = connections[url] = { conn: null, channel: null };
   connection.conn = amqp.connect(url, { clientProperties:
-      { hostname: hostname, bunnymq: packageVersion, startedAt: startedAt, connectedAt: new Date() }
+      { hostname: hostname, bunnymq: packageVersion, startedAt: startedAt.toISOString(), connectedAt: new Date().toISOString() }
     }).then((conn) => {
         //on connection close, delete connection
         conn.on('close', () => { delete connection.conn; });
