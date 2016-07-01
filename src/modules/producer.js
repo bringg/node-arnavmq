@@ -61,7 +61,7 @@ function maybeAnswer(queue) {
       this.conn.config.transport.info('bmq:producer', '[' + queue + '] < answer');
       delete rpcQueue[corrId];
     } catch(e) {
-      this.conn.config.transport.error(e);
+      this.conn.config.transport.error(new Error('Receiving RPC message from previous session: callback no more in memory. ' + queue));
     }
   };
 }
