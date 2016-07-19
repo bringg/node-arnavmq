@@ -19,6 +19,29 @@ function checkQueue(channel, queueName) {
       throw err;
     });
 }
+
+/**
+ * Consume the queue
+ * @param rpcQueue
+ * @param conn
+ * @param channel
+ * @param queue
+ * @returns {function(*)}
+ */
+function consumeQueue(rpcQueue, conn, channel, queue) {
+  return function (_queue){
+    rpcQueue.queue = _queue.queue;
+
+    //if channel is closed, we want to make sure we cleanup the queue so future calls will recreate it
+    conn.addListener('close', () => {
+      delete rpcQueue.queue;
+      createRpcQueue.call(this, queue);
+    });
+
+    return channel.consume(_queue.queue, maybeAnswer.call(this, queue), {noAck: true})
+      .then(() => rpcQueue.queue);
+  };
+}
 /**
  * Create a RPC-ready queue
  * @param  {string} queue the queue name in which we send a RPC request
@@ -41,21 +64,8 @@ function createRpcQueue(queue) {
     .get()
     .then((channel) => {
       return checkQueue(channel, queue)
-        .then(()=> {
-          return channel.assertQueue(resQueue, {durable: true, exclusive: true})
-            .then((_queue) => {
-              rpcQueue.queue = _queue.queue;
-
-              //if channel is closed, we want to make sure we cleanup the queue so future calls will recreate it
-              this.conn.addListener('close', () => {
-                delete rpcQueue.queue;
-                createRpcQueue.call(this, queue);
-              });
-
-              return channel.consume(_queue.queue, maybeAnswer.call(this, queue), {noAck: true});
-            })
-            .then(() => rpcQueue.queue);
-        });
+        .then(() => channel.assertQueue(resQueue, {durable: true, exclusive: true}))
+        .then(consumeQueue(rpcQueue, this.conn, channel, queue).bind(this));
     })
     .catch((err) => {
       delete rpcQueue.queue;
