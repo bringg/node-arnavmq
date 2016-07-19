@@ -108,7 +108,7 @@ describe('producer/consumer', function() {
         assert.equal(message.content, 'ok');
       })
       .then(() => {
-        return producer.produce(fixtures.rountingKey, { content: 'ok' }, { routingKey: 'route' });
+        return producer.produce(fixtures.routingKey, { content: 'ok' }, { routingKey: 'route' });
       });
     });
   });
