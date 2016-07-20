@@ -70,5 +70,20 @@ describe('config', function() {
       var conf = { host: 'amqp://my-host' };
       assert.equal(main(conf).producer.conn.config.hostname.length, uuid.v4().length);
     });
+
+    it('should ensure prefetch is in an integer format', function() {
+      var conf = { host: 'amqp://my-host', prefetch: '3' };
+      assert.equal(main(conf).producer.conn.config.prefetch, 3);
+    });
+
+    it('should set unlimited prefetch if prefetch is an invalid value', function() {
+      var conf = { host: 'amqp://my-host', prefetch: '' };
+      assert.equal(main(conf).producer.conn.config.prefetch, 0);
+    });
+
+    it('should use provided prefetch', function() {
+      var conf = { host: 'amqp://my-host', prefetch: 1 };
+      assert.equal(main(conf).producer.conn.config.prefetch, 1);
+    });
   });
 });
