@@ -12,8 +12,8 @@ var fixtures = {
 
 var letters = 0;
 
-describe('producer/consumer', function() {
-  before(function() {
+describe('producer/consumer', function () {
+  before(function () {
     this.timeout(20000);
     return docker.start();
   });
@@ -22,7 +22,7 @@ describe('producer/consumer', function() {
     return docker.stop();
   });
 
-  describe('msg delevering', function() {
+  describe('msg delevering', function () {
     before(() => {
       return consumer.consume(fixtures.queues[0], function () {
         letters--;
@@ -35,7 +35,7 @@ describe('producer/consumer', function() {
 
     it('should be able to consume message sended by producer to queue [test-queue-0]', function () {
       letters++;
-      return producer.produce(fixtures.queues[0], { msg: uuid.v4() })
+      return producer.produce(fixtures.queues[0], {msg: uuid.v4()})
         .then(() => utils.timeoutPromise(300))
         .then(() => assert.equal(letters, 0));
     });
@@ -66,7 +66,7 @@ describe('producer/consumer', function() {
       var messages = [];
       letters += 200;
 
-      for(let i = 0; i < count; i++) {
+      for (let i = 0; i < count; i++) {
         messages.push(producer.produce(fixtures.queues[0], null));
         messages.push(producer.produce(fixtures.queues[1], null));
       }
@@ -78,38 +78,78 @@ describe('producer/consumer', function() {
 
   });
 
-  describe('msg requeueing', function() {
+  describe('msg requeueing', function () {
     it('should be able to consume message, but throw error so the message is requeued again on queue [test-queue-0]', function (done) {
       var attempt = 3;
 
       consumer.consume(fixtures.queues[3], function (_msg) {
-        assert(typeof _msg === 'object');
+          assert(typeof _msg === 'object');
 
-        --attempt;
-        if (!attempt) {
-          return done();
-        } else {
-          throw new Error('Any kind of error');
-        }
-      })
-      .then(function () {
-        producer.produce(fixtures.queues[3], { msg: uuid.v4() })
-        .then(function (response) {
-          assert(response === true);
-          ++letters;
+          --attempt;
+          if (!attempt) {
+            return done();
+          } else {
+            throw new Error('Any kind of error');
+          }
+        })
+        .then(function () {
+          producer.produce(fixtures.queues[3], {msg: uuid.v4()})
+            .then(function (response) {
+              assert(response === true);
+              ++letters;
+            });
         });
-      });
+    });
+  });
+
+  describe('producer/no queue', function () {
+    it('should reject for rpc channel in case the queue does not exists', function (done) {
+      var fakeQueue = 'fake:queue:name';
+      producer.produce(fakeQueue, {msg: Date.now()}, {rpc: true})
+        .then(function () {
+          done(new Error('it should reject'));
+        })
+        .catch(function (err) {
+          try {
+            assert(err instanceof Error);
+            assert(err.message.indexOf('NOT_FOUND') > -1);
+            assert(err.message.indexOf('404') > -1);
+            assert(err.message.indexOf(fakeQueue) > -1);
+            done();
+          } catch (e) {
+            done(e);
+          }
+        });
+    });
+
+    it('should reject for non rpc channel in case the queue does not exists', function (done) {
+      var fakeQueue = 'fake:queue:name';
+      producer.produce(fakeQueue, {msg: Date.now()}, {rpc: false})
+        .then(function () {
+          done(new Error('it should reject'));
+        })
+        .catch(function (err) {
+          try {
+            assert(err instanceof Error);
+            assert(err.message.indexOf('NOT_FOUND') > -1);
+            assert(err.message.indexOf('404') > -1);
+            assert(err.message.indexOf(fakeQueue) > -1);
+            done();
+          } catch (e) {
+            done(e);
+          }
+        });
     });
   });
 
   describe('routing keys', function () {
-    it('should be able to send a message to a rounting key exchange', function() {
+    it('should be able to send a message to a rounting key exchange', function () {
       return consumer.consume(fixtures.routingKey, function (message) {
-        assert.equal(message.content, 'ok');
-      })
-      .then(() => {
-        return producer.produce(fixtures.rountingKey, { content: 'ok' }, { routingKey: 'route' });
-      });
+          assert.equal(message.content, 'ok');
+        })
+        .then(() => {
+          return producer.produce(fixtures.routingKey, {content: 'ok'}, {routingKey: 'route'});
+        });
     });
   });
 });
