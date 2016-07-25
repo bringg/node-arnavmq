@@ -25,6 +25,8 @@ module.exports = function(config) {
     transport: utils.emptyLogger
   }, config);
 
+  config.prefetch = parseInt(config.prefetch, 10) || 0;
+
   return {
     producer: require('./modules/producer')(conn(config)),
     consumer: require('./modules/consumer')(conn(config))
