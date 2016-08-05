@@ -132,12 +132,11 @@ function checkRpc(queue, msg, options) {
         //reply to us if you receive this message!
         options.replyTo = amqpRPCQueues[queue].queue;
 
-        return publishOrSendToQueue.call(this, queue, msg, options)
-          .then(() => {
+        if (publishOrSendToQueue.call(this, queue, msg, options)) {
             //defered promise that will resolve when response is received
             amqpRPCQueues[queue][corrId] = Promise.defer();
             return amqpRPCQueues[queue][corrId].promise;
-          });
+        }
       });
   }
 
