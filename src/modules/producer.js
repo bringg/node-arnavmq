@@ -4,6 +4,11 @@ var utils = require('./utils'),
 
 var amqpRPCQueues = {};
 
+const ERRORS = {
+  TIMEOUT: 'Timeout reached',
+  BUFFER_FULL: 'Buffer is full'
+};
+
 /**
  * Create a RPC-ready queue
  * @param  {string} queue the queue name in which we send a RPC request
@@ -75,6 +80,23 @@ function publishOrSendToQueue(queue, msg, options) {
 }
 
 /**
+ * Start a timer to reject the pending RPC call if no answer is received within the given timeout
+ * @param  {string} queue  The queue where the RPC request was sent
+ * @param  {string} corrId The RPC correlation ID
+ * @param  {number} time    The timeout in ms to wait for an answer before triggering the rejection
+ * @return {void}         Nothing
+ */
+function prepareTimeoutRpc(queue, corrId, time) {
+  setTimeout(function() {
+    const rpcCallback = amqpRPCQueues[queue][corrId];
+    if (rpcCallback) {
+      rpcCallback.reject(new Error(ERRORS.TIMEOUT));
+      delete amqpRPCQueues[queue][corrId];
+    }
+  }, time);
+}
+
+/**
  * Send message with or without rpc protocol, and check if RPC queues are created
  * @param  {string} queue   the queue to send `msg` on
  * @param  {any} msg     string, object, number.. anything bufferable/serializable
@@ -96,8 +118,14 @@ function checkRpc (queue, msg, options) {
 
         if (publishOrSendToQueue.call(this, queue, msg, options)) {
             //defered promise that will resolve when response is received
-            amqpRPCQueues[queue][corrId] = Promise.defer();
-            return amqpRPCQueues[queue][corrId].promise;
+            let responsePromise = Promise.defer();
+            amqpRPCQueues[queue][corrId] = responsePromise;
+            if (options.timeout) {
+              prepareTimeoutRpc(queue, corrId, options.timeout);
+            }
+            return responsePromise.promise;
+        } else {
+          return Promise.reject(ERRORS.BUFFER_FULL);
         }
       });
   }
@@ -129,6 +157,9 @@ function produce(queue, msg, options) {
     return checkRpc.call(this, queue, parsers.out(msg, options), options);
   })
   .catch((err) => {
+    if ([ERRORS.TIMEOUT, ERRORS.BUFFER_FULL].indexOf(err.message) !== -1) {
+      throw err;
+    }
     //add timeout between retries because we don't want to overflow the CPU
     this.conn.config.transport.error('bmq:producer', err);
     return utils.timeoutPromise(this.conn.config.timeout)

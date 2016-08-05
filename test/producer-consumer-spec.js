@@ -112,4 +112,13 @@ describe('producer/consumer', function() {
       });
     });
   });
+
+  describe('rpc timeouts', function() {
+    it('should reject on timeout, if no answer received', function() {
+      return producer.produce('non-existing-queue', { msg: 'ok' }, { rpc: true, timeout: 1000 })
+        .catch((e) => {
+          assert.equal(e.message, 'Timeout reached');
+        });
+    });
+  });
 });
