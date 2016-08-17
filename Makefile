@@ -2,6 +2,7 @@
 run:
 	node src/index.js
 deps:
+	docker pull rabbitmq:3.6
 	npm install -g jshint mocha istanbul
 	npm i
 lint:
