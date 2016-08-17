@@ -20,7 +20,7 @@ describe('disconnections', function() {
     it('should be able to re-register to consume messages between connection failures', function(done) {
       this.timeout(20000);
       var counter = 0;
-      return consumer.consume(queue, function() {
+      consumer.consume(queue, function() {
         counter++;
         if (counter === 50) {
           done();
@@ -57,7 +57,7 @@ describe('disconnections', function() {
         if (counter === 50) done();
       };
 
-      return consumer.consume(queue, function() {
+      consumer.consume(queue, function() {
         counter++;
         return counter;
       })
