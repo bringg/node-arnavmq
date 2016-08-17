@@ -1,47 +1,14 @@
-const utils = require('./utils');
-const uuid = require('node-uuid');
-const parsers = require('./message-parsers');
+var utils = require('./utils'),
+  uuid = require('node-uuid'),
+  parsers = require('./message-parsers');
 
 var amqpRPCQueues = {};
 
-/**
- * Checks if the channel exists
- * @param {Object} channel the channel to check
- * @param {String} queueName name of the queue to check on channel
- * @returns {Promise} rejects if there is no queue
- */
-function checkQueue(channel, queueName) {
-  return channel
-    .checkQueue(queueName)
-    .catch((err) => {
-      // error means there is no queue
-      err.type = 'no_queue';
-      throw err;
-    });
-}
+const ERRORS = {
+  TIMEOUT: 'Timeout reached',
+  BUFFER_FULL: 'Buffer is full'
+};
 
-/**
- * Consume the queue
- * @param rpcQueue
- * @param conn
- * @param channel
- * @param queue
- * @returns {function(*)}
- */
-function consumeQueue(rpcQueue, conn, channel, queue) {
-  return function (_queue){
-    rpcQueue.queue = _queue.queue;
-
-    //if channel is closed, we want to make sure we cleanup the queue so future calls will recreate it
-    conn.addListener('close', () => {
-      delete rpcQueue.queue;
-      createRpcQueue.call(this, queue);
-    });
-
-    return channel.consume(_queue.queue, maybeAnswer.call(this, queue), {noAck: true})
-      .then(() => rpcQueue.queue);
-  };
-}
 /**
  * Create a RPC-ready queue
  * @param  {string} queue the queue name in which we send a RPC request
@@ -52,24 +19,27 @@ function createRpcQueue(queue) {
     amqpRPCQueues[queue] = {};
   }
 
-  const rpcQueue = amqpRPCQueues[queue];
+  let rpcQueue = amqpRPCQueues[queue];
   if (rpcQueue.queue) return Promise.resolve(rpcQueue.queue);
 
   //we create the callback queue using base queue name + appending config hostname and :res for clarity
   //ie. if hostname is gateway-http and queue is service-oauth, response queue will be service-oauth:gateway-http:res
   //it is important to have different hostname or no hostname on each module sending message or there will be conflicts
   var resQueue = queue + ':' + this.conn.config.hostname + ':res';
-  rpcQueue.queue = this
-    .conn
-    .get()
-    .then((channel) => {
-      return checkQueue(channel, queue)
-        .then(() => channel.assertQueue(resQueue, {durable: true, exclusive: true}))
-        .then(consumeQueue(rpcQueue, this.conn, channel, queue).bind(this));
+  rpcQueue.queue = this.conn.get().then((channel) => {
+    return channel.assertQueue(resQueue, { durable: true, exclusive: true })
+      .then((_queue) => {
+        rpcQueue.queue = _queue.queue;
+
+        //if channel is closed, we want to make sure we cleanup the queue so future calls will recreate it
+        this.conn.addListener('close', () => { delete rpcQueue.queue; createRpcQueue.call(this, queue); });
+
+        return channel.consume(_queue.queue, maybeAnswer.call(this, queue), { noAck: true });
+      })
+      .then(() => rpcQueue.queue);
     })
-    .catch((err) => {
+    .catch(() => {
       delete rpcQueue.queue;
-      if (err.type === 'no_queue') throw err;
       return utils.timeoutPromise(this.conn.config.timeout).then(() => {
         return createRpcQueue.call(this, queue);
       });
@@ -95,31 +65,45 @@ function maybeAnswer(queue) {
       rpcQueue[corrId].resolve(parsers.in(msg));
       this.conn.config.transport.info('bmq:producer', '[' + queue + '] < answer');
       delete rpcQueue[corrId];
-    } catch (e) {
+    } catch(e) {
       this.conn.config.transport.error(new Error('Receiving RPC message from previous session: callback no more in memory. ' + queue));
     }
   };
 }
 
 function publishOrSendToQueue(queue, msg, options) {
-  return checkQueue(this.channel, queue)
-    .then(() => {
-      if (!options.routingKey) {
-        return this.channel.sendToQueue(queue, msg, options);
-      } else {
-        return this.channel.publish(queue, options.routingKey, msg, options);
-      }
-    });
+  if (!options.routingKey) {
+    return this.channel.sendToQueue(queue, msg, options);
+  } else {
+    return this.channel.publish(queue, options.routingKey, msg, options);
+  }
+}
+
+/**
+ * Start a timer to reject the pending RPC call if no answer is received within the given timeout
+ * @param  {string} queue  The queue where the RPC request was sent
+ * @param  {string} corrId The RPC correlation ID
+ * @param  {number} time    The timeout in ms to wait for an answer before triggering the rejection
+ * @return {void}         Nothing
+ */
+function prepareTimeoutRpc(queue, corrId, time) {
+  setTimeout(function() {
+    const rpcCallback = amqpRPCQueues[queue][corrId];
+    if (rpcCallback) {
+      rpcCallback.reject(new Error(ERRORS.TIMEOUT));
+      delete amqpRPCQueues[queue][corrId];
+    }
+  }, time);
 }
 
 /**
  * Send message with or without rpc protocol, and check if RPC queues are created
  * @param  {string} queue   the queue to send `msg` on
- * @param  {*} msg     string, object, number.. anything bufferable/serializable
+ * @param  {any} msg     string, object, number.. anything bufferable/serializable
  * @param  {object} options contain rpc property (if true, enable rpc for this message)
  * @return {Promise}         Resolves when message is correctly sent, or when response is received when rpc is enabled
  */
-function checkRpc(queue, msg, options) {
+function checkRpc (queue, msg, options) {
   //messages are persistent
   options.persistent = true;
 
@@ -132,12 +116,17 @@ function checkRpc(queue, msg, options) {
         //reply to us if you receive this message!
         options.replyTo = amqpRPCQueues[queue].queue;
 
-        return publishOrSendToQueue.call(this, queue, msg, options)
-          .then(() => {
+        if (publishOrSendToQueue.call(this, queue, msg, options)) {
             //defered promise that will resolve when response is received
-            amqpRPCQueues[queue][corrId] = Promise.defer();
-            return amqpRPCQueues[queue][corrId].promise;
-          });
+            let responsePromise = Promise.defer();
+            amqpRPCQueues[queue][corrId] = responsePromise;
+            if (options.timeout) {
+              prepareTimeoutRpc(queue, corrId, options.timeout);
+            }
+            return responsePromise.promise;
+        } else {
+          return Promise.reject(ERRORS.BUFFER_FULL);
+        }
       });
   }
 
@@ -147,37 +136,39 @@ function checkRpc(queue, msg, options) {
 /**
  * Ensure channel exists and send message using `checkRpc`
  * @param  {string} queue   The destination queue on which we want to send a message
- * @param  {*} msg     Anything serializable/bufferable
+ * @param  {any} msg     Anything serializable/bufferable
  * @param  {object} options message options (persistent, durable, rpc, etc.)
  * @return {Promise}         checkRpc response
  */
 function produce(queue, msg, options) {
   //default options are persistent and durable because we do not want to miss any outgoing message
   //unless user specify it
-  options = Object.assign({persistent: true, durable: true}, options);
+  options = Object.assign({ persistent: true, durable: true }, options);
 
   return this.conn.get()
-    .then((_channel) => {
-      this.channel = _channel;
+  .then((_channel) => {
+    this.channel = _channel;
 
-      //undefined can't be serialized/buffered :p
-      if (!msg) msg = null;
+    //undefined can't be serialized/buffered :p
+    if (!msg) msg = null;
 
-      this.conn.config.transport.info('bmq:producer', '[' + queue + '] > ', msg);
+    this.conn.config.transport.info('bmq:producer', '[' + queue + '] > ', msg);
 
-      return checkRpc.call(this, queue, parsers.out(msg, options), options);
-    })
-    .catch((err) => {
-      if (err.type === 'no_queue') throw err;
-      //add timeout between retries because we don't want to overflow the CPU
-      this.conn.config.transport.error('bmq:producer', err);
-      return utils.timeoutPromise(this.conn.config.timeout)
-        .then(() => {
-          return produce.call(this, queue, msg, options);
-        });
+    return checkRpc.call(this, queue, parsers.out(msg, options), options);
+  })
+  .catch((err) => {
+    if ([ERRORS.TIMEOUT, ERRORS.BUFFER_FULL].indexOf(err.message) !== -1) {
+      throw err;
+    }
+    //add timeout between retries because we don't want to overflow the CPU
+    this.conn.config.transport.error('bmq:producer', err);
+    return utils.timeoutPromise(this.conn.config.timeout)
+    .then(() => {
+      return produce.call(this, queue, msg, options);
     });
+  });
 }
 
-module.exports = function (conn) {
-  return {conn, produce};
+module.exports = function(conn) {
+  return { conn, produce };
 };
