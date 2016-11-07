@@ -44,17 +44,18 @@ consumer.consume('queue:name', function (_msg) {
 ```
 
 ## RPC Support
-You can create RPC requests easily be adding an option to the current message:
+You can create RPC requests easily by adding the `rpc: true` option to the `produce` call:
 ```javascript
 consumer.consume('queue:name', function() {
   return 'hello world!'; //you can also return a promise if you want to do async stuff
 });
 
-producer.produce('queue:name', { message: 'content' }, { rpc: true })
+producer.produce('queue:name', { message: 'content' }, { rpc: true, timeout: 1000 })
 .then(function(consumerResponse) {
   console.log(consumerResponse); // prints hello world!
 });
 ```
+The optional `timeout` option results in a rejection when no answer has been received after the given amount of milliseconds.
 
 ## Routing keys
 You can send publish commands with routing keys (thanks to @nekrasoft)
