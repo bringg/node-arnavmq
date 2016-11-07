@@ -1,6 +1,7 @@
 var utils = require('./utils'),
   uuid = require('node-uuid'),
-  parsers = require('./message-parsers');
+  parsers = require('./message-parsers'),
+  Deferred = require('../classes/deferred');
 
 var amqpRPCQueues = {};
 
@@ -118,7 +119,7 @@ function checkRpc (queue, msg, options) {
 
         if (publishOrSendToQueue.call(this, queue, msg, options)) {
             //defered promise that will resolve when response is received
-            let responsePromise = Promise.defer();
+            let responsePromise =  new Deferred();
             amqpRPCQueues[queue][corrId] = responsePromise;
             if (options.timeout) {
               prepareTimeoutRpc(queue, corrId, options.timeout);
