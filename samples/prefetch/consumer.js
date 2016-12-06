@@ -1,14 +1,14 @@
-var consumer = require('../../index')().consumer;
+const consumer = require('../../src/index')().consumer;
 
-var i = 0;
-var interval;
+let i = 0;
+let interval;
 
-interval = setInterval(function () {
-  consumer.consume('queue-prefetch' + i, function (_msg) {
-    return Promise.resolve(JSON.stringify(_msg));
-  });
+interval = setInterval(() => {
+  consumer.consume(`queue-prefetch${i}`, msg =>
+    Promise.resolve(JSON.stringify(msg))
+  );
 
-  ++i;
+  i += 1;
   if (i >= 100) {
     interval = clearInterval(interval);
   }

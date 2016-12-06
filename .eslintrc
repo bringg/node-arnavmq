@@ -1,0 +1,15 @@
+{
+  "extends": "airbnb",
+  "env": {
+    "node":true,
+    "mocha":true,
+    "es6": true,
+    "mongo":true
+  },
+  "rules": {
+    // disable requiring trailing commas
+    "comma-dangle": 0,
+    "max-len": ["error", {"code": 120, "ignoreComments": true, "ignoreUrls": true}],
+    "no-underscore-dangle": [1, { "allow": ["_config"] }]
+  }
+}

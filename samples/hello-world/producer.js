@@ -1,9 +1,8 @@
-var producer = require('../../index')().producer;
+const producer = require('../../src/index')().producer;
+const { logger } = require('@dialonce/boot')();
 
 producer.connect()
-.then(function (_channel) {
+.then(() => {
   producer.produce('queueName', { message: 'hello world!' })
-  .then(function (response) {
-    console.log(response); // true if message has been sent, else false
-  });
+  .then(logger.info); // true if message has been sent, else false
 });

@@ -1,12 +1,12 @@
-var producer = require('../../index')().producer;
+const producer = require('../../src/index')().producer;
 
-var i = 0;
-var interval;
+let i = 0;
+let interval;
 
-interval = setInterval(function () {
-  producer.produce('queueName-' + i, { message: 'start-' + i }, { rpc: true });
+interval = setInterval(() => {
+  producer.produce(`queueName-${i}`, { message: `start-${i}` }, { rpc: true });
 
-  ++i;
+  i += 1;
   if (i >= 5) {
     interval = clearInterval(interval);
   }

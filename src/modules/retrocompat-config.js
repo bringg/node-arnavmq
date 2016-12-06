@@ -1,4 +1,7 @@
-//deprecated configuration property names
+const { logger } = require('@dialonce/boot')();
+// deprecated configuration property names
+/* eslint no-param-reassign: "off" */
+/* eslint global-require: "off" */
 function oldConfigNames(config) {
   if (config.amqpUrl) {
     config.host = config.amqpUrl;
@@ -12,12 +15,12 @@ function oldConfigNames(config) {
     config.requeue = config.amqpRequeue;
   }
 
-  if(config.amqpTimeout) {
+  if (config.amqpTimeout) {
     config.timeout = config.amqpTimeout;
   }
 }
 
-//deprecated env vars to configure the module
+// deprecated env vars to configure the module
 function envVars(config) {
   if (process.env.AMQP_URL && !config.host) {
     config.host = process.env.AMQP_URL;
@@ -29,8 +32,8 @@ function envVars(config) {
 
   if (process.env.AMQP_DEBUG) {
     try {
-      config.transport = require('winston');
-    } catch(e) {
+      config.transport = logger;
+    } catch (e) {
       config.transport = console;
     }
   }
@@ -41,7 +44,7 @@ function envVars(config) {
  * @param  {object} config A BunnyMQ configuration object
  * @return {object}        Updated config object
  */
-module.exports = function(config) {
+module.exports = (config) => {
   config = config || {};
   envVars(config);
   oldConfigNames(config);

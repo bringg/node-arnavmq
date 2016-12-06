@@ -1,82 +1,79 @@
-var assert = require('assert');
-var producer = require('../src/index')().producer;
-var consumer = require('../src/index')().consumer;
-var uuid = require('node-uuid');
-var docker = require('./docker');
-var utils = require('../src/modules/utils');
+const assert = require('assert');
+const producer = require('../src/index')().producer;
+const consumer = require('../src/index')().consumer;
+const uuid = require('node-uuid');
+const docker = require('./docker');
+const utils = require('../src/modules/utils');
 
-var fixtures = {
+const fixtures = {
   queues: ['rpc-queue-0', 'rpc-queue-1', 'rpc-queue-2', 'rpc-queue-3']
 };
 
-describe('Producer/Consumer RPC messaging:', function() {
-  before(function() {
-    this.timeout(20000);
-    return docker.start();
-  });
+/* eslint func-names: "off" */
+/* eslint prefer-arrow-callback: "off" */
+describe('Producer/Consumer RPC messaging:', function () {
+  this.timeout(20000);
 
-  after(() => {
-    return docker.stop();
-  });
+  before(docker.start);
 
-  it('should be able to create a consumer that returns a message if called as RPC [rpc-queue-0]', function () {
-    return consumer.consume(fixtures.queues[0], function () {
-      return 'Power Ranger Red';
-    })
-    .then(function(created) {
+  after(docker.stop);
+
+  it('should be able to create a consumer that returns a message if called as RPC [rpc-queue-0]', () =>
+    consumer.consume(fixtures.queues[0], () =>
+      'Power Ranger Red'
+    )
+    .then((created) => {
       assert(created === true);
-    });
-  });
+    })
+  );
 
-  it('should be able to send directly to the queue, without correlationId and not crash [rpc-queue-0]', function () {
-    return producer.produce(fixtures.queues[0], { nothing: true }, { rpc: true })
-      .then(() => {
-        return producer.produce(fixtures.queues[0] + ':' + producer.conn.config.hostname + ':res', { nothing: true });
-      })
-      .then(utils.timeoutPromise(500));
-  });
+  it('should be able to send directly to the queue, without correlationId and not crash [rpc-queue-0]', () =>
+    producer.produce(fixtures.queues[0], { nothing: true }, { rpc: true })
+      .then(() =>
+        producer.produce(`${fixtures.queues[0]}:${producer.conn.config.hostname}:res`, { nothing: true })
+      )
+      .then(utils.timeoutPromise(500))
+  );
 
-  it('should be able to produce a RPC message and get a response [rpc-queue-0]', function () {
-    return producer.produce(fixtures.queues[0], { msg: uuid.v4() }, { rpc: true })
-    .then(function (response) {
+  it('should be able to produce a RPC message and get a response [rpc-queue-0]', () =>
+    producer.produce(fixtures.queues[0], { msg: uuid.v4() }, { rpc: true })
+    .then((response) => {
       assert.equal(response, 'Power Ranger Red');
-    });
-  });
+    })
+  );
 
-  it('should be able to produce a RPC message and get a as JSON [rpc-queue-1]', function () {
-    return consumer.consume(fixtures.queues[1], function () {
-      return { powerRangerColor: 'Pink' };
-    })
-    .then(function() {
-      return producer.produce(fixtures.queues[1], { msg: uuid.v4() }, { rpc: true });
-    })
-    .then(function (response) {
+  /* eslint no-labels: "off" */
+  /* eslint no-restricted-syntax: "off" */
+  /* eslint no-unused-labels: "off" */
+  /* eslint no-unused-expressions: "off" */
+  it('should be able to produce a RPC message and get a as JSON [rpc-queue-1]', () =>
+    consumer.consume(fixtures.queues[1],
+      function () {
+        return { powerRangerColor: 'Pink' };
+      })
+    .then(() =>
+      producer.produce(fixtures.queues[1], { msg: uuid.v4() }, { rpc: true })
+    )
+    .then((response) => {
       assert.equal(typeof response, 'object');
       assert.equal(response.powerRangerColor, 'Pink');
-    });
-  });
+    })
+  );
 
-  it('should be able to produce a RPC message and get undefined response [rpc-queue-2]', function () {
-    return consumer.consume(fixtures.queues[2], function () {
-      return undefined;
-    })
-    .then(function() {
-      return producer.produce(fixtures.queues[2], undefined, { rpc: true });
-    })
-    .then(function (response) {
+  it('should be able to produce a RPC message and get undefined response [rpc-queue-2]', () =>
+    consumer.consume(fixtures.queues[2], () => undefined)
+    .then(() => producer.produce(fixtures.queues[2], undefined, { rpc: true }))
+    .then((response) => {
       assert(response === undefined, 'Got a response !== undefined');
-    });
-  });
+    })
+  );
 
-  it('should be able to produce a RPC message and get null response [rpc-queue-3]', function () {
-    return consumer.consume(fixtures.queues[3], function () {
-      return null;
-    })
-    .then(function() {
-      return producer.produce(fixtures.queues[3], undefined, { rpc: true });
-    })
-    .then(function (response) {
+  it('should be able to produce a RPC message and get null response [rpc-queue-3]', () =>
+    consumer.consume(fixtures.queues[3], () => null)
+    .then(() =>
+      producer.produce(fixtures.queues[3], undefined, { rpc: true }))
+    .then((response) => {
       assert(response === null, 'Got a response !== null');
-    });
-  });
+    })
+  );
 });

@@ -1,72 +1,72 @@
-var assert = require('assert');
-var producer = require('../src/index')().producer;
-var consumer = require('../src/index')().consumer;
-var utils = require('../src/modules/utils');
-var uuid = require('node-uuid');
-var docker = require('./docker');
+const assert = require('assert');
+const producer = require('../src/index')().producer;
+const consumer = require('../src/index')().consumer;
+const utils = require('../src/modules/utils');
+const uuid = require('node-uuid');
+const docker = require('./docker');
 
-var fixtures = {
+const fixtures = {
   queues: ['test-queue-0', 'test-queue-1', 'test-queue-2', 'test-queue-3'],
   routingKey: 'queue-routing-key'
 };
 
-var letters = 0;
+let letters = 0;
 
-describe('producer/consumer', function() {
-  before(function() {
-    this.timeout(20000);
-    return docker.start();
-  });
+/* eslint func-names: "off" */
+/* eslint prefer-arrow-callback: "off" */
+describe('producer/consumer', function () {
+  this.timeout(20000);
 
-  after(() => {
-    return docker.stop();
-  });
+  before(docker.start);
 
-  describe('msg delevering', function() {
-    before(() => {
-      return consumer.consume(fixtures.queues[0], function () {
-        letters--;
-      }).then(() => {
-        return consumer.consume(fixtures.queues[1], function () {
-          letters--;
-        });
-      });
-    });
+  after(docker.stop);
 
-    it('should be able to consume message sended by producer to queue [test-queue-0]', function () {
-      letters++;
+  describe('msg delevering', () => {
+    before(() =>
+      consumer.consume(fixtures.queues[0], () => {
+        letters -= 1;
+      }).then(() =>
+        consumer.consume(fixtures.queues[1], () => {
+          letters -= 1;
+        })
+      )
+    );
+
+    it('should be able to consume message sended by producer to queue [test-queue-0]', () => {
+      letters += 1;
       return producer.produce(fixtures.queues[0], { msg: uuid.v4() })
         .then(() => utils.timeoutPromise(300))
         .then(() => assert.equal(letters, 0));
     });
 
-    it('should be able to consume message sended by producer to queue [test-queue-0] (no message)', function () {
-      letters++;
+    it('should be able to consume message sended by producer to queue [test-queue-0] (no message)', () => {
+      letters += 1;
       return producer.produce(fixtures.queues[0])
         .then(() => utils.timeoutPromise(300))
         .then(() => assert.equal(letters, 0));
     });
 
-    it('should be able to consume message sended by producer to queue [test-queue-0] (null message)', function () {
-      letters++;
+    it('should be able to consume message sended by producer to queue [test-queue-0] (null message)', () => {
+      letters += 1;
       return producer.produce(fixtures.queues[0], null)
         .then(() => utils.timeoutPromise(300))
         .then(() => assert.equal(letters, 0));
     });
 
-    it('should not be able to consume message sended by producer to queue [test-queue-1]', function () {
-      letters++;
+    it('should not be able to consume message sended by producer to queue [test-queue-1]', () => {
+      letters += 1;
       return producer.produce(fixtures.queues[1], null)
         .then(() => utils.timeoutPromise(300))
         .then(() => assert.equal(letters, 0));
     });
 
-    it('should be able to consume all message populated by producer to all queues [test-queue-0, test-queue-1, test-queue-2]', function () {
-      var count = 100;
-      var messages = [];
+    it('should be able to consume all message populated by producer to all queues [test-queue-0,' +
+      ' test-queue-1, test-queue-2]', () => {
+      const count = 100;
+      const messages = [];
       letters += 200;
 
-      for(let i = 0; i < count; i++) {
+      for (let i = 0; i < count; i += 1) {
         messages.push(producer.produce(fixtures.queues[0], null));
         messages.push(producer.produce(fixtures.queues[1], null));
       }
@@ -75,50 +75,49 @@ describe('producer/consumer', function() {
         .then(() => utils.timeoutPromise(500))
         .then(() => assert.equal(letters, 0));
     });
-
   });
 
-  describe('msg requeueing', function() {
-    it('should be able to consume message, but throw error so the message is requeued again on queue [test-queue-0]', function (done) {
-      var attempt = 3;
+  describe('msg requeueing', () => {
+    it('should be able to consume message, but throw error so the message is requeued again on queue [test-queue-0]',
+     (done) => {
+       let attempt = 3;
 
-      consumer.consume(fixtures.queues[3], function (_msg) {
-        assert(typeof _msg === 'object');
+       consumer.consume(fixtures.queues[3], (msg) => {
+         assert(typeof msg === 'object');
 
-        --attempt;
-        if (!attempt) {
-          return done();
-        } else {
-          throw new Error('Any kind of error');
-        }
-      })
-      .then(function () {
+         attempt -= 1;
+         if (!attempt) {
+           return done();
+         }
+         throw new Error('Any kind of error');
+       })
+      .then(() => {
         producer.produce(fixtures.queues[3], { msg: uuid.v4() })
-        .then(function (response) {
+        .then((response) => {
           assert(response === true);
-          ++letters;
+          letters += 1;
         });
       });
-    });
+     });
   });
 
-  describe('routing keys', function () {
-    it('should be able to send a message to a rounting key exchange', function() {
-      return consumer.consume(fixtures.routingKey, function (message) {
+  describe('routing keys', () => {
+    it('should be able to send a message to a rounting key exchange', () =>
+      consumer.consume(fixtures.routingKey, (message) => {
         assert.equal(message.content, 'ok');
       })
-      .then(() => {
-        return producer.produce(fixtures.rountingKey, { content: 'ok' }, { routingKey: 'route' });
-      });
-    });
+      .then(() =>
+        producer.produce(fixtures.rountingKey, { content: 'ok' }, { routingKey: 'route' })
+      )
+    );
   });
 
-  describe('rpc timeouts', function() {
-    it('should reject on timeout, if no answer received', function() {
-      return producer.produce('non-existing-queue', { msg: 'ok' }, { rpc: true, timeout: 1000 })
+  describe('rpc timeouts', () => {
+    it('should reject on timeout, if no answer received', () =>
+      producer.produce('non-existing-queue', { msg: 'ok' }, { rpc: true, timeout: 1000 })
         .catch((e) => {
           assert.equal(e.message, 'Timeout reached');
-        });
-    });
+        })
+    );
   });
 });

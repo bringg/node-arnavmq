@@ -37,8 +37,8 @@ Consumer (subscriber), can handle messages from a named queue.
 ```javascript
 var consumer = require('bunnymq')({ host: 'amqp://localhost' }).consumer;
 
-consumer.consume('queue:name', function (_msg) {
-  //_msg is the exact item sent by a producer as payload
+consumer.consume('queue:name', function (msg) {
+  //msg is the exact item sent by a producer as payload
   //if it is an object, it is already parsed as object
 });
 ```
