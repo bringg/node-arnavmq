@@ -1,15 +1,12 @@
-var consumer = require('../../index')().consumer;
+const consumer = require('../../src/index')().consumer;
+const { logger } = require('@dialonce/boot')();
 
 consumer.connect()
-.then(function (_channel) {
-  consumer.consume('queueName', function (_msg) {
-    return new Promise(function (resolve, reject) {
-      setTimeout(function () {
-        resolve(true);
-      }, 5000);
-    });
-  })
-  .then(function (response) {
-    console.log(response); // true if message has been acknowledged, else false
-  });
+.then(() => {
+  consumer.consume('queueName', () =>
+    new Promise((resolve) => {
+      setTimeout(resolve(true), 5000);
+    })
+  )
+  .then(logger.info); // true if message has been acknowledged, else false
 });
