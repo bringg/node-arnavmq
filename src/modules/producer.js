@@ -33,10 +33,9 @@ class Producer {
     const rpcQueue = this.amqpRPCQueues[queue];
 
     return (msg) => {
-      // check the correlation ID sent by the initial message using RPC
-      const corrId = msg.properties.correlationId;
-
       try {
+        // check the correlation ID sent by the initial message using RPC
+        const corrId = msg.properties.correlationId;
         // if we found one, we execute the callback and delete it because it will never be received again anyway
         rpcQueue[corrId].resolve(parsers.in(msg));
         this._conn.config.transport.info('bmq:producer', `[${queue}] < answer`);
@@ -55,9 +54,7 @@ class Producer {
    * @return {Promise}       Resolves when answer response queue is ready to receive messages
    */
   createRpcQueue(queue) {
-    if (!this.amqpRPCQueues[queue]) {
-      this.amqpRPCQueues[queue] = {};
-    }
+    this.amqpRPCQueues[queue] = this.amqpRPCQueues[queue] || {};
 
     const rpcQueue = this.amqpRPCQueues[queue];
     if (rpcQueue.queue) return Promise.resolve(rpcQueue.queue);
@@ -103,12 +100,12 @@ class Producer {
    * @return {void}         Nothing
    */
   prepareTimeoutRpc(queue, corrId, time) {
-    const self = this;
+    const producer = this;
     setTimeout(() => {
-      const rpcCallback = self.amqpRPCQueues[queue][corrId];
+      const rpcCallback = producer.amqpRPCQueues[queue][corrId];
       if (rpcCallback) {
         rpcCallback.reject(new Error(ERRORS.TIMEOUT));
-        delete self.amqpRPCQueues[queue][corrId];
+        delete producer.amqpRPCQueues[queue][corrId];
       }
     }, time);
   }
@@ -173,7 +170,7 @@ class Producer {
       return this.checkRpc(queue, parsers.out(msg, options), options);
     })
     .catch((err) => {
-      if ([ERRORS.TIMEOUT, ERRORS.BUFFER_FULL].indexOf(err.message) !== -1) {
+      if ([ERRORS.TIMEOUT, ERRORS.BUFFER_FULL].includes(err.message)) {
         throw err;
       }
       // add timeout between retries because we don't want to overflow the CPU

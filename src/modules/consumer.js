@@ -111,7 +111,7 @@ module.exports = (conn) => {
 
   if (!instance) {
     instance = new Consumer(conn);
-  } else if (instance) {
+  } else {
     instance.conn = conn;
   }
   return instance;

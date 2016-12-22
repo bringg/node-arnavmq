@@ -48,9 +48,7 @@ describe('Producer/Consumer RPC messaging:', function () {
   /* eslint no-unused-expressions: "off" */
   it('should be able to produce a RPC message and get a as JSON [rpc-queue-1]', () =>
     consumer.consume(fixtures.queues[1],
-      function () {
-        return { powerRangerColor: 'Pink' };
-      })
+      () => Object.assign({}, { powerRangerColor: 'Pink' }))
     .then(() =>
       producer.produce(fixtures.queues[1], { msg: uuid.v4() }, { rpc: true })
     )
