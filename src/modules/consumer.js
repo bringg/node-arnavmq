@@ -8,11 +8,11 @@ class Consumer {
     this.channel = null;
   }
 
-  get conn() {
+  get connection() {
     return this._connection;
   }
 
-  set conn(value) {
+  set connection(value) {
     this._connection = value;
   }
 
