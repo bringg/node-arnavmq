@@ -6,8 +6,6 @@ const utils = require('../src/modules/utils');
 /* eslint func-names: "off" */
 /* eslint prefer-arrow-callback: "off" */
 describe('disconnections', function () {
-  this.timeout(20000);
-
   before(docker.start);
 
   after(docker.stop);
@@ -16,7 +14,6 @@ describe('disconnections', function () {
     const queue = 'disco:test';
 
     it('should be able to re-register to consume messages between connection failures', (done) => {
-      this.timeout(20000);
       let counter = 0;
       consumer.consume(queue, () => {
         counter += 1;
@@ -41,7 +38,6 @@ describe('disconnections', function () {
     const queue = 'disco:test:2';
 
     it('should be able to re-register to consume messages between connection failures', (done) => {
-      this.timeout(20000);
       let counter = 0;
       const checkReceived = (cnt) => {
         if (cnt === 50) done();

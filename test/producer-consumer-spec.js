@@ -15,8 +15,6 @@ let letters = 0;
 /* eslint func-names: "off" */
 /* eslint prefer-arrow-callback: "off" */
 describe('producer/consumer', function () {
-  this.timeout(20000);
-
   before(docker.start);
 
   after(docker.stop);

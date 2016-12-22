@@ -12,8 +12,6 @@ const fixtures = {
 /* eslint func-names: "off" */
 /* eslint prefer-arrow-callback: "off" */
 describe('Producer/Consumer RPC messaging:', function () {
-  this.timeout(20000);
-
   before(docker.start);
 
   after(docker.stop);

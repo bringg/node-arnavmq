@@ -15,7 +15,7 @@ init:
 	sed -i 's/{service-name}/$(NAME)/g' sonar-project.properties
 	sed -i 's/{service-name}/$(NAME)/g' README.md
 cover:
-	istanbul cover _mocha -- test --recursive
+	istanbul cover _mocha -- test --recursive --timeout=20000
 sonar:
 	sed '/sonar.projectVersion/d' ./sonar-project.properties > tmp && mv tmp sonar-project.properties
 	echo sonar.projectVersion=`cat package.json | python -c "import json,sys;obj=json.load(sys.stdin);print obj['version'];"` >> sonar-project.properties
