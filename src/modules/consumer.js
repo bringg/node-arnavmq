@@ -4,16 +4,16 @@ const assert = require('assert');
 
 class Consumer {
   constructor(connection) {
-    this._conn = connection;
+    this._connection = connection;
     this.channel = null;
   }
 
   get conn() {
-    return this._conn;
+    return this._connection;
   }
 
   set conn(value) {
-    this._conn = value;
+    this._connection = value;
   }
 
   /**
@@ -31,7 +31,7 @@ class Consumer {
     return (content) => {
       if (msg.properties.replyTo) {
         const options = { correlationId: msg.properties.correlationId, persistent: true, durable: true };
-        this._conn.config.transport.info('bmq:consumer', `[${queue}][${msg.properties.replyTo}] >`, content);
+        this._connection.config.transport.info('bmq:consumer', `[${queue}][${msg.properties.replyTo}] >`, content);
         this.channel.sendToQueue(msg.properties.replyTo, parsers.out(content, options), options);
       }
 
@@ -57,9 +57,9 @@ class Consumer {
 
     // consumer gets a suffix if one is set on the configuration, to suffix all queues names
     // ex: service-something with suffix :ci becomes service-suffix:ci etc.
-    const suffixedQueue = queue + this._conn.config.consumerSuffix;
+    const suffixedQueue = queue + this._connection.config.consumerSuffix;
 
-    return this._conn.get()
+    return this._connection.get()
     .then((channel) => {
       this.channel = channel;
 
@@ -70,10 +70,10 @@ class Consumer {
 
       return this.channel.assertQueue(suffixedQueue, options)
       .then((q) => {
-        this._conn.config.transport.info('bmq:consumer', 'init', q.queue);
+        this._connection.config.transport.info('bmq:consumer', 'init', q.queue);
 
         this.channel.consume(q.queue, (msg) => {
-          this._conn.config.transport.info('bmq:consumer', `[${q.queue}] < ${msg.content.toString()}`);
+          this._connection.config.transport.info('bmq:consumer', `[${q.queue}] < ${msg.content.toString()}`);
 
           // main answer management chaining
           // receive message, parse it, execute callback, check if should answer, ack/reject message
@@ -85,8 +85,8 @@ class Consumer {
           })
           .catch((err) => {
             // if something bad happened in the callback, reject the message so we can requeue it (or not)
-            this._conn.config.transport.error('bmq:consumer', err);
-            this.channel.reject(msg, this.conn.config.requeue);
+            this._connection.config.transport.error('bmq:consumer', err);
+            this.channel.reject(msg, this._connection.config.requeue);
           });
         }, { noAck: false });
 
@@ -95,7 +95,7 @@ class Consumer {
     })
     .catch(() =>
       // in case of any error creating the channel, wait for some time and then try to reconnect again (to avoid overflow)
-      utils.timeoutPromise(this._conn.config.timeout)
+      utils.timeoutPromise(this._connection.config.timeout)
         .then(() => this.consume(queue, options, callback))
     );
   }
@@ -106,13 +106,13 @@ let instance;
 /* eslint no-unused-expressions: "off" */
 /* eslint no-sequences: "off" */
 /* eslint arrow-body-style: "off" */
-module.exports = (conn) => {
-  assert(instance || conn, 'Consumer can not be created because connection does not exist');
+module.exports = (connection) => {
+  assert(instance || connection, 'Consumer can not be created because connection does not exist');
 
   if (!instance) {
-    instance = new Consumer(conn);
+    instance = new Consumer(connection);
   } else {
-    instance.conn = conn;
+    instance.connection = connection;
   }
   return instance;
 };

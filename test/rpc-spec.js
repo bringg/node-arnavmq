@@ -30,7 +30,7 @@ describe('Producer/Consumer RPC messaging:', function () {
   it('should be able to send directly to the queue, without correlationId and not crash [rpc-queue-0]', () =>
     producer.produce(fixtures.queues[0], { nothing: true }, { rpc: true })
       .then(() =>
-        producer.produce(`${fixtures.queues[0]}:${producer.conn.config.hostname}:res`, { nothing: true })
+        producer.produce(`${fixtures.queues[0]}:${producer.connection.config.hostname}:res`, { nothing: true })
       )
       .then(utils.timeoutPromise(500))
   );

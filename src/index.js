@@ -1,7 +1,7 @@
 require('dotenv').config({ silent: true });
 const uuid = require('node-uuid');
 const utils = require('./modules/utils');
-const conn = require('./modules/connection');
+const connection = require('./modules/connection');
 const retrocompat = require('./modules/retrocompat-config');
 require('@dialonce/boot')({
   LOGS_TOKEN: process.env.LOGS_TOKEN,
@@ -36,7 +36,7 @@ module.exports = (config) => {
 
   config.prefetch = parseInt(config.prefetch, 10) || 0;
   return {
-    producer: require('./modules/producer')(conn(config)),
-    consumer: require('./modules/consumer')(conn(config))
+    producer: require('./modules/producer')(connection(config)),
+    consumer: require('./modules/consumer')(connection(config))
   };
 };
