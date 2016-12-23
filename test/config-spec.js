@@ -1,6 +1,8 @@
 var assert = require('assert'),
   uuid = require('node-uuid');
 
+require('events').EventEmitter.prototype._maxListeners = 100;
+
 describe('config', function() {
 
   beforeEach(function() {
@@ -49,7 +51,7 @@ describe('config', function() {
       let conf = retrocompat();
 
       //ensure transport is console
-      assert(conf.transport.assert);
+      assert(conf.transport);
       assert.equal(conf.host, process.env.AMQP_URL);
       assert.equal(conf.consumerSuffix, process.env.LOCAL_QUEUE);
     });
