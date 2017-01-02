@@ -49,7 +49,7 @@ describe('config', function() {
       let conf = retrocompat();
 
       //ensure transport is console
-      assert(conf.transport.assert);
+      assert(conf.transport);
       assert.equal(conf.host, process.env.AMQP_URL);
       assert.equal(conf.consumerSuffix, process.env.LOCAL_QUEUE);
     });
@@ -60,6 +60,12 @@ describe('config', function() {
 
     it('should be able to merge config', function() {
       var conf = { host: 'amqp://my-host' };
+      assert.equal(main(conf).producer.conn.config.host, 'amqp://my-host');
+      // should set value from env var if no config passed
+      process.env.AMQP_URL = 'amqp://localhost';
+      conf = assert(main({}).producer.conn.config.host, 'amqp://localhost');
+      // should prioritize config value instead of env var
+      conf = { host: 'amqp://my-host' };
       assert.equal(main(conf).producer.conn.config.host, 'amqp://my-host');
     });
 
