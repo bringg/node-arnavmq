@@ -1,5 +1,8 @@
+require('dotenv').load({ silent: true });
 var assert = require('assert'),
   uuid = require('node-uuid');
+
+require('events').EventEmitter.prototype._maxListeners = process.env.MAX_EMITTERS;
 
 describe('config', function() {
 
@@ -49,7 +52,7 @@ describe('config', function() {
       let conf = retrocompat();
 
       //ensure transport is console
-      assert(conf.transport.assert);
+      assert(conf.transport);
       assert.equal(conf.host, process.env.AMQP_URL);
       assert.equal(conf.consumerSuffix, process.env.LOCAL_QUEUE);
     });

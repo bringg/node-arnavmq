@@ -1,10 +1,12 @@
+require('dotenv').load({ silent: true });
 var uuid = require('node-uuid'),
   utils = require('./modules/utils'),
   conn = require('./modules/connection'),
   retrocompat = require('./modules/retrocompat-config');
 
-const hostnameFallback = uuid.v4();
+require('events').EventEmitter.prototype._maxListeners = process.env.MAX_EMITTERS || 20;
 
+const hostnameFallback = uuid.v4();
 module.exports = function(config) {
   //we want to keep retrocompatibility with older configuration format for a while (until 3.0.0)
   //everything in here is deprecated
