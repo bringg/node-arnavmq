@@ -64,6 +64,12 @@ describe('config', function() {
     it('should be able to merge config', function() {
       var conf = { host: 'amqp://my-host' };
       assert.equal(main(conf).producer.conn.config.host, 'amqp://my-host');
+      // should set value from env var if no config passed
+      process.env.AMQP_URL = 'amqp://localhost';
+      conf = assert(main({}).producer.conn.config.host, 'amqp://localhost');
+      // should prioritize config value instead of env var
+      conf = { host: 'amqp://my-host' };
+      assert.equal(main(conf).producer.conn.config.host, 'amqp://my-host');
     });
 
     it('should generate an uuid as hostname if no env for HOSTNAME/USER', function() {
