@@ -1,4 +1,4 @@
-var producer = require('../../index')().producer;
+const producer = require('../../src/index')().producer;
 
 producer.produce('circleArea', { toDo: 'Calculate circle area', r: 10 });
 

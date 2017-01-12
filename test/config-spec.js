@@ -1,17 +1,20 @@
-require('dotenv').load({ silent: true });
-var assert = require('assert'),
-  uuid = require('node-uuid');
 
-require('events').EventEmitter.prototype._maxListeners = process.env.MAX_EMITTERS;
+require('dotenv').config({ silent: true });
+const assert = require('assert');
+const uuid = require('node-uuid');
+require('@dialonce/boot')({
+  LOGS_TOKEN: process.env.LOGS_TOKEN,
+  BUGS_TOKEN: process.env.BUGS_TOKEN
+});
 
-describe('config', function() {
-
-  beforeEach(function() {
+/* eslint global-require: "off" */
+describe('config', () => {
+  beforeEach(() => {
     this.oldHost = process.env.HOSTNAME;
     this.oldUsr = process.env.USER;
   });
 
-  afterEach(function() {
+  afterEach(() => {
     process.env.HOSTNAME = this.oldHost;
     process.env.USER = this.oldUsr;
     process.env.LOCAL_QUEUE = '';
@@ -19,16 +22,15 @@ describe('config', function() {
     process.env.AMQP_DEBUG = '';
   });
 
-  describe('retrocompat', function() {
+  describe('retrocompat', () => {
+    const retrocompat = require('../src/modules/retrocompat-config');
 
-    var retrocompat = require('../src/modules/retrocompat-config');
-
-    it('should set config as empty array if no config present', function() {
-      let conf = retrocompat();
+    it('should set config as empty array if no config present', () => {
+      const conf = retrocompat();
       assert.deepEqual(conf, {});
     });
 
-    it('should be able to override default config options based on config object', function() {
+    it('should be able to override default config options based on config object', () => {
       let conf = {
         amqpUrl: 'ok',
         amqpPrefetch: 1,
@@ -44,55 +46,49 @@ describe('config', function() {
       assert.equal(conf.timeout, conf.amqpTimeout);
     });
 
-    it('should be able to override default config options based on env vars', function() {
+    it('should be able to override default config options based on env vars', () => {
       process.env.LOCAL_QUEUE = ':test';
       process.env.AMQP_URL = 'ok';
       process.env.AMQP_DEBUG = true;
 
-      let conf = retrocompat();
+      const conf = retrocompat();
 
-      //ensure transport is console
+      // ensure transport is console
       assert(conf.transport);
       assert.equal(conf.host, process.env.AMQP_URL);
       assert.equal(conf.consumerSuffix, process.env.LOCAL_QUEUE);
     });
   });
 
-  describe('entry point', function() {
-    var main = require('../src/index');
+  describe('entry point', () => {
+    const main = require('../src/index');
 
-    it('should be able to merge config', function() {
-      var conf = { host: 'amqp://my-host' };
-      assert.equal(main(conf).producer.conn.config.host, 'amqp://my-host');
-      // should set value from env var if no config passed
-      process.env.AMQP_URL = 'amqp://localhost';
-      conf = assert(main({}).producer.conn.config.host, 'amqp://localhost');
-      // should prioritize config value instead of env var
-      conf = { host: 'amqp://my-host' };
-      assert.equal(main(conf).producer.conn.config.host, 'amqp://my-host');
+    it('should be able to merge config', () => {
+      const conf = { host: 'amqp://localhost' };
+      assert.equal(main(conf).producer.connection.config.host, 'amqp://localhost');
     });
 
-    it('should generate an uuid as hostname if no env for HOSTNAME/USER', function() {
+    it('should generate an uuid as hostname if no env for HOSTNAME/USER', () => {
       process.env.HOSTNAME = '';
       process.env.USER = '';
 
-      var conf = { host: 'amqp://my-host' };
-      assert.equal(main(conf).producer.conn.config.hostname.length, uuid.v4().length);
+      const conf = { host: 'amqp://localhost' };
+      assert.equal(main(conf).producer.connection.config.hostname.length, uuid.v4().length);
     });
 
-    it('should ensure prefetch is in an integer format', function() {
-      var conf = { host: 'amqp://my-host', prefetch: '3' };
-      assert.equal(main(conf).producer.conn.config.prefetch, 3);
+    it('should ensure prefetch is in an integer format', () => {
+      const conf = { host: 'amqp://localhost', prefetch: '3' };
+      assert.equal(main(conf).producer.connection.config.prefetch, 3);
     });
 
-    it('should set unlimited prefetch if prefetch is an invalid value', function() {
-      var conf = { host: 'amqp://my-host', prefetch: '' };
-      assert.equal(main(conf).producer.conn.config.prefetch, 0);
+    it('should set unlimited prefetch if prefetch is an invalid value', () => {
+      const conf = { host: 'amqp://localhost', prefetch: '' };
+      assert.equal(main(conf).producer.connection.config.prefetch, 0);
     });
 
-    it('should use provided prefetch', function() {
-      var conf = { host: 'amqp://my-host', prefetch: 1 };
-      assert.equal(main(conf).producer.conn.config.prefetch, 1);
+    it('should use provided prefetch', () => {
+      const conf = { host: 'amqp://localhost', prefetch: 1 };
+      assert.equal(main(conf).producer.connection.config.prefetch, 1);
     });
   });
 });

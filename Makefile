@@ -3,10 +3,10 @@ run:
 	node src/index.js
 deps:
 	docker pull rabbitmq:3.6
-	npm install -g jshint mocha istanbul
+	npm install -g mocha istanbul
 	npm i
 lint:
-	jshint .
+	./node_modules/.bin/eslint .
 test:
 	make lint
 	make cover
@@ -15,7 +15,7 @@ init:
 	sed -i 's/{service-name}/$(NAME)/g' sonar-project.properties
 	sed -i 's/{service-name}/$(NAME)/g' README.md
 cover:
-	istanbul cover _mocha -- test --recursive
+	istanbul cover _mocha -- test --recursive --timeout=20000
 sonar:
 	sed '/sonar.projectVersion/d' ./sonar-project.properties > tmp && mv tmp sonar-project.properties
 	echo sonar.projectVersion=`cat package.json | python -c "import json,sys;obj=json.load(sys.stdin);print obj['version'];"` >> sonar-project.properties
