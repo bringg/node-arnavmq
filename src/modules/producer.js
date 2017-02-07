@@ -134,8 +134,12 @@ class Producer {
             // defered promise that will resolve when response is received
             const responsePromise = new Deferred();
             this.amqpRPCQueues[queue][corrId] = responsePromise;
-            if (options.timeout) {
+            //  Using given timeout
+            if (options.timeout > 0) {
               this.prepareTimeoutRpc(queue, corrId, options.timeout);
+            //  Using default timeout
+            } else if (this._connection.config.rpcTimeout > 0) {
+              this.prepareTimeoutRpc(queue, corrId, this._connection.config.rpcTimeout);
             }
             return responsePromise.promise;
           }

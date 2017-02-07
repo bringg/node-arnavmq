@@ -111,11 +111,19 @@ describe('producer/consumer', function () {
   });
 
   describe('rpc timeouts', () => {
-    it('should reject on timeout, if no answer received', () =>
+    it('should reject on given timeout, if no answer received', () =>
       producer.produce('non-existing-queue', { msg: 'ok' }, { rpc: true, timeout: 1000 })
         .catch((e) => {
           assert.equal(e.message, 'Timeout reached');
         })
     );
+
+    it('should reject on default timeout, if no answer received', () => {
+      producer._connection._config.rpcTimeout = 1000;
+      producer.produce('non-existing-queue', { msg: 'ok' }, { rpc: true })
+        .catch((e) => {
+          assert.equal(e.message, 'Timeout reached');
+        });
+    });
   });
 });
