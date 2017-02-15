@@ -1,4 +1,3 @@
-
 require('dotenv').config({ silent: true });
 const assert = require('assert');
 const uuid = require('node-uuid');
@@ -89,6 +88,16 @@ describe('config', () => {
     it('should use provided prefetch', () => {
       const conf = { host: 'amqp://localhost', prefetch: 1 };
       assert.equal(main(conf).producer.connection.config.prefetch, 1);
+    });
+
+    it('should use default rpcRimeout if none given', () => {
+      const conf = { host: 'amqp://localhost' };
+      assert.equal(main(conf).producer.connection.config.rpcTimeout, 1000);
+    });
+
+    it('should use provided rpcRimeout', () => {
+      const conf = { host: 'amqp://localhost', rpcTimeout: 999 };
+      assert.equal(main(conf).producer.connection.config.rpcTimeout, 999);
     });
   });
 });

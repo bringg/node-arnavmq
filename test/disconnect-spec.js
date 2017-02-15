@@ -43,6 +43,8 @@ describe('disconnections', function () {
         if (cnt === 50) done();
       };
 
+      //  Disable default rpcTimeout
+      producer._connection._config.rpcTimeout = 0;
       consumer.consume(queue, () => {
         counter += 1;
         return counter;

@@ -27,6 +27,8 @@ module.exports = (config) => {
     requeue: true,
     //  time between two reconnect (ms)
     timeout: 1000,
+    //  default timeout for RPC calls. If set to '0' there will be none.
+    rpcTimeout: 1000,
     consumerSuffix: '',
     // generate a hostname so we can track this connection on the broker (rabbitmq management plugin)
     hostname: process.env.HOSTNAME || process.env.USER || hostnameFallback,

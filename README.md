@@ -56,6 +56,8 @@ producer.produce('queue:name', { message: 'content' }, { rpc: true, timeout: 100
 });
 ```
 The optional `timeout` option results in a rejection when no answer has been received after the given amount of milliseconds.
+When '0' is given, there will be no timeout for this call.
+This value will overwrite the default timeout set in the config in `rpcTimeout`.
 
 ## Routing keys
 You can send publish commands with routing keys (thanks to @nekrasoft)
@@ -75,6 +77,8 @@ You can specify a config object, properties and default values are:
     requeue: true,
     //time between two reconnect (ms)
     timeout: 1000,
+    //default timeout for RPC calls. If set to '0' there will be none.
+    rpcTimeout: 1000,
     consumerSuffix: '',
     //generate a hostname so we can track this connection on the broker (rabbitmq management plugin)
     hostname: process.env.HOSTNAME || process.env.USER || uuid.v4(),
