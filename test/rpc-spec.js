@@ -14,7 +14,7 @@ const fixtures = {
 describe('Producer/Consumer RPC messaging:', function () {
   before(docker.start);
 
-  after(docker.stop);
+  after(docker.rm);
 
   it('should be able to create a consumer that returns a message if called as RPC [rpc-queue-0]', () =>
     consumer.consume(fixtures.queues[0], () =>

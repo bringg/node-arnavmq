@@ -17,7 +17,7 @@ let letters = 0;
 describe('producer/consumer', function () {
   before(docker.start);
 
-  after(docker.stop);
+  after(docker.rm);
 
   describe('msg delevering', () => {
     before(() =>
