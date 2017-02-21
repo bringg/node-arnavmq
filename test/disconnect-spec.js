@@ -8,7 +8,7 @@ const utils = require('../src/modules/utils');
 describe('disconnections', function () {
   before(docker.start);
 
-  after(docker.stop);
+  after(docker.rm);
 
   describe('regular pub/sub', () => {
     const queue = 'disco:test';
