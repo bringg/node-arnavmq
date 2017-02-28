@@ -141,7 +141,6 @@ class Producer {
           return Promise.reject(ERRORS.BUFFER_FULL);
         });
     }
-
     return this.publishOrSendToQueue(queue, msg, options);
   }
 

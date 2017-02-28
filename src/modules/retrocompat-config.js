@@ -24,11 +24,11 @@ function oldConfigNames(config) {
 // deprecated env vars to configure the module
 function envVars(config) {
   const configuration = Object.assign({}, config);
-  if (process.env.AMQP_URL) {
+  if (process.env.AMQP_URL && !configuration.host) {
     configuration.host = process.env.AMQP_URL;
   }
 
-  if (process.env.LOCAL_QUEUE) {
+  if (process.env.LOCAL_QUEUE && !configuration.consumerSuffix) {
     configuration.consumerSuffix = process.env.LOCAL_QUEUE;
   }
 
