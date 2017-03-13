@@ -12,6 +12,10 @@ class Consumer {
     this._connection = value;
   }
 
+  get connection() {
+    return this._connection;
+  }
+
   /**
    * Get a function to execute on incoming messages to handle RPC
    * @param  {any} msg   An amqp.node message object

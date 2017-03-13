@@ -19,6 +19,10 @@ class Producer {
     this._connection = value;
   }
 
+  get connection() {
+    return this._connection;
+  }
+
   /**
    * Get a function to execute on channel consumer incoming message is received
    * @param  {string} queue name of the queue where messages are SENT
