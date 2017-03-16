@@ -1,19 +1,19 @@
 const parsers = require('./message-parsers');
 const utils = require('./utils');
-const assert = require('assert');
 
 class Consumer {
+
   constructor(connection) {
     this._connection = connection;
     this.channel = null;
   }
 
-  get connection() {
-    return this._connection;
-  }
-
   set connection(value) {
     this._connection = value;
+  }
+
+  get connection() {
+    return this._connection;
   }
 
   /**
@@ -49,6 +49,10 @@ class Consumer {
    */
    /* eslint no-param-reassign: "off" */
   consume(queue, options, callback) {
+    return this.subscribe(queue, options, callback);
+  }
+
+  subscribe(queue, options, callback) {
     if (typeof options === 'function') {
       callback = options;
       // default message options
@@ -65,7 +69,7 @@ class Consumer {
 
       // when channel is closed, we want to be sure we recreate the queue ASAP so we trigger a reconnect by recreating the consumer
       this.channel.addListener('close', () => {
-        this.consume(queue, options, callback);
+        this.subscribe(queue, options, callback);
       });
 
       return this.channel.assertQueue(suffixedQueue, options)
@@ -96,23 +100,12 @@ class Consumer {
     .catch(() =>
       // in case of any error creating the channel, wait for some time and then try to reconnect again (to avoid overflow)
       utils.timeoutPromise(this._connection.config.timeout)
-        .then(() => this.consume(queue, options, callback))
+        .then(() => this.subscribe(queue, options, callback))
     );
   }
 }
 
-let instance;
-
 /* eslint no-unused-expressions: "off" */
 /* eslint no-sequences: "off" */
 /* eslint arrow-body-style: "off" */
-module.exports = (connection) => {
-  assert(instance || connection, 'Consumer can not be created because connection does not exist');
-
-  if (!instance) {
-    instance = new Consumer(connection);
-  } else {
-    instance.connection = connection;
-  }
-  return instance;
-};
+module.exports = Consumer;

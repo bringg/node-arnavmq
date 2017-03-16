@@ -1,6 +1,6 @@
 const docker = require('./docker');
 const assert = require('assert');
-const { producer, consumer } = require('../src/index')();
+const bunnymq = require('../src/index')();
 const utils = require('../src/modules/utils');
 
 /* eslint func-names: "off" */
@@ -15,19 +15,19 @@ describe('disconnections', function () {
 
     it('should be able to re-register to consume messages between connection failures', (done) => {
       let counter = 0;
-      consumer.consume(queue, () => {
+      bunnymq.consume(queue, () => {
         counter += 1;
         if (counter === 50) {
           done();
         }
       })
-      .then(() => producer.produce(queue))
+      .then(() => bunnymq.produce(queue))
       .then(() => utils.timeoutPromise(500))
       .then(() => assert(counter))
       .then(docker.stop)
       .then(() => {
         for (let i = counter; i < 50; i += 1) {
-          producer.produce(queue);
+          bunnymq.produce(queue);
         }
       })
       .then(docker.start);
@@ -42,20 +42,18 @@ describe('disconnections', function () {
       const checkReceived = (cnt) => {
         if (cnt === 50) done();
       };
-
-      //  Disable default rpcTimeout
-      producer._connection._config.rpcTimeout = 0;
-      consumer.consume(queue, () => {
+      bunnymq.connection._config.rpcTimeout = 0;
+      bunnymq.consume(queue, () => {
         counter += 1;
         return counter;
       })
-      .then(() => producer.produce(queue, undefined, { rpc: true }).then(checkReceived))
+      .then(() => bunnymq.produce(queue, undefined, { rpc: true }).then(checkReceived))
       .then(() => utils.timeoutPromise(500))
       .then(() => assert(counter))
       .then(docker.stop)
       .then(() => {
         for (let i = counter; i < 50; i += 1) {
-          producer.produce(queue, undefined, { rpc: true }).then(checkReceived);
+          bunnymq.produce(queue, undefined, { rpc: true }).then(checkReceived);
         }
       })
       .then(docker.start);

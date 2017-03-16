@@ -27,17 +27,17 @@ npm install bunnymq
 Producer (publisher), can send messages to a named queue.
 
 ```javascript
-var producer = require('bunnymq')({ host: 'amqp://localhost' }).producer;
-producer.produce('queue:name', 'Hello World!');
+const bunnymq = require('bunnymq')({ host: 'amqp://localhost' });
+bunnymq.publish('queue:name', 'Hello World!');
 ```
 
 ### Subscriber
 Consumer (subscriber), can handle messages from a named queue.
 
 ```javascript
-var consumer = require('bunnymq')({ host: 'amqp://localhost' }).consumer;
+const bunnymq = require('bunnymq')({ host: 'amqp://localhost' });
 
-consumer.consume('queue:name', function (msg) {
+bunnymq.subscribe('queue:name', function (msg) {
   //msg is the exact item sent by a producer as payload
   //if it is an object, it is already parsed as object
 });
@@ -46,11 +46,11 @@ consumer.consume('queue:name', function (msg) {
 ## RPC Support
 You can create RPC requests easily by adding the `rpc: true` option to the `produce` call:
 ```javascript
-consumer.consume('queue:name', function() {
+bunnymq.subscribe('queue:name', function() {
   return 'hello world!'; //you can also return a promise if you want to do async stuff
 });
 
-producer.produce('queue:name', { message: 'content' }, { rpc: true, timeout: 1000 })
+bunnymq.publish('queue:name', { message: 'content' }, { rpc: true, timeout: 1000 })
 .then(function(consumerResponse) {
   console.log(consumerResponse); // prints hello world!
 });
@@ -62,14 +62,14 @@ This value will overwrite the default timeout set in the config in `rpcTimeout`.
 ## Routing keys
 You can send publish commands with routing keys (thanks to @nekrasoft)
 ```javascript
-producer.produce('queue:name', { message: 'content' }, { routingKey: 'my-routing-key' });
+bunnymq.publish('queue:name', { message: 'content' }, { routingKey: 'my-routing-key' });
 ```
 
 ## Config
 You can specify a config object, properties and default values are:
 
 ```javascript
-  var bunnymq = require('bunnymq')({
+  const bunnymq = require('bunnymq')({
     host: 'amqp://localhost',
     //number of fetched messages at once on the channel
     prefetch: 5,

@@ -1,6 +1,5 @@
 const assert = require('assert');
-const producer = require('../src/index')().producer;
-const consumer = require('../src/index')().consumer;
+const bunnymq = require('../src/index')();
 const uuid = require('node-uuid');
 const docker = require('./docker');
 const utils = require('../src/modules/utils');
@@ -17,7 +16,7 @@ describe('Producer/Consumer RPC messaging:', function () {
   after(docker.rm);
 
   it('should be able to create a consumer that returns a message if called as RPC [rpc-queue-0]', () =>
-    consumer.consume(fixtures.queues[0], () =>
+    bunnymq.consume(fixtures.queues[0], () =>
       'Power Ranger Red'
     )
     .then((created) => {
@@ -26,15 +25,15 @@ describe('Producer/Consumer RPC messaging:', function () {
   );
 
   it('should be able to send directly to the queue, without correlationId and not crash [rpc-queue-0]', () =>
-    producer.produce(fixtures.queues[0], { nothing: true }, { rpc: true })
+    bunnymq.produce(fixtures.queues[0], { nothing: true }, { rpc: true })
       .then(() =>
-        producer.produce(`${fixtures.queues[0]}:${producer.connection.config.hostname}:res`, { nothing: true })
+        bunnymq.produce(`${fixtures.queues[0]}:${bunnymq.connection.config.hostname}:res`, { nothing: true })
       )
       .then(utils.timeoutPromise(500))
   );
 
   it('should be able to produce a RPC message and get a response [rpc-queue-0]', () =>
-    producer.produce(fixtures.queues[0], { msg: uuid.v4() }, { rpc: true })
+    bunnymq.produce(fixtures.queues[0], { msg: uuid.v4() }, { rpc: true })
     .then((response) => {
       assert.equal(response, 'Power Ranger Red');
     })
@@ -45,10 +44,10 @@ describe('Producer/Consumer RPC messaging:', function () {
   /* eslint no-unused-labels: "off" */
   /* eslint no-unused-expressions: "off" */
   it('should be able to produce a RPC message and get a as JSON [rpc-queue-1]', () =>
-    consumer.consume(fixtures.queues[1],
+    bunnymq.consume(fixtures.queues[1],
       () => Object.assign({}, { powerRangerColor: 'Pink' }))
     .then(() =>
-      producer.produce(fixtures.queues[1], { msg: uuid.v4() }, { rpc: true })
+      bunnymq.produce(fixtures.queues[1], { msg: uuid.v4() }, { rpc: true })
     )
     .then((response) => {
       assert.equal(typeof response, 'object');
@@ -57,17 +56,17 @@ describe('Producer/Consumer RPC messaging:', function () {
   );
 
   it('should be able to produce a RPC message and get undefined response [rpc-queue-2]', () =>
-    consumer.consume(fixtures.queues[2], () => undefined)
-    .then(() => producer.produce(fixtures.queues[2], undefined, { rpc: true }))
+    bunnymq.consume(fixtures.queues[2], () => undefined)
+    .then(() => bunnymq.produce(fixtures.queues[2], undefined, { rpc: true }))
     .then((response) => {
       assert(response === undefined, 'Got a response !== undefined');
     })
   );
 
   it('should be able to produce a RPC message and get null response [rpc-queue-3]', () =>
-    consumer.consume(fixtures.queues[3], () => null)
+    bunnymq.consume(fixtures.queues[3], () => null)
     .then(() =>
-      producer.produce(fixtures.queues[3], undefined, { rpc: true }))
+      bunnymq.produce(fixtures.queues[3], undefined, { rpc: true }))
     .then((response) => {
       assert(response === null, 'Got a response !== null');
     })

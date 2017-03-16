@@ -2,7 +2,6 @@ const utils = require('./utils');
 const uuid = require('node-uuid');
 const parsers = require('./message-parsers');
 const Deferred = require('../classes/deferred');
-const assert = require('assert');
 
 const ERRORS = {
   TIMEOUT: 'Timeout reached',
@@ -16,12 +15,12 @@ class Producer {
     this.channel = null;
   }
 
-  get connection() {
-    return this._connection;
-  }
-
   set connection(value) {
     this._connection = value;
+  }
+
+  get connection() {
+    return this._connection;
   }
 
   /**
@@ -146,8 +145,20 @@ class Producer {
           return Promise.reject(ERRORS.BUFFER_FULL);
         });
     }
-
     return this.publishOrSendToQueue(queue, msg, options);
+  }
+
+  /**
+   * @deprecated Use publish instead
+   * Ensure channel exists and send message using `checkRpc`
+   * @param  {string} queue   The destination queue on which we want to send a message
+   * @param  {any} msg     Anything serializable/bufferable
+   * @param  {object} options message options (persistent, durable, rpc, etc.)
+   * @return {Promise}         checkRpc response
+   */
+   /* eslint prefer-rest-params: off */
+  produce(queue, msg, options) {
+    return this.publish(queue, msg, options);
   }
 
   /**
@@ -158,20 +169,21 @@ class Producer {
    * @return {Promise}         checkRpc response
    */
   /* eslint no-param-reassign: "off" */
-  produce(queue, msg, options) {
+  publish(queue, msg, options) {
     // default options are persistent and durable because we do not want to miss any outgoing message
     // unless user specify it
-    options = Object.assign({ persistent: true, durable: true }, options);
+    const settings = Object.assign({ persistent: true, durable: true }, options);
+    let message = Object.assign({}, msg);
     return this._connection.get()
     .then((channel) => {
       this.channel = channel;
 
       // undefined can't be serialized/buffered :p
-      if (!msg) msg = null;
+      if (!message) message = null;
 
       this._connection.config.transport.info('bmq:producer', `[${queue}] > `, msg);
 
-      return this.checkRpc(queue, parsers.out(msg, options), options);
+      return this.checkRpc(queue, parsers.out(message, settings), settings);
     })
     .catch((err) => {
       if ([ERRORS.TIMEOUT, ERRORS.BUFFER_FULL].includes(err.message)) {
@@ -180,22 +192,12 @@ class Producer {
       // add timeout between retries because we don't want to overflow the CPU
       this._connection.config.transport.error('bmq:producer', err);
       return utils.timeoutPromise(this._connection.config.timeout)
-      .then(() => this.produce(queue, msg, options));
+      .then(() => this.publish(queue, message, settings));
     });
   }
 }
 
-let instance;
 /* eslint no-unused-expressions: "off" */
 /* eslint no-sequences: "off" */
 /* eslint arrow-body-style: "off" */
-module.exports = (connection) => {
-  assert(instance || connection, 'Producer can not be created because connection does not exist');
-
-  if (!instance) {
-    instance = new Producer(connection);
-  } else {
-    instance.connection = connection;
-  }
-  return instance;
-};
+module.exports = Producer;

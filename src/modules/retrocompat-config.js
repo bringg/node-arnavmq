@@ -1,42 +1,45 @@
 const { logger } = require('@dialonce/boot')();
 // deprecated configuration property names
-/* eslint no-param-reassign: "off" */
 /* eslint global-require: "off" */
 function oldConfigNames(config) {
-  if (config.amqpUrl) {
-    config.host = config.amqpUrl;
+  const configuration = Object.assign({}, config);
+  if (configuration.amqpUrl) {
+    configuration.host = configuration.amqpUrl;
   }
 
-  if (config.amqpPrefetch) {
-    config.prefetch = config.amqpPrefetch;
+  if (configuration.amqpPrefetch) {
+    configuration.prefetch = configuration.amqpPrefetch;
   }
 
-  if (config.amqpRequeue) {
-    config.requeue = config.amqpRequeue;
+  if (configuration.amqpRequeue) {
+    configuration.requeue = configuration.amqpRequeue;
   }
 
-  if (config.amqpTimeout) {
-    config.timeout = config.amqpTimeout;
+  if (configuration.amqpTimeout) {
+    configuration.timeout = configuration.amqpTimeout;
   }
+  return configuration;
 }
 
 // deprecated env vars to configure the module
 function envVars(config) {
-  if (process.env.AMQP_URL && !config.host) {
-    config.host = process.env.AMQP_URL;
+  const configuration = Object.assign({}, config);
+  if (process.env.AMQP_URL && !configuration.host) {
+    configuration.host = process.env.AMQP_URL;
   }
 
-  if (process.env.LOCAL_QUEUE && !config.consumerSuffix) {
-    config.consumerSuffix = process.env.LOCAL_QUEUE;
+  if (process.env.LOCAL_QUEUE && !configuration.consumerSuffix) {
+    configuration.consumerSuffix = process.env.LOCAL_QUEUE;
   }
 
   if (process.env.AMQP_DEBUG) {
     try {
-      config.transport = logger;
+      configuration.transport = logger;
     } catch (e) {
-      config.transport = console;
+      configuration.transport = console;
     }
   }
+  return configuration;
 }
 
 /**
@@ -45,9 +48,9 @@ function envVars(config) {
  * @return {object}        Updated config object
  */
 module.exports = (config) => {
-  config = config || {};
-  envVars(config);
-  oldConfigNames(config);
+  let configuration = Object.assign({}, config);
+  configuration = envVars(configuration);
+  configuration = oldConfigNames(configuration);
 
-  return config;
+  return configuration;
 };

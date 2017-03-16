@@ -83,9 +83,8 @@ class Connection {
    * Connect to AMQP and create channel
    * @return {Promise} A promise that resolve with an amqp.node channel object
    */
-   /* eslint arrow-body-style: "off" */
   get() {
-    return this.getConnection().then(() => { return this.getChannel(); });
+    return this.getConnection().then(() => this.getChannel());
   }
 
   /**
