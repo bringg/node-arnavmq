@@ -1,7 +1,7 @@
 const assert = require('assert');
 const bunnymq = require('../src/index')();
 const utils = require('../src/modules/utils');
-const uuid = require('node-uuid');
+const uuid = require('uuid');
 const docker = require('./docker');
 
 const fixtures = {
