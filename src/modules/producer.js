@@ -1,5 +1,5 @@
 const utils = require('./utils');
-const uuid = require('node-uuid');
+const uuid = require('uuid');
 const parsers = require('./message-parsers');
 const Deferred = require('../classes/deferred');
 

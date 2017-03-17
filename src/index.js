@@ -1,5 +1,5 @@
 require('dotenv').config({ silent: true });
-const uuid = require('node-uuid');
+const uuid = require('uuid');
 const utils = require('./modules/utils');
 const connection = require('./modules/connection');
 const retrocompat = require('./modules/retrocompat-config');
