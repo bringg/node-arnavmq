@@ -29,7 +29,9 @@
   "dependencies": {
     "@dialonce/boot": "^0.4.1",
     "amqplib": "^0.4.1",
+    "deserialize-error": "0.0.3",
     "dotenv": "^2.0.0",
+    "serialize-error": "^2.1.0",
     "uuid": "^3.0.1"
   },
   "devDependencies": {

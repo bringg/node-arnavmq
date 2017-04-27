@@ -125,4 +125,20 @@ describe('producer/consumer', function () {
         });
     });
   });
+
+  describe('error', () => {
+    it('should not be consumed', (done) => {
+      bunnymq.consume('test-queue-5', () =>
+        ({ error: new Error('Error test') })
+      )
+      .then(() =>
+        bunnymq.produce('test-queue-5', {}, { rpc: true })
+      )
+      .then((response) => {
+        assert(response.error);
+        assert(response.error instanceof Error);
+        done();
+      });
+    });
+  });
 });

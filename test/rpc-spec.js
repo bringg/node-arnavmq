@@ -5,7 +5,7 @@ const docker = require('./docker');
 const utils = require('../src/modules/utils');
 
 const fixtures = {
-  queues: ['rpc-queue-0', 'rpc-queue-1', 'rpc-queue-2', 'rpc-queue-3']
+  queues: ['rpc-queue-0', 'rpc-queue-1', 'rpc-queue-2']
 };
 
 /* eslint func-names: "off" */
@@ -60,15 +60,6 @@ describe('Producer/Consumer RPC messaging:', function () {
     .then(() => bunnymq.produce(fixtures.queues[2], undefined, { rpc: true }))
     .then((response) => {
       assert(response === undefined, 'Got a response !== undefined');
-    })
-  );
-
-  it('should be able to produce a RPC message and get null response [rpc-queue-3]', () =>
-    bunnymq.consume(fixtures.queues[3], () => null)
-    .then(() =>
-      bunnymq.produce(fixtures.queues[3], undefined, { rpc: true }))
-    .then((response) => {
-      assert(response === null, 'Got a response !== null');
     })
   );
 });
