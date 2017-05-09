@@ -61,7 +61,7 @@ class Consumer {
 
     // consumer gets a suffix if one is set on the configuration, to suffix all queues names
     // ex: service-something with suffix :ci becomes service-suffix:ci etc.
-    const suffixedQueue = queue + this._connection.config.consumerSuffix;
+    const suffixedQueue = `${queue}${this._connection.config.consumerSuffix || ''}`;
 
     return this._connection.get()
     .then((channel) => {
