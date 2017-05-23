@@ -48,11 +48,24 @@ module.exports = (connection) => {
   } else {
     instance.connection = connection;
   }
-  return {
+
+  const consumer = {
     consume: instance.consume.bind(instance),
-    subscribe: instance.subscribe.bind(instance),
+    subscribe: instance.subscribe.bind(instance)
+  };
+
+  const producer = {
     produce: instance.produce.bind(instance),
-    publish: instance.publish.bind(instance),
-    connection: instance.connection
+    publish: instance.publish.bind(instance)
+  };
+
+  return {
+    connection: instance.connection,
+    consume: consumer.consume,
+    subscribe: consumer.subscribe,
+    produce: producer.produce,
+    publish: producer.publish,
+    consumer,
+    producer
   };
 };

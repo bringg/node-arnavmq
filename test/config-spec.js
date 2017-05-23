@@ -92,7 +92,7 @@ describe('config', () => {
 
     it('should use default rpcRimeout if none given', () => {
       const conf = { host: 'amqp://localhost' };
-      assert.equal(main(conf).connection.config.rpcTimeout, 1000);
+      assert.equal(main(conf).connection.config.rpcTimeout, 15000);
     });
 
     it('should use provided rpcRimeout', () => {

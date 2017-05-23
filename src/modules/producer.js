@@ -122,29 +122,28 @@ class Producer {
 
     if (options.rpc) {
       return this.createRpcQueue(queue)
-        .then(() => {
-          // generates a correlationId (random uuid) so we know which callback to execute on received response
-          const corrId = uuid.v4();
-          options.correlationId = corrId;
-          // reply to us if you receive this message!
-          options.replyTo = this.amqpRPCQueues[queue].queue;
+      .then(() => {
+        // generates a correlationId (random uuid) so we know which callback to execute on received response
+        const corrId = uuid.v4();
+        options.correlationId = corrId;
+        // reply to us if you receive this message!
+        options.replyTo = this.amqpRPCQueues[queue].queue;
 
-          if (this.publishOrSendToQueue(queue, msg, options)) {
-            // defered promise that will resolve when response is received
-            const responsePromise = new Deferred();
-            this.amqpRPCQueues[queue][corrId] = responsePromise;
-            //  Using given timeout
-            if (options.timeout > 0) {
-              this.prepareTimeoutRpc(queue, corrId, options.timeout);
-            //  Using default timeout
-            } else if (this._connection.config.rpcTimeout > 0) {
-              this.prepareTimeoutRpc(queue, corrId, this._connection.config.rpcTimeout);
-            }
-            return responsePromise.promise;
-          }
-          return Promise.reject(ERRORS.BUFFER_FULL);
-        });
+        this.publishOrSendToQueue(queue, msg, options);
+        // defered promise that will resolve when response is received
+        const responsePromise = new Deferred();
+        this.amqpRPCQueues[queue][corrId] = responsePromise;
+
+        //  Using given timeout or default one
+        const timeout = options.timeout || this._connection.config.rpcTimeout || 0;
+        if (timeout > 0) {
+          this.prepareTimeoutRpc(queue, corrId, timeout);
+        }
+
+        return responsePromise.promise;
+      });
     }
+
     return this.publishOrSendToQueue(queue, msg, options);
   }
 

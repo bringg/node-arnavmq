@@ -15,19 +15,19 @@ describe('disconnections', function () {
 
     it('should be able to re-register to consume messages between connection failures', (done) => {
       let counter = 0;
-      bunnymq.consume(queue, () => {
+      bunnymq.consumer.consume(queue, () => {
         counter += 1;
         if (counter === 50) {
           done();
         }
       })
-      .then(() => bunnymq.produce(queue))
+      .then(() => bunnymq.producer.produce(queue))
       .then(() => utils.timeoutPromise(500))
       .then(() => assert(counter))
       .then(docker.stop)
       .then(() => {
         for (let i = counter; i < 50; i += 1) {
-          bunnymq.produce(queue);
+          bunnymq.producer.produce(queue);
         }
       })
       .then(docker.start);
@@ -43,17 +43,17 @@ describe('disconnections', function () {
         if (cnt === 50) done();
       };
       bunnymq.connection._config.rpcTimeout = 0;
-      bunnymq.consume(queue, () => {
+      bunnymq.consumer.consume(queue, () => {
         counter += 1;
         return counter;
       })
-      .then(() => bunnymq.produce(queue, undefined, { rpc: true }).then(checkReceived))
+      .then(() => bunnymq.producer.produce(queue, undefined, { rpc: true }).then(checkReceived))
       .then(() => utils.timeoutPromise(500))
       .then(() => assert(counter))
       .then(docker.stop)
       .then(() => {
         for (let i = counter; i < 50; i += 1) {
-          bunnymq.produce(queue, undefined, { rpc: true }).then(checkReceived);
+          bunnymq.producer.produce(queue, undefined, { rpc: true }).then(checkReceived);
         }
       })
       .then(docker.start);
