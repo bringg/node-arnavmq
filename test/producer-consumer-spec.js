@@ -141,4 +141,17 @@ describe('producer/consumer', function () {
       });
     });
   });
+
+  describe('undefined queue name', () => {
+    before(() => {
+      bunnymq.connection._config.consumerSuffix = undefined;
+    });
+
+    it('should receive message', () => {
+      bunnymq.consume('queue-name-undefined-suffix', (message) => {
+        assert.equal(message.msg, 'test for undefined queue suffix');
+      })
+        .then(() => bunnymq.produce('queue-name-undefined-suffix', { msg: 'test for undefined queue suffix' }));
+    });
+  });
 });
