@@ -163,7 +163,7 @@ class Producer {
   /**
    * Ensure channel exists and send message using `checkRpc`
    * @param  {string} queue   The destination queue on which we want to send a message
-   * @param  {any} msg     Anything serializable/bufferable
+   * @param  {string|object} msg     Anything serializable/bufferable
    * @param  {object} options message options (persistent, durable, rpc, etc.)
    * @return {Promise}         checkRpc response
    */
@@ -172,7 +172,7 @@ class Producer {
     // default options are persistent and durable because we do not want to miss any outgoing message
     // unless user specify it
     const settings = Object.assign({ persistent: true, durable: true }, options);
-    let message = Object.assign({}, msg);
+    let message = typeof msg === 'string' ? msg : Object.assign({}, msg);
     return this._connection.get()
     .then((channel) => {
       this.channel = channel;
