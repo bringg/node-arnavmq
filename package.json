@@ -1,6 +1,6 @@
 {
   "name": "bunnymq",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "BunnyMq is a RabbitMq wrapper",
   "keywords": [
     "rabbitmq",
@@ -27,7 +27,6 @@
   },
   "homepage": "https://github.com/dial-once/node-bunnymq#readme",
   "dependencies": {
-    "@dialonce/boot": "^0.4.1",
     "amqplib": "^0.4.1",
     "deserialize-error": "0.0.3",
     "dotenv": "^2.0.0",

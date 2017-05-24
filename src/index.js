@@ -3,10 +3,6 @@ const uuid = require('uuid');
 const utils = require('./modules/utils');
 const connection = require('./modules/connection');
 const retrocompat = require('./modules/retrocompat-config');
-require('@dialonce/boot')({
-  LOGS_TOKEN: process.env.LOGS_TOKEN,
-  BUGS_TOKEN: process.env.BUGS_TOKEN
-});
 
 require('events').EventEmitter.prototype._maxListeners = process.env.MAX_EMITTERS || 20;
 
