@@ -1,10 +1,6 @@
 require('dotenv').config({ silent: true });
 const assert = require('assert');
 const uuid = require('uuid');
-require('@dialonce/boot')({
-  LOGS_TOKEN: process.env.LOGS_TOKEN,
-  BUGS_TOKEN: process.env.BUGS_TOKEN
-});
 
 /* eslint global-require: "off" */
 describe('config', () => {
