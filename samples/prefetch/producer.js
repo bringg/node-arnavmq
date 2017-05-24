@@ -1,16 +1,14 @@
+const producer = require('../../src/index')().producer;
+const { logger } = require('@dialonce/boot')();
 
-var producer = require('../../index')().producer;
+let i = 0;
+let interval;
 
-var i = 0;
-var interval;
+interval = setInterval(() => {
+  producer.produce(`queue-prefetch${i}`, { message: `start-${i}` }, { rpc: true })
+  .then(logger.info);
 
-interval = setInterval(function () {
-  producer.produce('queue-prefetch' + i, { message: 'start-' + i }, { rpc: true })
-  .then(function (result) {
-    console.log('result:', result);
-  });
-
-  ++i;
+  i += 1;
   if (i >= 100) {
     interval = clearInterval(interval);
   }

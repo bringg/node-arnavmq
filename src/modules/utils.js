@@ -1,15 +1,12 @@
-'use strict';
-
 /**
  * A function to generate a pause in promise chaining
  * @param  {number} timer How much ws to wait
  * @return {Promise}      A Promise that will resolve when timer is expired
  */
-module.exports.timeoutPromise = (timer) => {
-  return new Promise((resolve) => {
+module.exports.timeoutPromise = timer =>
+  new Promise((resolve) => {
     setTimeout(resolve, timer);
   });
-};
 
 function empty() {}
 

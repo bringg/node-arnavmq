@@ -1,31 +1,33 @@
-var consumer = require('../../index')().consumer;
+const consumer = require('../../src/index')().consumer;
+const { logger } = require('@dialonce/boot')();
 
-consumer.consume('circleArea', function (_msg) {
-  _msg = JSON.parse(_msg);
+/* eslint no-param-reassign: "off" */
+consumer.consume('circleArea', (msg) => {
+  msg = JSON.parse(msg);
 
-  var area = Math.pow(parseInt(_msg.r), 2) * Math.PI;
+  const area = (parseInt(msg.r, 10) ** 2) * Math.PI;
 
-  console.log('Circle area is: ', area);
-
-  return area;
-});
-
-consumer.consume('squareArea', function (_msg) {
-  _msg = JSON.parse(_msg);
-
-  var area = Math.pow(parseInt(_msg.l), 2);
-
-  console.log('Square area is: ', area);
+  logger.info('Circle area is: ', area);
 
   return area;
 });
 
-consumer.consume('triangleArea', function (_msg) {
-  _msg = JSON.parse(_msg);
+consumer.consume('squareArea', (msg) => {
+  msg = JSON.parse(msg);
 
-  var area = parseInt(_msg.b) * parseInt(_msg.h) * 1 / 2;
+  const area = parseInt(msg.l, 10) ** 2;
 
-  console.log('Triangle area is: ', area);
+  logger.info('Square area is: ', area);
+
+  return area;
+});
+
+consumer.consume('triangleArea', (msg) => {
+  msg = JSON.parse(msg);
+
+  const area = parseInt(msg.b, 10) * parseInt(msg.h, 10) * 0.5;
+
+  logger.info('Triangle area is: ', area);
 
   return area;
 });

@@ -1,124 +1,157 @@
-var assert = require('assert');
-var producer = require('../src/index')().producer;
-var consumer = require('../src/index')().consumer;
-var utils = require('../src/modules/utils');
-var uuid = require('node-uuid');
-var docker = require('./docker');
+const assert = require('assert');
+const bunnymq = require('../src/index')();
+const utils = require('../src/modules/utils');
+const uuid = require('uuid');
+const docker = require('./docker');
 
-var fixtures = {
+const fixtures = {
   queues: ['test-queue-0', 'test-queue-1', 'test-queue-2', 'test-queue-3'],
   routingKey: 'queue-routing-key'
 };
 
-var letters = 0;
+let letters = 0;
 
-describe('producer/consumer', function() {
-  before(function() {
-    this.timeout(20000);
-    return docker.start();
-  });
+/* eslint func-names: "off" */
+/* eslint prefer-arrow-callback: "off" */
+describe('producer/consumer', function () {
+  before(docker.start);
 
-  after(() => {
-    return docker.stop();
-  });
+  after(docker.rm);
 
-  describe('msg delevering', function() {
-    before(() => {
-      return consumer.consume(fixtures.queues[0], function () {
-        letters--;
-      }).then(() => {
-        return consumer.consume(fixtures.queues[1], function () {
-          letters--;
-        });
-      });
-    });
+  describe('msg delevering', () => {
+    before(() =>
+      bunnymq.consumer.consume(fixtures.queues[0], () => {
+        letters -= 1;
+      }).then(() =>
+        bunnymq.consumer.consume(fixtures.queues[1], () => {
+          letters -= 1;
+        })
+      )
+    );
 
-    it('should be able to consume message sended by producer to queue [test-queue-0]', function () {
-      letters++;
-      return producer.produce(fixtures.queues[0], { msg: uuid.v4() })
+    it('should be able to consume message sended by producer to queue [test-queue-0]', () => {
+      letters += 1;
+      return bunnymq.producer.produce(fixtures.queues[0], { msg: uuid.v4() })
         .then(() => utils.timeoutPromise(300))
         .then(() => assert.equal(letters, 0));
     });
 
-    it('should be able to consume message sended by producer to queue [test-queue-0] (no message)', function () {
-      letters++;
-      return producer.produce(fixtures.queues[0])
+    it('should be able to consume message sended by producer to queue [test-queue-0] (no message)', () => {
+      letters += 1;
+      return bunnymq.producer.produce(fixtures.queues[0])
         .then(() => utils.timeoutPromise(300))
         .then(() => assert.equal(letters, 0));
     });
 
-    it('should be able to consume message sended by producer to queue [test-queue-0] (null message)', function () {
-      letters++;
-      return producer.produce(fixtures.queues[0], null)
+    it('should be able to consume message sended by producer to queue [test-queue-0] (null message)', () => {
+      letters += 1;
+      return bunnymq.producer.produce(fixtures.queues[0], null)
         .then(() => utils.timeoutPromise(300))
         .then(() => assert.equal(letters, 0));
     });
 
-    it('should not be able to consume message sended by producer to queue [test-queue-1]', function () {
-      letters++;
-      return producer.produce(fixtures.queues[1], null)
+    it('should not be able to consume message sended by producer to queue [test-queue-1]', () => {
+      letters += 1;
+      return bunnymq.producer.produce(fixtures.queues[1], null)
         .then(() => utils.timeoutPromise(300))
         .then(() => assert.equal(letters, 0));
     });
 
-    it('should be able to consume all message populated by producer to all queues [test-queue-0, test-queue-1, test-queue-2]', function () {
-      var count = 100;
-      var messages = [];
+    it('should be able to consume all message populated by producer to all queues [test-queue-0,' +
+      ' test-queue-1, test-queue-2]', () => {
+      const count = 100;
+      const messages = [];
       letters += 200;
 
-      for(let i = 0; i < count; i++) {
-        messages.push(producer.produce(fixtures.queues[0], null));
-        messages.push(producer.produce(fixtures.queues[1], null));
+      for (let i = 0; i < count; i += 1) {
+        messages.push(bunnymq.producer.produce(fixtures.queues[0], null));
+        messages.push(bunnymq.producer.produce(fixtures.queues[1], null));
       }
 
       return Promise.all(messages)
         .then(() => utils.timeoutPromise(500))
         .then(() => assert.equal(letters, 0));
     });
-
   });
 
-  describe('msg requeueing', function() {
-    it('should be able to consume message, but throw error so the message is requeued again on queue [test-queue-0]', function (done) {
-      var attempt = 3;
+  describe('msg requeueing', () => {
+    it('should be able to consume message, but throw error so the message is requeued again on queue [test-queue-0]',
+     (done) => {
+       let attempt = 3;
 
-      consumer.consume(fixtures.queues[3], function (_msg) {
-        assert(typeof _msg === 'object');
+       bunnymq.consumer.consume(fixtures.queues[3], (msg) => {
+         assert(typeof msg === 'object');
 
-        --attempt;
-        if (!attempt) {
-          return done();
-        } else {
-          throw new Error('Any kind of error');
-        }
-      })
-      .then(function () {
-        producer.produce(fixtures.queues[3], { msg: uuid.v4() })
-        .then(function (response) {
+         attempt -= 1;
+         if (!attempt) {
+           return done();
+         }
+         throw new Error('Any kind of error');
+       })
+      .then(() => {
+        bunnymq.producer.produce(fixtures.queues[3], { msg: uuid.v4() })
+        .then((response) => {
           assert(response === true);
-          ++letters;
+          letters += 1;
         });
       });
-    });
+     });
   });
 
-  describe('routing keys', function () {
-    it('should be able to send a message to a rounting key exchange', function() {
-      return consumer.consume(fixtures.routingKey, function (message) {
+  describe('routing keys', () => {
+    it('should be able to send a message to a rounting key exchange', () =>
+      bunnymq.consumer.consume(fixtures.routingKey, (message) => {
         assert.equal(message.content, 'ok');
       })
-      .then(() => {
-        return producer.produce(fixtures.rountingKey, { content: 'ok' }, { routingKey: 'route' });
-      });
-    });
+      .then(() =>
+        bunnymq.producer.produce(fixtures.rountingKey, { content: 'ok' }, { routingKey: 'route' })
+      )
+    );
   });
 
-  describe('rpc timeouts', function() {
-    it('should reject on timeout, if no answer received', function() {
-      return producer.produce('non-existing-queue', { msg: 'ok' }, { rpc: true, timeout: 1000 })
+  describe('rpc timeouts', () => {
+    it('should reject on timeout, if no answer received', () =>
+      bunnymq.producer.produce('non-existing-queue', { msg: 'ok' }, { rpc: true, timeout: 1000 })
+        .catch((e) => {
+          assert.equal(e.message, 'Timeout reached');
+        })
+    );
+
+    it('should reject on default timeout, if no answer received', () => {
+      bunnymq.connection._config.rpcTimeout = 1000;
+      bunnymq.producer.produce('non-existing-queue', { msg: 'ok' }, { rpc: true })
         .catch((e) => {
           assert.equal(e.message, 'Timeout reached');
         });
+    });
+  });
+
+  describe('error', () => {
+    it('should not be consumed', (done) => {
+      bunnymq.consumer.consume('test-queue-5', () =>
+        ({ error: new Error('Error test') })
+      )
+      .then(() =>
+        bunnymq.producer.produce('test-queue-5', {}, { rpc: true })
+      )
+      .then((response) => {
+        assert(response.error);
+        assert(response.error instanceof Error);
+        done();
+      });
+    });
+  });
+
+  describe('undefined queue name', () => {
+    before(() => {
+      bunnymq.connection._config.consumerSuffix = undefined;
+    });
+
+    it('should receive message', () => {
+      bunnymq.consumer.consume('queue-name-undefined-suffix', (message) => {
+        assert.equal(message.msg, 'test for undefined queue suffix');
+      })
+      .then(() => bunnymq.producer.produce('queue-name-undefined-suffix', { msg: 'test for undefined queue suffix' }));
     });
   });
 });
