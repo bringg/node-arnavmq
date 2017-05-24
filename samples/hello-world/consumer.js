@@ -1,5 +1,5 @@
+/* eslint no-console: off */
 const consumer = require('../../src/index')().consumer;
-const { logger } = require('@dialonce/boot')();
 
 consumer.connect()
 .then(() => {
@@ -8,5 +8,5 @@ consumer.connect()
       setTimeout(resolve(true), 5000);
     })
   )
-  .then(logger.info); // true if message has been acknowledged, else false
+  .then(console.info); // true if message has been acknowledged, else false
 });

@@ -1,6 +1,4 @@
-const { logger } = require('@dialonce/boot')();
 // deprecated configuration property names
-/* eslint global-require: "off" */
 function oldConfigNames(config) {
   const configuration = Object.assign({}, config);
   if (configuration.amqpUrl) {
@@ -32,13 +30,10 @@ function envVars(config) {
     configuration.consumerSuffix = process.env.LOCAL_QUEUE;
   }
 
-  if (process.env.AMQP_DEBUG) {
-    try {
-      configuration.transport = logger;
-    } catch (e) {
-      configuration.transport = console;
-    }
+  if (process.env.AMQP_DEBUG && !configuration.transport) {
+    configuration.transport = console;
   }
+
   return configuration;
 }
 

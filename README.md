@@ -89,6 +89,8 @@ You can specify a config object, properties and default values are:
 
 You can override any or no of the property above.
 
+<b>Note:</b> if you enable the debug mode using the `AMQP_DEBUG=true` env var, but you do not attach any transport logger, the module will fallback to console.
+
 ## Env vars
 Deprecated as of 2.1.0, don't use env vars to configure the module, see Config section.
 
