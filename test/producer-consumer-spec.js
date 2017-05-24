@@ -29,28 +29,37 @@ describe('producer/consumer', function () {
       )
     );
 
-    it('should be able to consume message sended by producer to queue [test-queue-0]', () => {
+    it('should receive message that is only string', () => {
+      const queueName = 'test-only-string-queue';
+      return bunnymq.consumer.consume(queueName, message => Promise.resolve(`${message}-test`))
+      .then(() => bunnymq.producer.produce(queueName, '85.69.30.121', { rpc: true }))
+      .then((result) => {
+        assert.equal(result, '85.69.30.121-test');
+      });
+    });
+
+    it('should be able to consume message sent by producer to queue [test-queue-0]', () => {
       letters += 1;
       return bunnymq.producer.produce(fixtures.queues[0], { msg: uuid.v4() })
         .then(() => utils.timeoutPromise(300))
         .then(() => assert.equal(letters, 0));
     });
 
-    it('should be able to consume message sended by producer to queue [test-queue-0] (no message)', () => {
+    it('should be able to consume message sent by producer to queue [test-queue-0] (no message)', () => {
       letters += 1;
       return bunnymq.producer.produce(fixtures.queues[0])
         .then(() => utils.timeoutPromise(300))
         .then(() => assert.equal(letters, 0));
     });
 
-    it('should be able to consume message sended by producer to queue [test-queue-0] (null message)', () => {
+    it('should be able to consume message sent by producer to queue [test-queue-0] (null message)', () => {
       letters += 1;
       return bunnymq.producer.produce(fixtures.queues[0], null)
         .then(() => utils.timeoutPromise(300))
         .then(() => assert.equal(letters, 0));
     });
 
-    it('should not be able to consume message sended by producer to queue [test-queue-1]', () => {
+    it('should not be able to consume message sent by producer to queue [test-queue-1]', () => {
       letters += 1;
       return bunnymq.producer.produce(fixtures.queues[1], null)
         .then(() => utils.timeoutPromise(300))
