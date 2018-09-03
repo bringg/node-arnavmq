@@ -172,7 +172,14 @@ class Producer {
     // default options are persistent and durable because we do not want to miss any outgoing message
     // unless user specify it
     const settings = Object.assign({ persistent: true, durable: true }, options);
-    let message = typeof msg === 'string' ? msg : Object.assign({}, msg);
+
+    let message = msg;
+    if (Array.isArray(msg)) {
+      message = Object.assign([], msg);
+    } else if (typeof(msg) !== 'string') {
+      message = Object.assign({}, msg);
+    }
+
     return this._connection.get()
     .then((channel) => {
       this.channel = channel;

@@ -38,6 +38,15 @@ describe('producer/consumer', function () {
       });
     });
 
+    it('should receive message that is only array', () => {
+      const queueName = 'test-only-array-queue';
+      return bunnymq.consumer.consume(queueName, message => Promise.resolve({ message }))
+      .then(() => bunnymq.producer.produce(queueName, [1, '2'], { rpc: true }))
+      .then((result) => {
+        assert.deepEqual(result, { message: [1, '2'] });
+      });
+    });
+
     it('should be able to consume message sent by producer to queue [test-queue-0]', () => {
       letters += 1;
       return bunnymq.producer.produce(fixtures.queues[0], { msg: uuid.v4() })
