@@ -68,7 +68,10 @@ class Producer {
           rpcQueue.queue = q.queue;
 
           // if channel is closed, we want to make sure we cleanup the queue so future calls will recreate it
-          this._connection.addListener('close', () => { delete rpcQueue.queue; this.createRpcQueue(queue); });
+          this._connection.addListener('close', () => {
+            delete rpcQueue.queue;
+            this.createRpcQueue(queue);
+          });
 
           return channel.consume(q.queue, this.maybeAnswer(queue), { noAck: true });
         })
