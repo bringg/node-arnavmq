@@ -82,7 +82,7 @@ class Consumer {
           // main answer management chaining
           // receive message, parse it, execute callback, check if should answer, ack/reject message
           Promise.resolve(parsers.in(msg))
-          .then(callback)
+          .then(body => callback(body, msg.properties))
           .then(this.checkRpc(msg, q.queue))
           .then(() => {
             this.channel.ack(msg);
