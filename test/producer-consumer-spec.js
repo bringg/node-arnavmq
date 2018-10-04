@@ -49,13 +49,13 @@ describe('producer/consumer', function () {
 
 
     it('should receive message headers', () => {
-      const header =  {header1: "Header1", header2: "Header2"};
+      const headers =  {header1: "Header1", header2: "Header2"};
       const queueName = 'test-headers';
       return bunnymq.consumer.consume(queueName, (message, properties) => Promise.resolve({ message: message, properties: properties }))
-      .then(() => bunnymq.producer.produce(queueName, [1, '2'], { rpc: true, headers: header }))
+      .then(() => bunnymq.producer.produce(queueName, [1, '2'], { rpc: true, headers: headers }))
       .then((result) => {
         assert.deepEqual(result.message, [1, '2']);
-        assert.deepEqual(result.properties.headers, header);
+        assert.deepEqual(result.properties.headers, headers);
       });
     });
 
