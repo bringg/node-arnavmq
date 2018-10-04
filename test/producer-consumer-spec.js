@@ -47,6 +47,29 @@ describe('producer/consumer', function () {
       });
     });
 
+
+    it('should receive message headers', () => {
+      const headers =  {header1: "Header1", header2: "Header2"};
+      const queueName = 'test-headers';
+      return bunnymq.consumer.consume(queueName, (message, properties) => Promise.resolve({ message: message, properties: properties }))
+      .then(() => bunnymq.producer.produce(queueName, [1, '2'], { rpc: true, headers: headers }))
+      .then((result) => {
+        assert.deepEqual(result.message, [1, '2']);
+        assert.deepEqual(result.properties.headers, headers);
+      });
+    });
+
+
+    it('should receive message properties', () => {
+      const queueName = 'test-headers';
+      return bunnymq.consumer.consume(queueName, (message, properties) => Promise.resolve({ message: message, properties: properties }))
+      .then(() => bunnymq.producer.produce(queueName, [1, '2'], { rpc: true }))
+      .then((result) => {
+        assert.deepEqual(result.message, [1, '2']);
+        assert.deepEqual(result.properties.contentType,  "application/json");
+      });
+    });
+
     it('should be able to consume message sent by producer to queue [test-queue-0]', () => {
       letters += 1;
       return bunnymq.producer.produce(fixtures.queues[0], { msg: uuid.v4() })
