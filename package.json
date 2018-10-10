@@ -1,6 +1,6 @@
 {
   "name": "bunnymq",
-  "version": "2.3.2",
+  "version": "2.4.0",
   "description": "BunnyMq is a RabbitMq wrapper",
   "keywords": [
     "rabbitmq",
@@ -13,8 +13,11 @@
   ],
   "main": "src/index.js",
   "scripts": {
-    "doc": "jsdoc -d ./docs --readme README.md --package package.json --template node_modules/minami src/*",
-    "test": "make test"
+    "start": "node src/index.js",
+    "lint": "./node_modules/.bin/eslint .",
+    "cover": "CONSOLE_LOGGING=false ./node_modules/.bin/nyc --reporter=lcov ./node_modules/.bin/_mocha test --recursive --timeout=10000 --exit",
+    "test": "npm run lint && npm run cover",
+    "doc": "jsdoc -d ./docs --readme README.md --package package.json --template node_modules/minami src/*"
   },
   "repository": {
     "type": "git",
@@ -36,11 +39,13 @@
   "devDependencies": {
     "assert": "1.3.0",
     "child-process-promise": "^2.2.0",
-    "eslint": "^3.11.1",
-    "eslint-config-airbnb": "^13.0.0",
-    "eslint-plugin-import": "^2.2.0",
-    "eslint-plugin-jsx-a11y": "^2.2.3",
-    "eslint-plugin-react": "^6.8.0",
+    "eslint": "^5.4.0",
+    "eslint-config-airbnb": "^17.1.0",
+    "eslint-plugin-import": "^2.14.0",
+    "eslint-plugin-jsx-a11y": "^6.1.1",
+    "eslint-plugin-react": "^7.11.1",
+    "mocha": "^5.2.0",
+    "nyc": "^12.0.2",
     "minami": "1.1.1"
   },
   "engines": {

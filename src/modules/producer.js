@@ -68,7 +68,11 @@ class Producer {
           rpcQueue.queue = q.queue;
 
           // if channel is closed, we want to make sure we cleanup the queue so future calls will recreate it
-          this._connection.addListener('close', () => { delete rpcQueue.queue; this.createRpcQueue(queue); });
+          this._connection.addListener('close', () => {
+            delete rpcQueue.queue;
+            this.createRpcQueue(queue);
+          });
+
           return channel.consume(q.queue, this.maybeAnswer(queue), { noAck: true });
         })
         .then(() => rpcQueue.queue)
@@ -171,7 +175,14 @@ class Producer {
     // default options are persistent and durable because we do not want to miss any outgoing message
     // unless user specify it
     const settings = Object.assign({ persistent: true, durable: true }, options);
-    let message = typeof msg === 'string' ? msg : Object.assign({}, msg);
+
+    let message = msg;
+    if (Array.isArray(msg)) {
+      message = Object.assign([], msg);
+    } else if (typeof(msg) !== 'string') {
+      message = Object.assign({}, msg);
+    }
+
     return this._connection.get()
     .then((channel) => {
       this.channel = channel;
