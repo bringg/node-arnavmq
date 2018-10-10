@@ -61,7 +61,7 @@ class Producer {
     // we create the callback queue using base queue name + appending config hostname and :res for clarity
     // ie. if hostname is gateway-http and queue is service-oauth, response queue will be service-oauth:gateway-http:res
     // it is important to have different hostname or no hostname on each module sending message or there will be conflicts
-    const resQueue = `${queue}:${this._connection.config.hostname}:res`;
+    const resQueue = `${queue}:${this._connection.config.hostname}:${process.pid}:res`;
     rpcQueue.queue = this._connection.get().then(channel =>
       channel.assertQueue(resQueue, { durable: true, exclusive: true })
         .then((q) => {
@@ -69,7 +69,6 @@ class Producer {
 
           // if channel is closed, we want to make sure we cleanup the queue so future calls will recreate it
           this._connection.addListener('close', () => { delete rpcQueue.queue; this.createRpcQueue(queue); });
-
           return channel.consume(q.queue, this.maybeAnswer(queue), { noAck: true });
         })
         .then(() => rpcQueue.queue)
