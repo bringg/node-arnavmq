@@ -61,7 +61,7 @@ class Producer {
     // we create the callback queue using base queue name + appending config hostname and :res for clarity
     // ie. if hostname is gateway-http and queue is service-oauth, response queue will be service-oauth:gateway-http:res
     // it is important to have different hostname or no hostname on each module sending message or there will be conflicts
-    const resQueue = `${queue}:${this._connection.config.hostname}:res`;
+    const resQueue = `${queue}:${this._connection.config.hostname}:${process.pid}:res`;
     rpcQueue.queue = this._connection.get().then(channel =>
       channel.assertQueue(resQueue, { durable: true, exclusive: true })
         .then((q) => {
