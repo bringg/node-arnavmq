@@ -25,7 +25,7 @@ describe('Producer/Consumer RPC messaging:', () => {
   it('should be able to send directly to the queue, without correlationId and not crash [rpc-queue-0]', () =>
     bunnymq.producer.produce(fixtures.queues[0], { nothing: true }, { rpc: true })
       .then(() =>
-        bunnymq.producer.produce(`${fixtures.queues[0]}:${bunnymq.connection.config.hostname}:res`, { nothing: true })
+        bunnymq.producer.produce(`${fixtures.queues[0]}:${bunnymq.connection.config.hostname}:${process.pid}:res`, { nothing: true })
       )
       .then(utils.timeoutPromise(500))
   );
