@@ -56,4 +56,18 @@ describe('Producer/Consumer RPC messaging:', () => {
       assert(response === undefined, 'Got a response !== undefined');
     })
   );
+
+  it('should return syntax error when we fail to parse response', () =>
+    bunnymq.consumer.consume(fixtures.queues[2], (msg, properties) => {
+      // call produce here manually to simulate client sending invalid json
+      bunnymq.producer.produce(properties.replyTo, 'invalid_json', { correlationId: properties.correlationId, contentType: 'application/json' })
+
+      // delete the replyTo so we don't return rpc to client
+      delete properties.replyTo;
+    })
+    .then(() => bunnymq.producer.produce(fixtures.queues[2], undefined, { contentType: 'application/json', rpc: true, timeout: 500 }))
+    .catch(err => {
+      assert.equal(err.name, 'SyntaxError');
+    })
+  );
 });

@@ -8,6 +8,17 @@ const ERRORS = {
   BUFFER_FULL: 'Buffer is full'
 };
 
+class ProducerError extends Error {
+  constructor({ name, message }) {
+    super(message);
+
+    this.name = name;
+    this.message = message;
+
+    Error.captureStackTrace(this, this.constructor);
+  }
+}
+
 class Producer {
   constructor(connection) {
     this.amqpRPCQueues = {};
@@ -32,17 +43,27 @@ class Producer {
     const rpcQueue = this.amqpRPCQueues[queue];
 
     return (msg) => {
-      try {
-        // check the correlation ID sent by the initial message using RPC
-        const corrId = msg.properties.correlationId;
-        // if we found one, we execute the callback and delete it because it will never be received again anyway
-        rpcQueue[corrId].resolve(parsers.in(msg));
-        this._connection.config.transport.info('bmq:producer', `[${queue}] < answer`);
-        delete rpcQueue[corrId];
-      } catch (e) {
+      // check the correlation ID sent by the initial message using RPC
+      const { correlationId } = msg.properties;
+      const responsePromise = rpcQueue[correlationId];
+
+      if (responsePromise === undefined) {
         this._connection.config.transport.error(new Error(
           `Receiving RPC message from previous session: callback no more in memory. ${queue}`
         ));
+
+        return;
+      }
+
+      // if we found one, we execute the callback and delete it because it will never be received again anyway
+      this._connection.config.transport.info('bmq:producer', `[${queue}] < answer`);
+
+      try {
+        responsePromise.resolve(parsers.in(msg));
+      } catch (e) {
+        responsePromise.reject(new ProducerError(e));
+      } finally {
+        delete rpcQueue[correlationId];
       }
     };
   }
@@ -195,9 +216,10 @@ class Producer {
       return this.checkRpc(queue, parsers.out(message, settings), settings);
     })
     .catch((err) => {
-      if ([ERRORS.TIMEOUT, ERRORS.BUFFER_FULL].includes(err.message)) {
+      if (err instanceof ProducerError || [ERRORS.TIMEOUT, ERRORS.BUFFER_FULL].includes(err.message)) {
         throw err;
       }
+
       // add timeout between retries because we don't want to overflow the CPU
       this._connection.config.transport.error('bmq:producer', err);
       return utils.timeoutPromise(this._connection.config.timeout)
