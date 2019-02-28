@@ -1,5 +1,5 @@
-const docker = require('./docker');
 const assert = require('assert');
+const docker = require('./docker');
 const bunnymq = require('../src/index')();
 const utils = require('../src/modules/utils');
 
@@ -21,16 +21,16 @@ describe('disconnections', function () {
           done();
         }
       })
-      .then(() => bunnymq.producer.produce(queue))
-      .then(() => utils.timeoutPromise(500))
-      .then(() => assert(counter))
-      .then(docker.stop)
-      .then(() => {
-        for (let i = counter; i < 50; i += 1) {
-          bunnymq.producer.produce(queue);
-        }
-      })
-      .then(docker.start);
+        .then(() => bunnymq.producer.produce(queue))
+        .then(() => utils.timeoutPromise(500))
+        .then(() => assert(counter))
+        .then(docker.stop)
+        .then(() => {
+          for (let i = counter; i < 50; i += 1) {
+            bunnymq.producer.produce(queue);
+          }
+        })
+        .then(docker.start);
     });
   });
 
@@ -47,16 +47,16 @@ describe('disconnections', function () {
         counter += 1;
         return counter;
       })
-      .then(() => bunnymq.producer.produce(queue, undefined, { rpc: true }).then(checkReceived))
-      .then(() => utils.timeoutPromise(500))
-      .then(() => assert(counter))
-      .then(docker.stop)
-      .then(() => {
-        for (let i = counter; i < 50; i += 1) {
-          bunnymq.producer.produce(queue, undefined, { rpc: true }).then(checkReceived);
-        }
-      })
-      .then(docker.start);
+        .then(() => bunnymq.producer.produce(queue, undefined, { rpc: true }).then(checkReceived))
+        .then(() => utils.timeoutPromise(500))
+        .then(() => assert(counter))
+        .then(docker.stop)
+        .then(() => {
+          for (let i = counter; i < 50; i += 1) {
+            bunnymq.producer.produce(queue, undefined, { rpc: true }).then(checkReceived);
+          }
+        })
+        .then(docker.start);
     });
   });
 });

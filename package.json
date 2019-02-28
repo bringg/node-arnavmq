@@ -15,7 +15,7 @@
   "scripts": {
     "start": "node src/index.js",
     "lint": "./node_modules/.bin/eslint .",
-    "cover": "CONSOLE_LOGGING=false ./node_modules/.bin/nyc --reporter=lcov ./node_modules/.bin/_mocha test --recursive --timeout=10000 --exit",
+    "cover": "CONSOLE_LOGGING=false ./node_modules/.bin/nyc --reporter=lcov ./node_modules/.bin/_mocha test --recursive --timeout=20000 --exit",
     "test": "npm run lint && npm run cover",
     "doc": "jsdoc -d ./docs --readme README.md --package package.json --template node_modules/minami src/*"
   },

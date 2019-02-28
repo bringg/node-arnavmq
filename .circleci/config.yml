@@ -13,6 +13,7 @@ jobs:
       # documented at https://circleci.com/docs/2.0/circleci-images/
     steps:
       - checkout
+      - setup_remote_docker
       - run:
           name: Install make
           command: sudo apt-get update && sudo apt-get -y install gcc make
@@ -25,7 +26,6 @@ jobs:
           # fallback to using the latest cache if no exact match is found
           - v1-dependencies
       
-      - setup_remote_docker
       - run:
           name: Install dependencies
           command: make deps
