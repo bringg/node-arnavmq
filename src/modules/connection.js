@@ -15,7 +15,7 @@ class Connection {
   */
   getConnection() {
     const url = this._config.host;
-    const hostname = this._config.hostname;
+    const { hostname } = this._config;
     let connection = this.connections[url];
 
     // cache handling, if connection already opened, return it
@@ -23,10 +23,11 @@ class Connection {
       return Promise.resolve(connection.conn);
     }
     // prepare the connection internal object, and reset channel if connection has been closed
-    connection = this.connections[url] = {
+    this.connections[url] = {
       conn: null,
       channel: null
     };
+    connection = this.connections[url];
     connection.conn = amqp.connect(url, {
       clientProperties: {
         hostname,
@@ -42,8 +43,7 @@ class Connection {
       conn.on('error', this._config.transport.error);
       connection.conn = conn;
       return conn;
-    })
-    .catch((e) => {
+    }).catch((e) => {
       connection.conn = null;
       throw e;
     });
@@ -57,7 +57,7 @@ class Connection {
   */
   getChannel() {
     const url = this._config.host;
-    const prefetch = this._config.prefetch;
+    const { prefetch } = this._config;
     const connection = this.connections[url];
 
     // cache handling, if channel already opened, return it
