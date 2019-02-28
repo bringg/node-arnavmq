@@ -128,7 +128,7 @@ describe('producer/consumer', function () {
           .then((response) => {
             assert(response === true);
             letters += 1;
-          }));
+          })).catch(done);
     });
   });
 
@@ -164,7 +164,8 @@ describe('producer/consumer', function () {
           assert(response.error);
           assert(response.error instanceof Error);
           done();
-        });
+        })
+        .catch(done);
     });
   });
 

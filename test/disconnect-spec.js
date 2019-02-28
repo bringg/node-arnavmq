@@ -30,7 +30,8 @@ describe('disconnections', function () {
             bunnymq.producer.produce(queue);
           }
         })
-        .then(docker.start);
+        .then(docker.start)
+        .catch(done);
     });
   });
 
@@ -56,7 +57,8 @@ describe('disconnections', function () {
             bunnymq.producer.produce(queue, undefined, { rpc: true }).then(checkReceived);
           }
         })
-        .then(docker.start);
+        .then(docker.start)
+        .catch(done);
     });
   });
 });
