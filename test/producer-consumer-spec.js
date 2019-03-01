@@ -14,7 +14,7 @@ let letters = 0;
 /* eslint func-names: "off" */
 /* eslint prefer-arrow-callback: "off" */
 describe('producer/consumer', function () {
-  before(docker.start);
+  before(() => docker.start().catch(() => {}));
 
   after(docker.rm);
 

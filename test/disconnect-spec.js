@@ -6,7 +6,7 @@ const utils = require('../src/modules/utils');
 /* eslint func-names: "off" */
 /* eslint prefer-arrow-callback: "off" */
 describe('disconnections', function () {
-  before(docker.start);
+  before(() => docker.start().catch(() => {}));
 
   after(docker.rm);
 

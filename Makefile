@@ -1,10 +1,10 @@
 .PHONY: test
 
 deps:
-	docker pull rabbitmq:3.6
 	npm install
 
 init:
+	docker pull rabbitmq:3.6
 	cp .env.tpl .env
 
 run:

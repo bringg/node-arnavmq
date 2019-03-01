@@ -9,7 +9,7 @@ const fixtures = {
 };
 
 describe('Producer/Consumer RPC messaging:', () => {
-  before(docker.start);
+  before(() => docker.start().catch(() => {}));
 
   after(docker.rm);
 
