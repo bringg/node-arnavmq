@@ -1,6 +1,8 @@
 const parsers = require('./message-parsers');
 const utils = require('./utils');
 
+const loggerAlias = 'bmq:consumer';
+
 class Consumer {
   constructor(connection) {
     this._connection = connection;
@@ -30,7 +32,7 @@ class Consumer {
     return (content) => {
       if (msg.properties.replyTo) {
         const options = { correlationId: msg.properties.correlationId, persistent: true, durable: true };
-        this._connection.config.transport.info('bmq:consumer', `[${queue}][${msg.properties.replyTo}] >`, content);
+        this._connection.config.transport.info(loggerAlias, `[${queue}][${msg.properties.replyTo}] >`, content);
         this.channel.sendToQueue(msg.properties.replyTo, parsers.out(content, options), options);
       }
 
@@ -71,10 +73,10 @@ class Consumer {
       });
 
       return this.channel.assertQueue(suffixedQueue, options).then((q) => {
-        this._connection.config.transport.info('bmq:consumer', 'init', q.queue);
+        this._connection.config.transport.info(loggerAlias, 'init', q.queue);
 
         this.channel.consume(q.queue, (msg) => {
-          this._connection.config.transport.info('bmq:consumer', `[${q.queue}] < ${msg.content.toString()}`);
+          this._connection.config.transport.info(loggerAlias, `[${q.queue}] < ${msg.content.toString()}`);
 
           // main answer management chaining
           // receive message, parse it, execute callback, check if should answer, ack/reject message
@@ -86,7 +88,7 @@ class Consumer {
             })
             .catch((err) => {
               // if something bad happened in the callback, reject the message so we can requeue it (or not)
-              this._connection.config.transport.error('bmq:consumer', err);
+              this._connection.config.transport.error(loggerAlias, err);
               this.channel.reject(msg, this._connection.config.requeue);
             });
         }, { noAck: false });

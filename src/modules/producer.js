@@ -8,6 +8,8 @@ const ERRORS = {
   BUFFER_FULL: 'Buffer is full'
 };
 
+const loggerAlias = 'bmq:producer';
+
 class ProducerError extends Error {
   constructor({ name, message }) {
     super(message);
@@ -56,7 +58,7 @@ class Producer {
       }
 
       // if we found one, we execute the callback and delete it because it will never be received again anyway
-      this._connection.config.transport.info('bmq:producer', `[${queue}] < answer`);
+      this._connection.config.transport.info(loggerAlias, `[${queue}] < answer`);
 
       try {
         responsePromise.resolve(parsers.in(msg));
@@ -208,7 +210,7 @@ class Producer {
       // undefined can't be serialized/buffered :p
       if (!message) message = null;
 
-      this._connection.config.transport.info('bmq:producer', `[${queue}] > `, msg);
+      this._connection.config.transport.info(loggerAlias, `[${queue}] > `, msg);
 
       return this.checkRpc(queue, parsers.out(message, settings), settings);
     }).catch((err) => {
@@ -217,7 +219,7 @@ class Producer {
       }
 
       // add timeout between retries because we don't want to overflow the CPU
-      this._connection.config.transport.error('bmq:producer', err);
+      this._connection.config.transport.error(loggerAlias, err);
       return utils.timeoutPromise(this._connection.config.timeout)
         .then(() => this.publish(queue, message, settings));
     });
