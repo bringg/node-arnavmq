@@ -50,9 +50,8 @@ class Producer {
       const responsePromise = rpcQueue[correlationId];
 
       if (responsePromise === undefined) {
-        this._connection.config.transport.error(new Error(
-          `Receiving RPC message from previous session: callback no more in memory. ${queue}`
-        ));
+        this._connection.config.transport.error(loggerAlias,
+          new Error(`Receiving RPC message from previous session: callback no more in memory. ${queue}`));
 
         return;
       }
