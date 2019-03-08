@@ -1,8 +1,10 @@
-const exec = require('child-process-promise').exec;
+const { exec } = require('child-process-promise');
 
-module.exports.start = () =>
-  exec('docker run -d --name=rabbitmq-bunnymq -p 5672:5672 rabbitmq:3.6; true && ' +
-    'docker start rabbitmq-bunnymq');
+const docker = process.env.CIRCLECI === 'true'
+  ? 'ssh remote-docker \\ docker'
+  : 'docker';
 
-module.exports.stop = () => exec('docker stop rabbitmq-bunnymq');
-module.exports.rm = () => exec('docker rm -f rabbitmq-bunnymq || true');
+module.exports.run = () => exec(`${docker}  run -d --name=rabbitmq-bunnymq -p 5672:5672 rabbitmq:3.6`);
+module.exports.start = () => exec(`${docker} start rabbitmq-bunnymq`);
+module.exports.stop = () => exec(`${docker} stop rabbitmq-bunnymq`);
+module.exports.rm = () => exec(`${docker} rm -f rabbitmq-bunnymq || true`);

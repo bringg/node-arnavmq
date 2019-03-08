@@ -26,6 +26,8 @@ build/Release
 # https://www.npmjs.org/doc/misc/npm-faq.html#should-i-check-my-node_modules-folder-into-git
 node_modules
 .env
+# Because we want people to receive patch fixes of dependency modules during the npm install
+package-lock.json
 
 # documentation
 docs

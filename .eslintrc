@@ -7,7 +7,7 @@
     "mongo":true
   },
   "rules": {
-    // disable requiring trailing commas
+    "implicit-arrow-linebreak": "warn",
     "comma-dangle": 0,
     "max-len": ["error", {"code": 120, "ignoreComments": true, "ignoreUrls": true}],
     "no-underscore-dangle": [1, { "allow": ["_config", "_connection", "_maxListeners"] }]

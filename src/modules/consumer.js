@@ -1,8 +1,9 @@
 const parsers = require('./message-parsers');
 const utils = require('./utils');
 
-class Consumer {
+const loggerAlias = 'bmq:consumer';
 
+class Consumer {
   constructor(connection) {
     this._connection = connection;
     this.channel = null;
@@ -31,7 +32,7 @@ class Consumer {
     return (content) => {
       if (msg.properties.replyTo) {
         const options = { correlationId: msg.properties.correlationId, persistent: true, durable: true };
-        this._connection.config.transport.info('bmq:consumer', `[${queue}][${msg.properties.replyTo}] >`, content);
+        this._connection.config.transport.info(loggerAlias, `[${queue}][${msg.properties.replyTo}] >`, content);
         this.channel.sendToQueue(msg.properties.replyTo, parsers.out(content, options), options);
       }
 
@@ -47,7 +48,7 @@ class Consumer {
    * @param  {Function} callback Callback function executed when a message is received on the queue name, can return a promise
    * @return {Promise}           A promise that resolves when connection is established and consumer is ready
    */
-   /* eslint no-param-reassign: "off" */
+  /* eslint no-param-reassign: "off" */
   consume(queue, options, callback) {
     return this.subscribe(queue, options, callback);
   }
@@ -63,8 +64,7 @@ class Consumer {
     // ex: service-something with suffix :ci becomes service-suffix:ci etc.
     const suffixedQueue = `${queue}${this._connection.config.consumerSuffix || ''}`;
 
-    return this._connection.get()
-    .then((channel) => {
+    return this._connection.get().then((channel) => {
       this.channel = channel;
 
       // when channel is closed, we want to be sure we recreate the queue ASAP so we trigger a reconnect by recreating the consumer
@@ -72,36 +72,32 @@ class Consumer {
         this.subscribe(queue, options, callback);
       });
 
-      return this.channel.assertQueue(suffixedQueue, options)
-      .then((q) => {
-        this._connection.config.transport.info('bmq:consumer', 'init', q.queue);
+      return this.channel.assertQueue(suffixedQueue, options).then((q) => {
+        this._connection.config.transport.info(loggerAlias, 'init', q.queue);
 
         this.channel.consume(q.queue, (msg) => {
-          this._connection.config.transport.info('bmq:consumer', `[${q.queue}] < ${msg.content.toString()}`);
+          this._connection.config.transport.info(loggerAlias, `[${q.queue}] < ${msg.content.toString()}`);
 
           // main answer management chaining
           // receive message, parse it, execute callback, check if should answer, ack/reject message
           Promise.resolve(parsers.in(msg))
-          .then(body => callback(body, msg.properties))
-          .then(this.checkRpc(msg, q.queue))
-          .then(() => {
-            this.channel.ack(msg);
-          })
-          .catch((err) => {
-            // if something bad happened in the callback, reject the message so we can requeue it (or not)
-            this._connection.config.transport.error('bmq:consumer', err);
-            this.channel.reject(msg, this._connection.config.requeue);
-          });
+            .then(body => callback(body, msg.properties))
+            .then(this.checkRpc(msg, q.queue))
+            .then(() => {
+              this.channel.ack(msg);
+            })
+            .catch((err) => {
+              // if something bad happened in the callback, reject the message so we can requeue it (or not)
+              this._connection.config.transport.error(loggerAlias, err);
+              this.channel.reject(msg, this._connection.config.requeue);
+            });
         }, { noAck: false });
 
         return true;
       });
-    })
-    .catch(() =>
-      // in case of any error creating the channel, wait for some time and then try to reconnect again (to avoid overflow)
-      utils.timeoutPromise(this._connection.config.timeout)
-        .then(() => this.subscribe(queue, options, callback))
-    );
+    // in case of any error creating the channel, wait for some time and then try to reconnect again (to avoid overflow)
+    }).catch(() => utils.timeoutPromise(this._connection.config.timeout)
+      .then(() => this.subscribe(queue, options, callback)));
   }
 }
 

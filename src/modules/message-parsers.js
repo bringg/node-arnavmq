@@ -30,7 +30,7 @@ module.exports.in = (msg) => {
  * @param  {object} options amqp.node message options object
  * @return {Buffer}         node.js Buffer object, sent by amqp.node
  */
- /* eslint no-param-reassign: "off" */
+/* eslint no-param-reassign: "off" */
 module.exports.out = (content, options) => {
   const falsie = [undefined, null];
   if (!falsie.includes(content) && typeof content !== 'string') {

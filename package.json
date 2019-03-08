@@ -15,7 +15,7 @@
   "scripts": {
     "start": "node src/index.js",
     "lint": "./node_modules/.bin/eslint .",
-    "cover": "CONSOLE_LOGGING=false ./node_modules/.bin/nyc --reporter=lcov ./node_modules/.bin/_mocha test --recursive --timeout=10000 --exit",
+    "cover": "./node_modules/.bin/nyc --reporter=lcov ./node_modules/.bin/_mocha test --recursive --timeout=20000 --exit",
     "test": "npm run lint && npm run cover",
     "doc": "jsdoc -d ./docs --readme README.md --package package.json --template node_modules/minami src/*"
   },
@@ -44,9 +44,9 @@
     "eslint-plugin-import": "^2.14.0",
     "eslint-plugin-jsx-a11y": "^6.1.1",
     "eslint-plugin-react": "^7.11.1",
+    "minami": "1.1.1",
     "mocha": "^5.2.0",
-    "nyc": "^12.0.2",
-    "minami": "1.1.1"
+    "nyc": "^13.3.0"
   },
   "engines": {
     "node": ">=6"

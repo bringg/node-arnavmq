@@ -1,5 +1,5 @@
-const utils = require('./utils');
 const uuid = require('uuid');
+const utils = require('./utils');
 const parsers = require('./message-parsers');
 const Deferred = require('../classes/deferred');
 
@@ -7,6 +7,8 @@ const ERRORS = {
   TIMEOUT: 'Timeout reached',
   BUFFER_FULL: 'Buffer is full'
 };
+
+const loggerAlias = 'bmq:producer';
 
 class ProducerError extends Error {
   constructor({ name, message }) {
@@ -48,15 +50,14 @@ class Producer {
       const responsePromise = rpcQueue[correlationId];
 
       if (responsePromise === undefined) {
-        this._connection.config.transport.error(new Error(
-          `Receiving RPC message from previous session: callback no more in memory. ${queue}`
-        ));
+        this._connection.config.transport.error(loggerAlias,
+          new Error(`Receiving RPC message from previous session: callback no more in memory. ${queue}`));
 
         return;
       }
 
       // if we found one, we execute the callback and delete it because it will never be received again anyway
-      this._connection.config.transport.info('bmq:producer', `[${queue}] < answer`);
+      this._connection.config.transport.info(loggerAlias, `[${queue}] < answer`);
 
       try {
         responsePromise.resolve(parsers.in(msg));
@@ -83,26 +84,25 @@ class Producer {
     // ie. if hostname is gateway-http and queue is service-oauth, response queue will be service-oauth:gateway-http:res
     // it is important to have different hostname or no hostname on each module sending message or there will be conflicts
     const resQueue = `${queue}:${this._connection.config.hostname}:${process.pid}:res`;
-    rpcQueue.queue = this._connection.get().then(channel =>
-      channel.assertQueue(resQueue, { durable: true, exclusive: true })
-        .then((q) => {
-          rpcQueue.queue = q.queue;
+    rpcQueue.queue = this._connection.get().then(channel => channel.assertQueue(resQueue, {
+      durable: true,
+      exclusive: true
+    })
+      .then((q) => {
+        rpcQueue.queue = q.queue;
 
-          // if channel is closed, we want to make sure we cleanup the queue so future calls will recreate it
-          this._connection.addListener('close', () => {
-            delete rpcQueue.queue;
-            this.createRpcQueue(queue);
-          });
+        // if channel is closed, we want to make sure we cleanup the queue so future calls will recreate it
+        this._connection.addListener('close', () => {
+          delete rpcQueue.queue;
+          this.createRpcQueue(queue);
+        });
 
-          return channel.consume(q.queue, this.maybeAnswer(queue), { noAck: true });
-        })
-        .then(() => rpcQueue.queue)
-      )
+        return channel.consume(q.queue, this.maybeAnswer(queue), { noAck: true });
+      })
+      .then(() => rpcQueue.queue))
       .catch(() => {
         delete rpcQueue.queue;
-        return utils.timeoutPromise(this._connection.config.timeout).then(() =>
-          this.createRpcQueue(queue)
-        );
+        return utils.timeoutPromise(this._connection.config.timeout).then(() => this.createRpcQueue(queue));
       });
 
     return rpcQueue.queue;
@@ -145,8 +145,7 @@ class Producer {
     options.persistent = true;
 
     if (options.rpc) {
-      return this.createRpcQueue(queue)
-      .then(() => {
+      return this.createRpcQueue(queue).then(() => {
         // generates a correlationId (random uuid) so we know which callback to execute on received response
         const corrId = uuid.v4();
         options.correlationId = corrId;
@@ -179,7 +178,7 @@ class Producer {
    * @param  {object} options message options (persistent, durable, rpc, etc.)
    * @return {Promise}         checkRpc response
    */
-   /* eslint prefer-rest-params: off */
+  /* eslint prefer-rest-params: off */
   produce(queue, msg, options) {
     return this.publish(queue, msg, options);
   }
@@ -200,30 +199,28 @@ class Producer {
     let message = msg;
     if (Array.isArray(msg)) {
       message = Object.assign([], msg);
-    } else if (typeof(msg) !== 'string') {
+    } else if (typeof msg !== 'string') {
       message = Object.assign({}, msg);
     }
 
-    return this._connection.get()
-    .then((channel) => {
+    return this._connection.get().then((channel) => {
       this.channel = channel;
 
       // undefined can't be serialized/buffered :p
       if (!message) message = null;
 
-      this._connection.config.transport.info('bmq:producer', `[${queue}] > `, msg);
+      this._connection.config.transport.info(loggerAlias, `[${queue}] > `, msg);
 
       return this.checkRpc(queue, parsers.out(message, settings), settings);
-    })
-    .catch((err) => {
+    }).catch((err) => {
       if (err instanceof ProducerError || [ERRORS.TIMEOUT, ERRORS.BUFFER_FULL].includes(err.message)) {
         throw err;
       }
 
       // add timeout between retries because we don't want to overflow the CPU
-      this._connection.config.transport.error('bmq:producer', err);
+      this._connection.config.transport.error(loggerAlias, err);
       return utils.timeoutPromise(this._connection.config.timeout)
-      .then(() => this.publish(queue, message, settings));
+        .then(() => this.publish(queue, message, settings));
     });
   }
 }
