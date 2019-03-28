@@ -7,8 +7,8 @@ jobs:
   build:
     working_directory: ~/node-bunnymq
     docker:
-      - image: circleci/node:10.15.1
-      - image: rabbitmq:3.6
+      - image: circleci/node:10.15.3
+      - image: rabbitmq:3.7
       # Specify service dependencies here if necessary
       # CircleCI maintains a library of pre-built images
       # documented at https://circleci.com/docs/2.0/circleci-images/
@@ -26,7 +26,7 @@ jobs:
           - v1-dependencies-{{ .Branch }}
           # fallback to using the latest cache if no exact match is found
           - v1-dependencies
-      
+
       - run:
           name: Install dependencies
           command: make deps

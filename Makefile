@@ -1,24 +1,20 @@
-.PHONY: test
+.PHONY: deps init cover lint test sonar
 
 deps:
 	npm install
 
 init:
-	docker pull rabbitmq:3.6
+	docker pull rabbitmq:3.7
 	cp .env.tpl .env
-
-run:
-	npm run start
 
 lint:
 	npm run lint
 
-cover:
-	make lint
-	npm run cover
+test: lint
+	npm test
 
-test:
-	npm run test
+cover: test
+	npm run cover
 
 sonar:
 	sed '/sonar.projectVersion/d' ./sonar-project.properties > tmp && mv tmp sonar-project.properties
