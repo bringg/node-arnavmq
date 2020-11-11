@@ -107,7 +107,6 @@ class Connection {
   }
 }
 
-
 let instance;
 
 module.exports = (config) => {

@@ -1,6 +1,6 @@
 // deprecated configuration property names
 function oldConfigNames(config) {
-  const configuration = Object.assign({}, config);
+  const configuration = { ...config };
   if (configuration.amqpUrl) {
     configuration.host = configuration.amqpUrl;
   }
@@ -21,7 +21,7 @@ function oldConfigNames(config) {
 
 // deprecated env vars to configure the module
 function envVars(config) {
-  const configuration = Object.assign({}, config);
+  const configuration = { ...config };
   if (process.env.AMQP_URL && !configuration.host) {
     configuration.host = process.env.AMQP_URL;
   }
@@ -43,7 +43,7 @@ function envVars(config) {
  * @return {object}        Updated config object
  */
 module.exports = (config) => {
-  let configuration = Object.assign({}, config);
+  let configuration = { ...config };
   configuration = envVars(configuration);
   configuration = oldConfigNames(configuration);
 

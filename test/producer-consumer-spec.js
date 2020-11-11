@@ -27,7 +27,7 @@ describe('producer/consumer', function () {
 
     it('should receive message that is only string', () => {
       const queueName = 'test-only-string-queue';
-      return bunnymq.consumer.consume(queueName, message => Promise.resolve(`${message}-test`))
+      return bunnymq.consumer.consume(queueName, (message) => Promise.resolve(`${message}-test`))
         .then(() => bunnymq.producer.produce(queueName, '85.69.30.121', { rpc: true }))
         .then((result) => {
           assert.equal(result, '85.69.30.121-test');
@@ -36,13 +36,12 @@ describe('producer/consumer', function () {
 
     it('should receive message that is only array', () => {
       const queueName = 'test-only-array-queue';
-      return bunnymq.consumer.consume(queueName, message => Promise.resolve({ message }))
+      return bunnymq.consumer.consume(queueName, (message) => Promise.resolve({ message }))
         .then(() => bunnymq.producer.produce(queueName, [1, '2'], { rpc: true }))
         .then((result) => {
           assert.deepEqual(result, { message: [1, '2'] });
         });
     });
-
 
     it('should receive message headers', () => {
       const headers = { header1: 'Header1', header2: 'Header2' };
@@ -54,7 +53,6 @@ describe('producer/consumer', function () {
           assert.deepEqual(result.properties.headers, headers);
         });
     });
-
 
     it('should receive message properties', () => {
       const queueName = 'test-headers';
@@ -133,19 +131,16 @@ describe('producer/consumer', function () {
   });
 
   describe('routing keys', () => {
-    it('should be able to send a message to a rounting key exchange', () =>
-      bunnymq.consumer.consume(fixtures.routingKey, (message) => {
-        assert.equal(message.content, 'ok');
-      }).then(() =>
-        bunnymq.producer.produce(fixtures.rountingKey, { content: 'ok' }, { routingKey: 'route' })));
+    it('should be able to send a message to a rounting key exchange', () => bunnymq.consumer.consume(fixtures.routingKey, (message) => {
+      assert.equal(message.content, 'ok');
+    }).then(() => bunnymq.producer.produce(fixtures.rountingKey, { content: 'ok' }, { routingKey: 'route' })));
   });
 
   describe('rpc timeouts', () => {
-    it('should reject on timeout, if no answer received', () =>
-      bunnymq.producer.produce('non-existing-queue', { msg: 'ok' }, { rpc: true, timeout: 1000 })
-        .catch((e) => {
-          assert.equal(e.message, 'Timeout reached');
-        }));
+    it('should reject on timeout, if no answer received', () => bunnymq.producer.produce('non-existing-queue', { msg: 'ok' }, { rpc: true, timeout: 1000 })
+      .catch((e) => {
+        assert.equal(e.message, 'Timeout reached');
+      }));
 
     it('should reject on default timeout, if no answer received', () => {
       bunnymq.connection._config.rpcTimeout = 1000;
