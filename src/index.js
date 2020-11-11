@@ -1,10 +1,7 @@
-require('dotenv').config({ silent: true });
 const uuid = require('uuid');
 const utils = require('./modules/utils');
 const connection = require('./modules/connection');
 const retrocompat = require('./modules/retrocompat-config');
-
-require('events').EventEmitter.prototype._maxListeners = process.env.MAX_EMITTERS || 20;
 
 /* eslint global-require: "off" */
 module.exports = (config) => {
