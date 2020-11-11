@@ -84,7 +84,7 @@ class Producer {
     // ie. if hostname is gateway-http and queue is service-oauth, response queue will be service-oauth:gateway-http:res
     // it is important to have different hostname or no hostname on each module sending message or there will be conflicts
     const resQueue = `${queue}:${this._connection.config.hostname}:${process.pid}:res`;
-    rpcQueue.queue = this._connection.get().then(channel => channel.assertQueue(resQueue, {
+    rpcQueue.queue = this._connection.get().then((channel) => channel.assertQueue(resQueue, {
       durable: true,
       exclusive: true
     })
@@ -194,13 +194,13 @@ class Producer {
   publish(queue, msg, options) {
     // default options are persistent and durable because we do not want to miss any outgoing message
     // unless user specify it
-    const settings = Object.assign({ persistent: true, durable: true }, options);
+    const settings = { persistent: true, durable: true, ...options };
 
     let message = msg;
     if (Array.isArray(msg)) {
       message = Object.assign([], msg);
     } else if (typeof msg !== 'string') {
-      message = Object.assign({}, msg);
+      message = { ...msg };
     }
 
     return this._connection.get().then((channel) => {

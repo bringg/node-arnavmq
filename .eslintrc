@@ -1,5 +1,5 @@
 {
-  "extends": "airbnb",
+  "extends": ["airbnb"],
   "env": {
     "node":true,
     "mocha":true,
@@ -9,7 +9,8 @@
   "rules": {
     "implicit-arrow-linebreak": "warn",
     "comma-dangle": 0,
-    "max-len": ["error", {"code": 120, "ignoreComments": true, "ignoreUrls": true}],
+    "max-classes-per-file": 0,
+    "max-len": ["error", {"code": 190, "ignoreComments": true, "ignoreUrls": true}],
     "no-underscore-dangle": [1, { "allow": ["_config", "_connection", "_maxListeners"] }]
   }
 }
