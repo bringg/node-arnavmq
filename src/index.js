@@ -1,4 +1,3 @@
-require('dotenv').config({ silent: true });
 const uuid = require('uuid');
 const utils = require('./modules/utils');
 const connection = require('./modules/connection');

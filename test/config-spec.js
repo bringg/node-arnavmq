@@ -1,4 +1,3 @@
-require('dotenv').config({ silent: true });
 const assert = require('assert');
 const uuid = require('uuid');
 
