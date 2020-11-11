@@ -30,7 +30,7 @@
   "dependencies": {
     "amqplib": "^0.5.3",
     "deserialize-error": "0.0.3",
-    "serialize-error": "^3.0.0",
+    "serialize-error": "^7.0.1",
     "uuid": "^8.3.1"
   },
   "devDependencies": {
