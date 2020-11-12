@@ -1,5 +1,4 @@
-const serializeError = require('serialize-error');
-const deserializeError = require('deserialize-error');
+const { serializeError, deserializeError } = require('serialize-error');
 /**
  * Incoming message parser - parse message based on headers
  * @param  {object} msg An amqp.node incoming message
