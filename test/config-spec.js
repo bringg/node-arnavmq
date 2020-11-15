@@ -16,44 +16,6 @@ describe('config', () => {
     process.env.AMQP_DEBUG = '';
   });
 
-  describe('retrocompat', () => {
-    const retrocompat = require('../src/modules/retrocompat-config');
-
-    it('should set config as empty array if no config present', () => {
-      const conf = retrocompat();
-      assert.deepEqual(conf, {});
-    });
-
-    it('should be able to override default config options based on config object', () => {
-      let conf = {
-        amqpUrl: 'ok',
-        amqpPrefetch: 1,
-        amqpRequeue: true,
-        amqpTimeout: 5
-      };
-
-      conf = retrocompat(conf);
-
-      assert.equal(conf.host, conf.amqpUrl);
-      assert.equal(conf.prefetch, conf.amqpPrefetch);
-      assert.equal(conf.requeue, conf.amqpRequeue);
-      assert.equal(conf.timeout, conf.amqpTimeout);
-    });
-
-    it('should be able to override default config options based on env vars', () => {
-      process.env.LOCAL_QUEUE = ':test';
-      process.env.AMQP_URL = 'ok';
-      process.env.AMQP_DEBUG = true;
-
-      const conf = retrocompat();
-
-      // ensure transport is console
-      assert(conf.transport);
-      assert.equal(conf.host, process.env.AMQP_URL);
-      assert.equal(conf.consumerSuffix, process.env.LOCAL_QUEUE);
-    });
-  });
-
   describe('entry point', () => {
     const main = require('../src/index');
 

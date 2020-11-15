@@ -1,7 +1,7 @@
 {
-  "name": "bunnymq",
-  "version": "2.5.0",
-  "description": "BunnyMq is a RabbitMq wrapper",
+  "name": "arnavmq",
+  "version": "0.9.0",
+  "description": "ArnavMQ is a RabbitMQ wrapper",
   "keywords": [
     "rabbitmq",
     "broker",
@@ -15,18 +15,18 @@
   "scripts": {
     "lint": "eslint .",
     "cover": "test -d .nyc_output && nyc report --reporter lcov",
-    "test": "nyc mocha --recursive --timeout=20000 --exit"
+    "test": "nyc mocha --recursive --timeout=30000 --exit"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dial-once/node-bunnymq.git"
+    "url": "git+https://github.com/bringg/node-arnavmq.git"
   },
-  "author": "Dial Once",
+  "author": "Bringg",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/dial-once/node-bunnymq/issues"
+    "url": "https://github.com/bringg/node-arnavmq/issues"
   },
-  "homepage": "https://github.com/dial-once/node-bunnymq#readme",
+  "homepage": "https://github.com/bringg/node-arnavmq#readme",
   "dependencies": {
     "amqplib": "^0.5.3",
     "deserialize-error": "0.0.3",
@@ -45,6 +45,6 @@
     "nyc": "^15.1.0"
   },
   "engines": {
-    "node": ">=6"
+    "node": ">=10"
   }
 }
