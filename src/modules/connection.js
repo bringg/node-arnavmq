@@ -31,7 +31,7 @@ class Connection {
     connection.conn = amqp.connect(url, {
       clientProperties: {
         hostname,
-        bunnymq: packageVersion,
+        arnavmq: packageVersion,
         startedAt: this.startedAt,
         connectedAt: new Date().toISOString()
       }
