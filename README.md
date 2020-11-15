@@ -8,7 +8,7 @@ The original project seems like not maintained anymore, in fact most recent rele
 Many thanks the original authors of `bunnymq` for their work and for such an easy to use library.
 With this fork we aim to fix all outstading bugs, make the library more stable, and continue adding features as needed.
 
-In order to avoid confusion fo the original project we decided to rename it to `ArnavMQ`.
+In order to avoid confusion with the original project we decided to rename it to `ArnavMQ`.
 Arnav (**ארנב**) is a Hebrew word which means Rabbit, yes how original ;) .
 
 
