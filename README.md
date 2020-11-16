@@ -11,7 +11,6 @@ With this fork we aim to fix all outstading bugs, make the library more stable, 
 In order to avoid confusion with the original project we decided to rename it to `ArnavMQ`.
 Arnav (**ארנב**) is a Hebrew word which means Rabbit, yes how original ;) .
 
-
 ## About
 
 **ArnavMQ** is an `amqp.node` wrapper to ease common AMQP usages (RPC, pub/sub, channel/connection handling etc...)
