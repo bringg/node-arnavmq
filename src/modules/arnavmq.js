@@ -2,7 +2,7 @@ const assert = require('assert');
 const Producer = require('./producer');
 const Consumer = require('./consumer');
 
-class BunnyMQ {
+class ArnavMQ {
   constructor(connection) {
     this._connection = connection;
     this.producer = new Producer(connection);
@@ -39,12 +39,12 @@ class BunnyMQ {
 }
 
 let instance;
-module.exports.BunnyMQ = BunnyMQ;
+module.exports.ArnavMQ = ArnavMQ;
 module.exports = (connection) => {
-  assert(instance || connection, 'BunnyMQ can not be initialized because connection does not exist');
+  assert(instance || connection, 'ArnavMQ can not be initialized because connection does not exist');
 
   if (!instance) {
-    instance = new BunnyMQ(connection);
+    instance = new ArnavMQ(connection);
   } else {
     instance.connection = connection;
   }
