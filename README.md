@@ -1,5 +1,8 @@
 # ArnavMQ
 
+[![npm](https://img.shields.io/npm/v/arnavmq.svg)](https://www.npmjs.com/package/arnavmq)
+[![CI](https://github.com/bringg/node-arnavmq/workflows/CI/badge.svg)](https://github.com/bringg/node-arnavmq/actions?query=branch%3Amaster)
+
 **Disclaimer**:
 
 This project is a hard-fork of [dial-once/node-bunnymq](https://github.com/dial-once/node-bunnymq).
