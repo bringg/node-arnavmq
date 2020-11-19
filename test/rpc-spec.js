@@ -9,9 +9,8 @@ const fixtures = {
 };
 
 describe('Producer/Consumer RPC messaging:', () => {
+  before(docker.rm);
   before(() => docker.run().then(docker.start));
-
-  after(docker.rm);
 
   it('should be able to create a consumer that returns a message if called as RPC [rpc-queue-0]', () => arnavmq.consumer.consume(fixtures.queues[0], () => 'Power Ranger Red')
     .then((created) => {
