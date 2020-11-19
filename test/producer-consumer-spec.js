@@ -64,6 +64,19 @@ describe('producer/consumer', function () {
         });
     });
 
+    it('should receive contentLength property', () => {
+      const queueName = 'test-headers';
+      const payload = { a: 1 };
+      const messageSize = Buffer.byteLength(JSON.stringify(payload));
+      return arnavmq.consumer.consume(queueName, (message, properties) => Promise.resolve({ message, properties }))
+        .then(() => arnavmq.producer.produce(queueName, payload, { rpc: true }))
+        .then((result) => {
+          assert.deepEqual(result.message, payload);
+          assert.deepEqual(result.properties.contentType, 'application/json');
+          assert.deepEqual(result.properties.contentLength, messageSize);
+        });
+    });
+
     it('should be able to consume message sent by producer to queue [test-queue-0]', () => {
       letters += 1;
       return arnavmq.producer.produce(fixtures.queues[0], { msg: uuid.v4() })
