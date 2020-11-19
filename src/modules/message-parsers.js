@@ -7,6 +7,10 @@ const { serializeError, deserializeError } = require('serialize-error');
 module.exports.in = (msg) => {
   // if sender put a json header, we parse it to avoid the pain for the consumer
   if (msg.content) {
+    if (!msg.properties.contentLength) {
+      msg.properties.contentLength = msg.content.length;
+    }
+
     if (msg.properties.contentType === 'application/json') {
       const content = JSON.parse(msg.content.toString());
       if (content && content.error && content.error instanceof Object) {
