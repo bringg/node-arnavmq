@@ -4,8 +4,7 @@ const parsers = require('./message-parsers');
 const Deferred = require('../classes/deferred');
 
 const ERRORS = {
-  TIMEOUT: 'Timeout reached',
-  BUFFER_FULL: 'Buffer is full'
+  TIMEOUT: 'Timeout reached'
 };
 
 const loggerAlias = 'bmq:producer';
@@ -213,7 +212,7 @@ class Producer {
 
       return this.checkRpc(queue, parsers.out(message, settings), settings);
     }).catch((err) => {
-      if (err instanceof ProducerError || [ERRORS.TIMEOUT, ERRORS.BUFFER_FULL].includes(err.message)) {
+      if (err instanceof ProducerError || ERRORS.TIMEOUT === err.message) {
         throw err;
       }
 
