@@ -202,7 +202,7 @@ class Producer {
       message = { ...msg };
     }
 
-    return this._sendToQueue(queue, msg, settings, 0)
+    return this._sendToQueue(queue, message, settings, 0);
   }
 
   _sendToQueue(queue, message, settings, currentRetryNumber) {
@@ -229,15 +229,15 @@ class Producer {
 
   _shouldRetry(error, currentRetryNumber) {
     if (error instanceof ProducerError || error.message === ERRORS.TIMEOUT) {
-      return false
+      return false;
     }
-    const maxRetries = this._connection.config.producerMaxRetries
+    const maxRetries = this._connection.config.producerMaxRetries;
     if (maxRetries < 0) {
       // Retry indefinitely...
       return true;
     }
 
-    return currentRetryNumber < maxRetries
+    return currentRetryNumber < maxRetries;
   }
 }
 
