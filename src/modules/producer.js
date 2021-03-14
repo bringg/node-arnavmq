@@ -202,25 +202,42 @@ class Producer {
       message = { ...msg };
     }
 
+    return this._sendToQueue(queue, msg, settings, 0)
+  }
+
+  _sendToQueue(queue, message, settings, currentRetryNumber) {
     return this._connection.get().then((channel) => {
       this.channel = channel;
 
       // undefined can't be serialized/buffered :p
       if (!message) message = null;
 
-      this._connection.config.transport.info(loggerAlias, `[${queue}] > `, msg);
+      this._connection.config.transport.info(loggerAlias, `[${queue}] > `, message);
 
       return this.checkRpc(queue, parsers.out(message, settings), settings);
     }).catch((err) => {
-      if (err instanceof ProducerError || ERRORS.TIMEOUT === err.message) {
+      if (!this._shouldRetry(err, currentRetryNumber)) {
         throw err;
       }
 
       // add timeout between retries because we don't want to overflow the CPU
       this._connection.config.transport.error(loggerAlias, err);
       return utils.timeoutPromise(this._connection.config.timeout)
-        .then(() => this.publish(queue, message, settings));
+        .then(() => this._sendToQueue(queue, message, settings, currentRetryNumber + 1));
     });
+  }
+
+  _shouldRetry(error, currentRetryNumber) {
+    if (error instanceof ProducerError || error.message === ERRORS.TIMEOUT) {
+      return false
+    }
+    const maxRetries = this._connection.config.producerMaxRetries
+    if (maxRetries < 0) {
+      // Retry indefinitely...
+      return true;
+    }
+
+    return currentRetryNumber < maxRetries
   }
 }
 
