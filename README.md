@@ -102,6 +102,9 @@ You can specify a config object, properties and default values are:
     // time between two reconnect (ms)
     timeout: 1000,
 
+    // the maximum number of retries when trying to send a message before throwing error when failing. If set to '0' will not retry. If set to less then '0', will retry indefinitely.
+    producerMaxRetries: -1,
+
     // default timeout for RPC calls. If set to '0' there will be none.
     rpcTimeout: 1000,
 
