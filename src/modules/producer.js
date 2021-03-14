@@ -7,7 +7,7 @@ const ERRORS = {
   TIMEOUT: 'Timeout reached'
 };
 
-const loggerAlias = 'bmq:producer';
+const loggerAlias = 'amq:producer';
 
 class ProducerError extends Error {
   constructor({ name, message }) {
