@@ -1,14 +1,16 @@
 const assert = require('assert');
-const faker = require('faker');
 const sinon = require('sinon');
-const amqp = require('amqplib');
 const docker = require('./docker');
-const arnavmq = require('../src/index')({ producerMaxRetries: -1 });
+const arnavmqFactory = require('../src/index');
 const utils = require('../src/modules/utils');
 
 /* eslint func-names: "off" */
 /* eslint prefer-arrow-callback: "off" */
 describe('disconnections', function () {
+  let arnavmq;
+  beforeEach(() => { arnavmq = arnavmqFactory(); });
+  const sandbox = sinon.createSandbox();
+  afterEach(() => sandbox.restore());
   before(docker.rm);
   before(() => docker.run().then(docker.start));
 
@@ -36,29 +38,21 @@ describe('disconnections', function () {
         .catch(done);
     });
 
-    it('should retry producing only as configured', (done) => {
-      const retryCount = faker.random.number({ min: 2, max: 6 });
+    it('should retry producing only as configured', async () => {
+      const retryCount = 3;
       arnavmq.connection._config.producerMaxRetries = retryCount;
       const expectedError = 'Fake connection error.';
-      sinon.stub(amqp, 'connect').rejects(new Error(expectedError));
-
-      arnavmq.producer.produce(queue)
-        .then(() => {
-          assert.fail('Should fail to produce and throw error, but did not.');
-        })
-        .catch((e) => {
-          if (e instanceof assert.AssertionError) {
-            done(e);
-            return;
-          }
-          try {
-            sinon.assert.callCount(amqp.connect, retryCount + 1);
-            assert.strictEqual(e.message, 'Fake connection error.');
-            done();
-          } catch (error) {
-            done(error);
-          }
-        });
+      sandbox.stub(arnavmq.connection, 'get').rejects(new Error(expectedError));
+      try {
+        await arnavmq.producer.produce(queue);
+        assert.fail('Should fail to produce and throw error, but did not.');
+      } catch (e) {
+        if (e instanceof assert.AssertionError) {
+          throw e;
+        }
+        sinon.assert.callCount(arnavmq.connection.get, retryCount + 1);
+        assert.strictEqual(e.message, expectedError);
+      }
     });
   });
 
