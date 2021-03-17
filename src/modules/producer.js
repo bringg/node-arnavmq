@@ -7,7 +7,7 @@ const ERRORS = {
   TIMEOUT: 'Timeout reached'
 };
 
-const loggerAlias = 'amq:producer';
+const loggerAlias = 'arnav_mq:producer';
 
 class ProducerError extends Error {
   constructor({ name, message }) {

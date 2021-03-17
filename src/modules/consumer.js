@@ -1,7 +1,7 @@
 const parsers = require('./message-parsers');
 const utils = require('./utils');
 
-const loggerAlias = 'amq:consumer';
+const loggerAlias = 'arnav_mq:consumer';
 
 class Consumer {
   constructor(connection) {
