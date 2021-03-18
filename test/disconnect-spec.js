@@ -1,11 +1,16 @@
 const assert = require('assert');
+const sinon = require('sinon');
 const docker = require('./docker');
-const arnavmq = require('../src/index')();
+const arnavmqFactory = require('../src/index');
 const utils = require('../src/modules/utils');
 
 /* eslint func-names: "off" */
 /* eslint prefer-arrow-callback: "off" */
 describe('disconnections', function () {
+  let arnavmq;
+  beforeEach(() => { arnavmq = arnavmqFactory(); });
+  const sandbox = sinon.createSandbox();
+  afterEach(() => sandbox.restore());
   before(docker.rm);
   before(() => docker.run().then(docker.start));
 
@@ -31,6 +36,23 @@ describe('disconnections', function () {
         })
         .then(docker.start)
         .catch(done);
+    });
+
+    it('should retry producing only as configured', async () => {
+      const retryCount = 3;
+      arnavmq.connection._config.producerMaxRetries = retryCount;
+      const expectedError = 'Fake connection error.';
+      sandbox.stub(arnavmq.connection, 'get').rejects(new Error(expectedError));
+      try {
+        await arnavmq.producer.produce(queue);
+        assert.fail('Should fail to produce and throw error, but did not.');
+      } catch (e) {
+        if (e instanceof assert.AssertionError) {
+          throw e;
+        }
+        sinon.assert.callCount(arnavmq.connection.get, retryCount + 1);
+        assert.strictEqual(e.message, expectedError);
+      }
     });
   });
 

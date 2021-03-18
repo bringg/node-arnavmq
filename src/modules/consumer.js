@@ -1,7 +1,7 @@
 const parsers = require('./message-parsers');
 const utils = require('./utils');
 
-const loggerAlias = 'bmq:consumer';
+const loggerAlias = 'arnav_mq:consumer';
 
 class Consumer {
   constructor(connection) {
@@ -95,7 +95,7 @@ class Consumer {
 
         return true;
       });
-    // in case of any error creating the channel, wait for some time and then try to reconnect again (to avoid overflow)
+      // in case of any error creating the channel, wait for some time and then try to reconnect again (to avoid overflow)
     }).catch(() => utils.timeoutPromise(this._connection.config.timeout)
       .then(() => this.subscribe(queue, options, callback)));
   }

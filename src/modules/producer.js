@@ -4,11 +4,10 @@ const parsers = require('./message-parsers');
 const Deferred = require('../classes/deferred');
 
 const ERRORS = {
-  TIMEOUT: 'Timeout reached',
-  BUFFER_FULL: 'Buffer is full'
+  TIMEOUT: 'Timeout reached'
 };
 
-const loggerAlias = 'bmq:producer';
+const loggerAlias = 'arnav_mq:producer';
 
 class ProducerError extends Error {
   constructor({ name, message }) {
@@ -203,25 +202,42 @@ class Producer {
       message = { ...msg };
     }
 
+    return this._sendToQueue(queue, message, settings, 0);
+  }
+
+  _sendToQueue(queue, message, settings, currentRetryNumber) {
     return this._connection.get().then((channel) => {
       this.channel = channel;
 
       // undefined can't be serialized/buffered :p
       if (!message) message = null;
 
-      this._connection.config.transport.info(loggerAlias, `[${queue}] > `, msg);
+      this._connection.config.transport.info(loggerAlias, `[${queue}] > `, message);
 
       return this.checkRpc(queue, parsers.out(message, settings), settings);
     }).catch((err) => {
-      if (err instanceof ProducerError || [ERRORS.TIMEOUT, ERRORS.BUFFER_FULL].includes(err.message)) {
+      if (!this._shouldRetry(err, currentRetryNumber)) {
         throw err;
       }
 
       // add timeout between retries because we don't want to overflow the CPU
       this._connection.config.transport.error(loggerAlias, err);
       return utils.timeoutPromise(this._connection.config.timeout)
-        .then(() => this.publish(queue, message, settings));
+        .then(() => this._sendToQueue(queue, message, settings, currentRetryNumber + 1));
     });
+  }
+
+  _shouldRetry(error, currentRetryNumber) {
+    if (error instanceof ProducerError || error.message === ERRORS.TIMEOUT) {
+      return false;
+    }
+    const maxRetries = this._connection.config.producerMaxRetries;
+    if (maxRetries < 0) {
+      // Retry indefinitely...
+      return true;
+    }
+
+    return currentRetryNumber < maxRetries;
   }
 }
 
