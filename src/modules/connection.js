@@ -1,6 +1,7 @@
 const amqp = require('amqplib');
 const assert = require('assert');
 const packageVersion = require('../../package.json').version;
+const logLevels = require('./logLevels');
 
 class Connection {
   constructor(config) {
@@ -87,7 +88,7 @@ class Connection {
     this._config.transport.error(error);
     if (this._config.logger) {
       this._config.logger({
-        level: 'error',
+        level: logLevels.Error,
         message: error.message,
         error
       });
