@@ -32,8 +32,17 @@ module.exports = (config) => {
     // generate a hostname so we can track this connection on the broker (rabbitmq management plugin)
     hostname: process.env.HOSTNAME || process.env.USER || uuid.v4(),
 
-    // the transport to use to debug. if provided, arnavmq will show some logs
-    transport: utils.emptyLogger,
+    // Deprecated. Use 'logger' instead. the transport to use to debug. if provided, arnavmq will show some logs
+    transport: utils.emptyTransport,
+
+    /**
+     *  A log function. Receives one parameter containing a log event with the following fields:
+     * * level - A string log level ("debug", "info", "warn", or  "error"). Always present.
+     * * message - A string message describing the event. Always present.
+     * * error - An 'Error' object in case one is present.
+     * * params - An optional object containing extra parameters that can provide extra context for the event.
+     */
+    logger: undefined,
 
     ...configuration
   };

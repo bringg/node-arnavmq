@@ -49,12 +49,17 @@ class Producer {
       const responsePromise = rpcQueue[correlationId];
 
       if (responsePromise === undefined) {
+        const error = new Error(`Receiving RPC message from previous session: callback no more in memory. ${queue}`);
         this._connection.config.transport.error(
           loggerAlias,
-          new Error(
-            `Receiving RPC message from previous session: callback no more in memory. ${queue}`
-          )
+          error
         );
+        this._connection.config.logger && this._connection.config.logger({
+          level: 'error',
+          message: `${loggerAlias} ${error.message}`,
+          error,
+          params: { queue, rpcQueue }
+        });
 
         return;
       }
@@ -64,6 +69,11 @@ class Producer {
         loggerAlias,
         `[${queue}] < answer`
       );
+      this._connection.config.logger && this._connection.config.logger({
+        level: 'info',
+        message: `${loggerAlias} [${queue}] < answer`,
+        params: { queue }
+      });
 
       try {
         responsePromise.resolve(parsers.in(msg));
@@ -233,16 +243,26 @@ class Producer {
           `[${queue}] > `,
           message
         );
+        this._connection.config.logger && this._connection.config.logger({
+          level: 'info',
+          message: `${loggerAlias} [${queue}] > ${message}`,
+          params: { queue, message }
+        });
 
         return this.checkRpc(queue, parsers.out(message, settings), settings);
       })
-      .catch((err) => {
-        if (!this._shouldRetry(err, currentRetryNumber)) {
-          throw err;
+      .catch((error) => {
+        if (!this._shouldRetry(error, currentRetryNumber)) {
+          throw error;
         }
 
         // add timeout between retries because we don't want to overflow the CPU
-        this._connection.config.transport.error(loggerAlias, err);
+        this._connection.config.transport.error(loggerAlias, error);
+        this._connection.config.logger && this._connection.config.logger({
+          level: 'error',
+          message: `${loggerAlias} ${error.message}`,
+          error
+        });
         return utils
           .timeoutPromise(this._connection.config.timeout)
           .then(() => this._sendToQueue(queue, message, settings, currentRetryNumber + 1));

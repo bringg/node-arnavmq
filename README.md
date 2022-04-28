@@ -115,8 +115,17 @@ You can specify a config object, properties and default values are:
     // generate a hostname so we can track this connection on the broker (rabbitmq management plugin)
     hostname: process.env.HOSTNAME || process.env.USER || uuid.v4(),
 
-    // the transport to use to debug. if provided, arnavmq will show some logs
-    transport: utils.emptyLogger
+    // Deprecated. Use 'logger' instead. the transport to use to debug. if provided, arnavmq will show some logs
+    transport: utils.emptyTransport
+
+    /**
+     *  An optional log function. Receives one parameter containing a log event with the following fields:
+     * * level - A string log level ("debug", "info", "warn", or  "error"). Always present.
+     * * message - A string message describing the event. Always present.
+     * * error - An 'Error' object in case one is present.
+     * * params - An optional object containing extra parameters that can provide extra context for the event (like a queue name or received message content).
+     */
+    logger: undefined
   });
 ```
 
@@ -128,9 +137,9 @@ You can override any or no of the property above.
 
 Find more about RabbitMQ in the links below:
 
-- http://www.rabbitmq.com/getstarted.html
-- https://www.cloudamqp.com/blog/2015-05-18-part1-rabbitmq-for-beginners-what-is-rabbitmq.html
-- http://spring.io/blog/2010/06/14/understanding-amqp-the-protocol-used-by-rabbitmq/
+- <http://www.rabbitmq.com/getstarted.html>
+- <https://www.cloudamqp.com/blog/2015-05-18-part1-rabbitmq-for-beginners-what-is-rabbitmq.html>
+- <http://spring.io/blog/2010/06/14/understanding-amqp-the-protocol-used-by-rabbitmq/>
 
 ## Tests
 

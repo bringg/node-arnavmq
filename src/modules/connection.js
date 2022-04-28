@@ -40,7 +40,7 @@ class Connection {
       conn.on('close', () => {
         delete connection.conn;
       });
-      conn.on('error', this._config.transport.error);
+      conn.on('error', this._onError.bind(this));
       connection.conn = conn;
       return conn;
     }).catch((e) => {
@@ -71,12 +71,27 @@ class Connection {
 
         // on error we remove the channel so the next call will recreate it (auto-reconnect are handled by connection users)
         channel.on('close', () => { delete connection.chann; });
-        channel.on('error', this._config.transport.error);
+        channel.on('error', this._onError.bind(this));
 
         connection.chann = channel;
         return channel;
       });
     return connection.chann;
+  }
+
+  /**
+   * Log errors from connection/channel error events.
+   * @param {Error} error
+   */
+  _onError(error) {
+    this._config.transport.error(error);
+    if (this._config.logger) {
+      this._config.logger({
+        level: 'error',
+        message: error.message,
+        error
+      });
+    }
   }
 
   /**

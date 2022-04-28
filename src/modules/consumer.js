@@ -33,6 +33,11 @@ class Consumer {
       if (msg.properties.replyTo) {
         const options = { correlationId: msg.properties.correlationId, persistent: true, durable: true };
         this._connection.config.transport.info(loggerAlias, `[${queue}][${msg.properties.replyTo}] >`, content);
+        this._connection.config.logger && this._connection.config.logger({
+          level: 'info',
+          message: `${loggerAlias} [${queue}][${msg.properties.replyTo}] > ${content}`,
+          params: { content }
+        });
         this.channel.sendToQueue(msg.properties.replyTo, parsers.out(content, options), options);
       }
 
@@ -74,9 +79,20 @@ class Consumer {
 
       return this.channel.assertQueue(suffixedQueue, options).then((q) => {
         this._connection.config.transport.info(loggerAlias, 'init', q.queue);
+        this._connection.config.logger && this._connection.config.logger({
+          level: 'info',
+          message: `${loggerAlias} init ${q.queue}`,
+          params: { queue: q.queue }
+        });
 
         this.channel.consume(q.queue, (msg) => {
-          this._connection.config.transport.info(loggerAlias, `[${q.queue}] < ${msg.content.toString()}`);
+          const messageString = msg.content.toString();
+          this._connection.config.transport.info(loggerAlias, `[${q.queue}] < ${messageString}`);
+          this._connection.config.logger && this._connection.config.logger({
+            level: 'info',
+            message: `${loggerAlias} [${q.queue}] < ${messageString}`,
+            params: { queue: q.queue, message: messageString }
+          });
 
           // main answer management chaining
           // receive message, parse it, execute callback, check if should answer, ack/reject message
@@ -86,9 +102,16 @@ class Consumer {
             .then(() => {
               this.channel.ack(msg);
             })
-            .catch((err) => {
+            .catch((error) => {
               // if something bad happened in the callback, reject the message so we can requeue it (or not)
-              this._connection.config.transport.error(loggerAlias, err);
+              this._connection.config.transport.error(loggerAlias, error);
+              this._connection.config.logger && this._connection.config.logger({
+                level: 'error',
+                message: `${loggerAlias} ${error.message}`,
+                error,
+                params: { queue: q.queue }
+              });
+
               this.channel.reject(msg, this._connection.config.requeue);
             });
         }, { noAck: false });

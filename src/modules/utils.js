@@ -10,10 +10,10 @@ module.exports.timeoutPromise = (timer) => new Promise((resolve) => {
 function empty() {}
 
 /**
- * Default logger to prevent any printing in the terminal
+ * Default transport to prevent any printing in the terminal
  * @type {Object} - empty logger overwriting the console object methods
  */
-module.exports.emptyLogger = {
+module.exports.emptyTransport = {
   info: empty,
   debug: empty,
   warn: empty,
