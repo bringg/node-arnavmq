@@ -47,6 +47,10 @@ module.exports = (config) => {
     ...configuration
   };
 
+  if (configuration.transport !== utils.emptyTransport) {
+    process.emitWarning("The 'transport' configuration option is deprecated. Please use the 'logger' option instead.", 'DeprecationWarning');
+  }
+
   configuration.prefetch = parseInt(configuration.prefetch, 10) || 0;
   return require('./modules/arnavmq')(connection(configuration));
 };
