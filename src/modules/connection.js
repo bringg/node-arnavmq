@@ -1,7 +1,6 @@
 const amqp = require('amqplib');
 const assert = require('assert');
 const packageVersion = require('../../package.json').version;
-const logLevels = require('./logLevels');
 
 class Connection {
   constructor(config) {
@@ -86,13 +85,10 @@ class Connection {
    */
   _onError(error) {
     this._config.transport.error(error);
-    if (this._config.logger) {
-      this._config.logger({
-        level: logLevels.Error,
-        message: error.message,
-        error
-      });
-    }
+    this._config.logger.error({
+      message: error.message,
+      error
+    });
   }
 
   /**
@@ -105,7 +101,7 @@ class Connection {
 
   /**
    * Register an event on the amqp.node channel
-   * @param {string} on   the channel event name to be binded with
+   * @param {string} on     the channel event name to be bound with
    * @param {function} func the callback function to execute when the event is called
    */
   addListener(on, func) {

@@ -1,19 +1,25 @@
-const logLevels = require('./logLevels');
-
 function empty() {}
 
-const emptyTransport = {
+const emptyLogger = {
+  info: empty,
+  debug: empty,
+  warn: empty,
+  error: empty,
   log: empty
 };
-// Initialize all log levels to be "empty".
-Object.keys(logLevels).forEach((level) => { emptyTransport[logLevels[level]] = empty; });
 
 module.exports = {
   /**
    * Default transport to prevent any printing in the terminal
    * @type {Object} - empty logger overwriting the console object methods
    */
-  emptyTransport,
+  emptyLogger,
+
+  /**
+   * @deprecated
+   * For backwards compatibility with the `transport` configuration.
+   */
+  emptyTransport: emptyLogger,
 
   /**
    * A function to generate a pause in promise chaining

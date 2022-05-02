@@ -1,6 +1,5 @@
 const parsers = require('./message-parsers');
 const utils = require('./utils');
-const logLevels = require('./logLevels');
 
 const loggerAlias = 'arnav_mq:consumer';
 
@@ -34,8 +33,7 @@ class Consumer {
       if (msg.properties.replyTo) {
         const options = { correlationId: msg.properties.correlationId, persistent: true, durable: true };
         this._connection.config.transport.info(loggerAlias, `[${queue}][${msg.properties.replyTo}] >`, content);
-        this._connection.config.logger && this._connection.config.logger({
-          level: logLevels.Info,
+        this._connection.config.logger.debug({
           message: `${loggerAlias} [${queue}][${msg.properties.replyTo}] > ${content}`,
           params: { content }
         });
@@ -48,7 +46,7 @@ class Consumer {
 
   /**
    * Create a durable queue on RabbitMQ and consumes messages from it - executing a callback function.
-   * Automaticaly answers with the callback response (can be a Promise)
+   * Automatically answers with the callback response (can be a Promise)
    * @param  {string}   queue    The RabbitMQ queue name
    * @param  {object}   options  (Optional) Options for the queue (durable, persistent, etc.)
    * @param  {Function} callback Callback function executed when a message is received on the queue name, can return a promise
@@ -80,8 +78,7 @@ class Consumer {
 
       return this.channel.assertQueue(suffixedQueue, options).then((q) => {
         this._connection.config.transport.info(loggerAlias, 'init', q.queue);
-        this._connection.config.logger && this._connection.config.logger({
-          level: logLevels.Info,
+        this._connection.config.logger.debug({
           message: `${loggerAlias} init ${q.queue}`,
           params: { queue: q.queue }
         });
@@ -89,8 +86,7 @@ class Consumer {
         this.channel.consume(q.queue, (msg) => {
           const messageString = msg.content.toString();
           this._connection.config.transport.info(loggerAlias, `[${q.queue}] < ${messageString}`);
-          this._connection.config.logger && this._connection.config.logger({
-            level: logLevels.Info,
+          this._connection.config.logger.debug({
             message: `${loggerAlias} [${q.queue}] < ${messageString}`,
             params: { queue: q.queue, message: messageString }
           });
@@ -106,9 +102,8 @@ class Consumer {
             .catch((error) => {
               // if something bad happened in the callback, reject the message so we can requeue it (or not)
               this._connection.config.transport.error(loggerAlias, error);
-              this._connection.config.logger && this._connection.config.logger({
-                level: logLevels.Error,
-                message: `${loggerAlias} ${error.message}`,
+              this._connection.config.logger.error({
+                message: `${loggerAlias} queue ${q.queue}: ${error.message}`,
                 error,
                 params: { queue: q.queue }
               });

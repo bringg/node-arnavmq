@@ -2,7 +2,6 @@ const uuid = require('uuid');
 const pDefer = require('p-defer');
 const utils = require('./utils');
 const parsers = require('./message-parsers');
-const logLevels = require('./logLevels');
 
 const ERRORS = {
   TIMEOUT: 'Timeout reached',
@@ -55,8 +54,7 @@ class Producer {
           loggerAlias,
           error
         );
-        this._connection.config.logger && this._connection.config.logger({
-          level: logLevels.Error,
+        this._connection.config.logger.error({
           message: `${loggerAlias} ${error.message}`,
           error,
           params: { queue, rpcQueue }
@@ -70,8 +68,7 @@ class Producer {
         loggerAlias,
         `[${queue}] < answer`
       );
-      this._connection.config.logger && this._connection.config.logger({
-        level: logLevels.Info,
+      this._connection.config.logger.debug({
         message: `${loggerAlias} [${queue}] < answer`,
         params: { queue }
       });
@@ -244,8 +241,7 @@ class Producer {
           `[${queue}] > `,
           message
         );
-        this._connection.config.logger && this._connection.config.logger({
-          level: logLevels.Info,
+        this._connection.config.logger.debug({
           message: `${loggerAlias} [${queue}] > ${message}`,
           params: { queue, message }
         });
@@ -259,8 +255,7 @@ class Producer {
 
         // add timeout between retries because we don't want to overflow the CPU
         this._connection.config.transport.error(loggerAlias, error);
-        this._connection.config.logger && this._connection.config.logger({
-          level: logLevels.Error,
+        this._connection.config.logger.error({
           message: `${loggerAlias} ${error.message}`,
           error
         });
