@@ -32,7 +32,7 @@ class Consumer {
     return (content) => {
       if (msg.properties.replyTo) {
         const options = { correlationId: msg.properties.correlationId, persistent: true, durable: true };
-        this._connection.config.transport.info(loggerAlias, `[${queue}][${msg.properties.replyTo}] >`, content);
+        this._connection.config.transport.debug(loggerAlias, `[${queue}][${msg.properties.replyTo}] >`, content);
         this._connection.config.logger.debug({
           message: `${loggerAlias} [${queue}][${msg.properties.replyTo}] > ${content}`,
           params: { content }
@@ -77,7 +77,7 @@ class Consumer {
       });
 
       return this.channel.assertQueue(suffixedQueue, options).then((q) => {
-        this._connection.config.transport.info(loggerAlias, 'init', q.queue);
+        this._connection.config.transport.debug(loggerAlias, 'init', q.queue);
         this._connection.config.logger.debug({
           message: `${loggerAlias} init ${q.queue}`,
           params: { queue: q.queue }
@@ -85,7 +85,7 @@ class Consumer {
 
         this.channel.consume(q.queue, (msg) => {
           const messageString = msg.content.toString();
-          this._connection.config.transport.info(loggerAlias, `[${q.queue}] < ${messageString}`);
+          this._connection.config.transport.debug(loggerAlias, `[${q.queue}] < ${messageString}`);
           this._connection.config.logger.debug({
             message: `${loggerAlias} [${q.queue}] < ${messageString}`,
             params: { queue: q.queue, message: messageString }
