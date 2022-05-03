@@ -103,9 +103,9 @@ class Consumer {
               // if something bad happened in the callback, reject the message so we can requeue it (or not)
               this._connection.config.transport.error(loggerAlias, error);
               this._connection.config.logger.error({
-                message: `${loggerAlias} queue ${q.queue}: ${error.message}`,
+                message: `${loggerAlias} Failed processing message from queue ${q.queue}: ${error.message}`,
                 error,
-                params: { queue: q.queue }
+                params: { queue: q.queue, message: messageString }
               });
 
               this.channel.reject(msg, this._connection.config.requeue);

@@ -50,11 +50,11 @@ class Producer {
 
       if (responsePromise === undefined) {
         const error = new Error(`Receiving RPC message from previous session: callback no more in memory. ${queue}`);
-        this._connection.config.transport.error(
+        this._connection.config.transport.warn(
           loggerAlias,
           error
         );
-        this._connection.config.logger.error({
+        this._connection.config.logger.warn({
           message: `${loggerAlias} ${error.message}`,
           error,
           params: { queue, rpcQueue }
@@ -256,8 +256,9 @@ class Producer {
         // add timeout between retries because we don't want to overflow the CPU
         this._connection.config.transport.error(loggerAlias, error);
         this._connection.config.logger.error({
-          message: `${loggerAlias} ${error.message}`,
-          error
+          message: `${loggerAlias} Failed sending message to queue ${queue}: ${error.message}`,
+          error,
+          params: { queue, message }
         });
         return utils
           .timeoutPromise(this._connection.config.timeout)
