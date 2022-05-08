@@ -40,7 +40,7 @@ class Connection {
       conn.on('close', () => {
         delete connection.conn;
       });
-      conn.on('error', this._config.transport.error);
+      conn.on('error', this._onError.bind(this));
       connection.conn = conn;
       return conn;
     }).catch((e) => {
@@ -71,12 +71,24 @@ class Connection {
 
         // on error we remove the channel so the next call will recreate it (auto-reconnect are handled by connection users)
         channel.on('close', () => { delete connection.chann; });
-        channel.on('error', this._config.transport.error);
+        channel.on('error', this._onError.bind(this));
 
         connection.chann = channel;
         return channel;
       });
     return connection.chann;
+  }
+
+  /**
+   * Log errors from connection/channel error events.
+   * @param {Error} error
+   */
+  _onError(error) {
+    this._config.transport.error(error);
+    this._config.logger.error({
+      message: error.message,
+      error
+    });
   }
 
   /**
@@ -89,7 +101,7 @@ class Connection {
 
   /**
    * Register an event on the amqp.node channel
-   * @param {string} on   the channel event name to be binded with
+   * @param {string} on     the channel event name to be bound with
    * @param {function} func the callback function to execute when the event is called
    */
   addListener(on, func) {

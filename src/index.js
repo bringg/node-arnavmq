@@ -4,9 +4,7 @@ const connection = require('./modules/connection');
 
 /* eslint global-require: "off" */
 module.exports = (config) => {
-  let configuration = { ...config };
-
-  configuration = {
+  const configuration = {
     // amqp connection string
     host: 'amqp://localhost',
 
@@ -32,11 +30,24 @@ module.exports = (config) => {
     // generate a hostname so we can track this connection on the broker (rabbitmq management plugin)
     hostname: process.env.HOSTNAME || process.env.USER || uuid.v4(),
 
-    // the transport to use to debug. if provided, arnavmq will show some logs
+    // Deprecated. Use 'logger' instead. The transport to use to debug. If provided, arnavmq will show some logs
     transport: utils.emptyLogger,
 
-    ...configuration
+    /**
+     * A logger object with a log function for each of the log levels ("debug", "info", "warn", or "error").
+     * Each log function receives one parameter containing a log event with the following fields:
+     * * message - A string message describing the event. Always present.
+     * * error - An 'Error' object in case one is present.
+     * * params - An optional object containing extra parameters that can provide extra context for the event.
+     */
+    logger: utils.emptyLogger,
+
+    ...config
   };
+
+  if (configuration.transport !== utils.emptyLogger) {
+    process.emitWarning("The 'transport' configuration option is deprecated. Please use the 'logger' option instead.", 'DeprecationWarning');
+  }
 
   configuration.prefetch = parseInt(configuration.prefetch, 10) || 0;
   return require('./modules/arnavmq')(connection(configuration));
