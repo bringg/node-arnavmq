@@ -36,7 +36,7 @@ module.exports.in = (msg) => {
 /* eslint no-param-reassign: "off" */
 module.exports.out = (content, options) => {
   // If falsy
-  if(content == null) {
+  if (content == null) {
     return Buffer.from([]);
   }
 
