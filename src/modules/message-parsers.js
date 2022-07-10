@@ -35,18 +35,16 @@ module.exports.in = (msg) => {
  */
 /* eslint no-param-reassign: "off" */
 module.exports.out = (content, options) => {
-  // If falsy
-  if (content == null) {
-    return Buffer.from([]);
-  }
-
-  if (typeof content !== 'string') {
+  const falsie = [undefined, null];
+  if (!falsie.includes(content) && typeof content !== 'string') {
     if (content.error instanceof Error) {
       content.error = serializeError(content.error);
     }
     // if content is not a string, we JSONify it (JSON.parse can handle numbers, etc. so we can skip all the checks)
     content = JSON.stringify(content);
     options.contentType = 'application/json';
+  } else if (falsie.includes(content)) {
+    return Buffer.from([]);
   }
 
   return Buffer.from(content, 'utf-8');
