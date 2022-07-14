@@ -165,6 +165,16 @@ class Producer {
     // messages are persistent
     options.persistent = true;
 
+    // convert timeout to amqp's expiration. It's message-level expiration.
+    // The message will be discarded from a queue once it’s been there longer than the given number of milliseconds
+    // This is needed to avoid the case when the message which is already expired from our pov (via timeout)
+    // is still waiting in the queue and thus is about to be processed by the consumer.
+    // Unfortunately, we can do nothing if the message is already consumed and is being processed at the moment
+    // when the timeout appears.
+    if (options.timeout && options.timeout > 0) {
+      options.expiration = options.timeout;
+    }
+
     if (options.rpc) {
       return this.createRpcQueue(queue).then(() => {
         // generates a correlationId (random uuid) so we know which callback to execute on received response
@@ -172,7 +182,10 @@ class Producer {
         options.correlationId = corrId;
         // reply to us if you receive this message!
         options.replyTo = this.amqpRPCQueues[queue].queue;
-
+        // set expiration if it isn't set yet
+        if (!options.expiration && this._connection.config.rpcTimeout > 0) {
+          options.expiration = this._connection.config.rpcTimeout;
+        }
         this.publishOrSendToQueue(queue, msg, options);
         // defered promise that will resolve when response is received
         const responsePromise = pDefer();

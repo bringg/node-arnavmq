@@ -1,6 +1,6 @@
 {
   "name": "arnavmq",
-  "version": "0.10.3",
+  "version": "0.10.4",
   "description": "ArnavMQ is a RabbitMQ wrapper",
   "keywords": [
     "rabbitmq",
@@ -15,7 +15,7 @@
   "scripts": {
     "lint": "eslint .",
     "cover": "test -d .nyc_output && nyc report --reporter lcov",
-    "test": "nyc mocha --recursive --timeout=30000 --exit"
+    "test": "nyc mocha --recursive --timeout=45000 --exit"
   },
   "repository": {
     "type": "git",
