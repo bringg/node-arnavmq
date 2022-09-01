@@ -74,7 +74,8 @@ arnavmq.publish('queue:name', { message: 'content' }, { rpc: true, timeout: 1000
 
 The optional `timeout` option results in a rejection when no answer has been received after the given amount of milliseconds.
 When '0' is given, there will be no timeout for this call.
-This value will overwrite the default timeout set in the config in `rpcTimeout`.
+This value will overwrite the default timeout set in the config in `rpcTimeout`. **Update:** Message-level timeout is deprecated. 
+Please use amqp's **expiration** option instead.
 
 ## Routing keys
 
