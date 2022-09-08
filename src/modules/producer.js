@@ -180,12 +180,9 @@ class Producer {
         // Unfortunately, we can do nothing if the message is already consumed and is being processed at the moment
         // when the timeout appears.
         if (options.timeout && options.timeout > 0) {
-          if (this._connection.config.logger) {
-            // TODO: remove that warn after timeout option is removed in scope of major version update
-            this._connection.config.logger.warn({
-              message: `${loggerAlias} using timeout option on message level is deprecated. Please use expiration instead.`,
-            });
-          }
+          utils.emitWarn('ARNAVMQ_MSG_TIMEOUT_DEPRECATED',
+            'using timeout option on message level is deprecated',
+            'Please use expiration instead');
           options.expiration = options.timeout;
         }
         // set expiration if it isn't set yet
