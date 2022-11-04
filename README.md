@@ -75,7 +75,8 @@ arnavmq.publish('queue:name', { message: 'content' }, { rpc: true, timeout: 1000
 The optional `timeout` option results in a rejection when no answer has been received after the given amount of milliseconds.
 When '0' is given, there will be no timeout for this call.
 This value will overwrite the default timeout set in the config in `rpcTimeout`. **Update:** Message-level timeout is deprecated. 
-Please use amqp's **expiration** option instead.
+Please use amqp's **expiration** option instead. It gives the same rejection for the producer if the timeout is reached, 
+but together with that it also guarantees that this message will not be consumed after the expiration period.
 
 ## Routing keys
 
@@ -117,7 +118,7 @@ You can specify a config object, properties and default values are:
     hostname: process.env.HOSTNAME || process.env.USER || uuid.v4(),
 
     // Deprecated. Use 'logger' instead. The transport to use to debug. If provided, arnavmq will show some logs
-    transport: utils.emptyLogger
+    transport: utils.emptyLogger,
 
     /**
      * A logger object with a log function for each of the log levels ("debug", "info", "warn", or "error").
