@@ -175,7 +175,7 @@ class Producer {
 
         // convert timeout to amqp's expiration. It's message-level expiration.
         // The message will be discarded from a queue once it’s been there longer than the given number of milliseconds
-        // This is needed to avoid the case when the message which is already expired from our pov (via timeout)
+        // This is needed to avoid the case when the message which is already expired from caller's point of view (via timeout)
         // is still waiting in the queue and thus is about to be processed by the consumer.
         // Unfortunately, we can do nothing if the message is already consumed and is being processed at the moment
         // when the timeout appears.
