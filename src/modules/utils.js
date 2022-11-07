@@ -38,7 +38,7 @@ module.exports = {
   emitWarn: function emitWarn(warning) {
     const { code, message, detail } = warning;
     if (!emitWarn.warned) {
-      emitWarn.warned = [];
+      emitWarn.warned = {};
     }
     if (!emitWarn.warned[code]) {
       emitWarn.warned[code] = true;
