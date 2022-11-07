@@ -1,6 +1,7 @@
 const uuid = require('uuid');
 const utils = require('./modules/utils');
 const connection = require('./modules/connection');
+const { TRANSPORT_LOGGING_DEPRECATED } = require('./modules/warnings');
 
 /* eslint global-require: "off" */
 module.exports = (config) => {
@@ -46,7 +47,7 @@ module.exports = (config) => {
   };
 
   if (configuration.transport !== utils.emptyLogger) {
-    process.emitWarning("The 'transport' configuration option is deprecated. Please use the 'logger' option instead.", 'DeprecationWarning');
+    utils.emitWarn(TRANSPORT_LOGGING_DEPRECATED);
   }
 
   configuration.prefetch = parseInt(configuration.prefetch, 10) || 0;
