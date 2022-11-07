@@ -28,5 +28,21 @@ module.exports = {
    */
   timeoutPromise: (timer) => new Promise((resolve) => {
     setTimeout(resolve, timer);
-  })
+  }),
+
+  /**
+   * A function that allows to emit warnings for a specified code. The idea is to
+   * limit a warning emission to one per a specific code.
+   * @param warning - {code: string, detail: string, message: string}
+   */
+  emitWarn: function emitWarn(warning) {
+    const { code, message, detail } = warning;
+    if (!emitWarn.warned) {
+      emitWarn.warned = {};
+    }
+    if (!emitWarn.warned[code]) {
+      emitWarn.warned[code] = true;
+      process.emitWarning(message, { code, detail });
+    }
+  }
 };
