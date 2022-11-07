@@ -1,7 +1,7 @@
 const uuid = require('uuid');
 const utils = require('./modules/utils');
 const connection = require('./modules/connection');
-const { TRANSPORT_LOGGING_DEPRECATED } = require('./modules/warnings');
+const { ARNAVMQ_TRANSPORT_LOGGER_DEPRECATED } = require('./modules/warnings');
 
 /* eslint global-require: "off" */
 module.exports = (config) => {
@@ -47,7 +47,7 @@ module.exports = (config) => {
   };
 
   if (configuration.transport !== utils.emptyLogger) {
-    utils.emitWarn(TRANSPORT_LOGGING_DEPRECATED);
+    utils.emitWarn(ARNAVMQ_TRANSPORT_LOGGER_DEPRECATED);
   }
 
   configuration.prefetch = parseInt(configuration.prefetch, 10) || 0;

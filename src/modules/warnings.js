@@ -9,7 +9,7 @@ module.exports = {
     message: 'using timeout option on message level is deprecated',
     detail: 'Please use expiration instead'
   },
-  TRANSPORT_LOGGING_DEPRECATED: {
+  ARNAVMQ_TRANSPORT_LOGGER_DEPRECATED: {
     code: 'TRANSPORT_LOGGING_DEPRECATED',
     message: "The 'transport' configuration option is deprecated",
     detail: "Please use the 'logger' option instead"
