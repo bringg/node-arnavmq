@@ -14,8 +14,9 @@ const crypto = require('crypto');
 if (typeof crypto.randomUUID === 'function') {
   uuidV4 = () => crypto.randomUUID();
 } else {
+  // eslint-disable-next-line global-require
   const uuid = require('uuid');
-  uuidV4 = uuid.v4();
+  uuidV4 = uuid.v4;
 }
 
 module.exports = {
