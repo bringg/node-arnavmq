@@ -1,6 +1,6 @@
 {
   "name": "arnavmq",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "ArnavMQ is a RabbitMQ wrapper",
   "keywords": [
     "rabbitmq",
@@ -29,7 +29,6 @@
   "homepage": "https://github.com/bringg/node-arnavmq#readme",
   "dependencies": {
     "amqplib": "^0.10.3",
-    "p-defer": "^3.0.0",
     "serialize-error": "^8.0.1",
     "uuid": "^9.0.0"
   },

@@ -1,5 +1,3 @@
-const uuid = require('uuid');
-const pDefer = require('p-defer');
 const utils = require('./utils');
 const parsers = require('./message-parsers');
 const { ARNAVMQ_MSG_TIMEOUT_DEPRECATED } = require('./warnings');
@@ -169,7 +167,7 @@ class Producer {
     if (options.rpc) {
       return this.createRpcQueue(queue).then(() => {
         // generates a correlationId (random uuid) so we know which callback to execute on received response
-        const corrId = uuid.v4();
+        const corrId = utils.uuidV4();
         options.correlationId = corrId;
         // reply to us if you receive this message!
         options.replyTo = this.amqpRPCQueues[queue].queue;
@@ -191,8 +189,13 @@ class Producer {
 
         this.publishOrSendToQueue(queue, msg, options);
         // defered promise that will resolve when response is received
-        const responsePromise = pDefer();
-        this.amqpRPCQueues[queue][corrId] = responsePromise;
+
+        const prCallbacks = {};
+        const promise = new Promise((resolve, reject) => {
+          prCallbacks.resolve = resolve;
+          prCallbacks.reject = reject;
+        });
+        this.amqpRPCQueues[queue][corrId] = prCallbacks;
 
         //  Using given timeout or default one
         const timeout = options.expiration || 0;
@@ -200,7 +203,7 @@ class Producer {
           this.prepareTimeoutRpc(queue, corrId, timeout);
         }
 
-        return responsePromise.promise;
+        return promise;
       });
     }
 

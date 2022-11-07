@@ -8,6 +8,16 @@ const emptyLogger = {
   log: empty
 };
 
+let uuidV4;
+const crypto = require('crypto');
+
+if (typeof crypto.randomUUID === 'function') {
+  uuidV4 = () => crypto.randomUUID();
+} else {
+  const uuid = require('uuid');
+  uuidV4 = uuid.v4();
+}
+
 module.exports = {
   /**
    * Default transport to prevent any printing in the terminal
@@ -44,5 +54,7 @@ module.exports = {
       emitWarn.warned[code] = true;
       process.emitWarning(message, { code, detail });
     }
-  }
+  },
+
+  uuidV4
 };

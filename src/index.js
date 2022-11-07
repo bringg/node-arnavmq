@@ -1,4 +1,3 @@
-const uuid = require('uuid');
 const utils = require('./modules/utils');
 const connection = require('./modules/connection');
 const { ARNAVMQ_TRANSPORT_LOGGER_DEPRECATED } = require('./modules/warnings');
@@ -29,7 +28,7 @@ module.exports = (config) => {
     consumerSuffix: '',
 
     // generate a hostname so we can track this connection on the broker (rabbitmq management plugin)
-    hostname: process.env.HOSTNAME || process.env.USER || uuid.v4(),
+    hostname: process.env.HOSTNAME || process.env.USER || utils.uuidV4(),
 
     // Deprecated. Use 'logger' instead. The transport to use to debug. If provided, arnavmq will show some logs
     transport: utils.emptyLogger,
