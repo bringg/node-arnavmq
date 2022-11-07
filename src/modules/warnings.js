@@ -10,7 +10,7 @@ module.exports = {
     detail: 'Please use expiration instead'
   },
   ARNAVMQ_TRANSPORT_LOGGER_DEPRECATED: {
-    code: 'TRANSPORT_LOGGING_DEPRECATED',
+    code: 'ARNAVMQ_TRANSPORT_LOGGER_DEPRECATED',
     message: "The 'transport' configuration option is deprecated",
     detail: "Please use the 'logger' option instead"
   }
