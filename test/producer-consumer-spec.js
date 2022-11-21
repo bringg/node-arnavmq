@@ -5,7 +5,7 @@ const utils = require('../src/modules/utils');
 const docker = require('./docker');
 
 const fixtures = {
-  queues: ['test-queue-0', 'test-queue-1', 'test-queue-2', 'test-queue-3', 'test-queue-4', 'test-queue-5'],
+  queues: ['test-queue-0', 'test-queue-1', 'test-queue-2', 'test-queue-3'],
   routingKey: 'queue-routing-key'
 };
 
@@ -161,30 +161,12 @@ describe('producer/consumer', function () {
           assert.equal(e.message, 'Timeout reached');
         });
     });
-
-    it('should not deliver message if timeout is reached ', (done) => {
-      // (prefetch + 1) messages will be sent. The last one doesn't have to be consumed as it has to be discarded while waiting in the queue
-      let receivedCounter = 0;
-      const numMsgsToSend = arnavmq.connection._config.prefetch + 1;
-      arnavmq.consumer.consume(fixtures.queues[5], () => {
-        receivedCounter += 1;
-        return utils.timeoutPromise(500);
-      })
-        .then(() => Promise.all(Array.from({ length: numMsgsToSend }, (v, k) => arnavmq.producer.produce(fixtures.queues[5], { a: k }, { rpc: true, timeout: 200 }))))
-        .catch(() => {
-          // last message promise is rejected due to timeout. Let's wait a sec to be sure that message hasn't been consumed
-          setTimeout(() => {
-            assert.equal(receivedCounter, numMsgsToSend - 1);
-            done();
-          }, 1000);
-        });
-    });
   });
 
   describe('error', () => {
     it('should not be consumed', (done) => {
-      arnavmq.consumer.consume(fixtures.queues[4], () => ({ error: new Error('Error test') }))
-        .then(() => arnavmq.producer.produce(fixtures.queues[4], {}, { rpc: true }))
+      arnavmq.consumer.consume('test-queue-5', () => ({ error: new Error('Error test') }))
+        .then(() => arnavmq.producer.produce('test-queue-5', {}, { rpc: true }))
         .then((response) => {
           assert(response.error);
           assert(response.error instanceof Error);

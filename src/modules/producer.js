@@ -2,7 +2,6 @@ const uuid = require('uuid');
 const pDefer = require('p-defer');
 const utils = require('./utils');
 const parsers = require('./message-parsers');
-const { ARNAVMQ_MSG_TIMEOUT_DEPRECATED } = require('./warnings');
 
 const ERRORS = {
   TIMEOUT: 'Timeout reached',
@@ -174,28 +173,13 @@ class Producer {
         // reply to us if you receive this message!
         options.replyTo = this.amqpRPCQueues[queue].queue;
 
-        // convert timeout to amqp's expiration. It's message-level expiration.
-        // The message will be discarded from a queue once it’s been there longer than the given number of milliseconds
-        // This is needed to avoid the case when the message which is already expired from caller's point of view (via timeout)
-        // is still waiting in the queue and thus is about to be processed by the consumer.
-        // Unfortunately, we can do nothing if the message is already consumed and is being processed at the moment
-        // when the timeout appears.
-        if (options.timeout && options.timeout > 0) {
-          utils.emitWarn(ARNAVMQ_MSG_TIMEOUT_DEPRECATED);
-          options.expiration = options.timeout;
-        }
-        // set expiration if it isn't set yet
-        if (!options.expiration && this._connection.config.rpcTimeout > 0) {
-          options.expiration = this._connection.config.rpcTimeout;
-        }
-
         this.publishOrSendToQueue(queue, msg, options);
         // defered promise that will resolve when response is received
         const responsePromise = pDefer();
         this.amqpRPCQueues[queue][corrId] = responsePromise;
 
         //  Using given timeout or default one
-        const timeout = options.expiration || 0;
+        const timeout = options.timeout || this._connection.config.rpcTimeout || 0;
         if (timeout > 0) {
           this.prepareTimeoutRpc(queue, corrId, timeout);
         }

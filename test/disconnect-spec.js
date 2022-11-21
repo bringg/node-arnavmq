@@ -62,7 +62,7 @@ describe('disconnections', function () {
     it('should be able to re-register to consume messages between connection failures', (done) => {
       let counter = 0;
       const checkReceived = (cnt) => {
-        if (cnt === 20) done();
+        if (cnt === 50) done();
       };
       arnavmq.connection._config.rpcTimeout = 0;
       arnavmq.consumer.consume(queue, () => {
@@ -70,11 +70,11 @@ describe('disconnections', function () {
         return counter;
       })
         .then(() => arnavmq.producer.produce(queue, undefined, { rpc: true }).then(checkReceived))
-        .then(() => utils.timeoutPromise(100))
+        .then(() => utils.timeoutPromise(500))
         .then(() => assert(counter))
         .then(docker.stop)
         .then(() => {
-          for (let i = counter; i < 20; i += 1) {
+          for (let i = counter; i < 50; i += 1) {
             arnavmq.producer.produce(queue, undefined, { rpc: true }).then(checkReceived);
           }
         })
