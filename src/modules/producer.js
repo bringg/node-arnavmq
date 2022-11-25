@@ -196,7 +196,7 @@ class Producer {
         this.amqpRPCQueues[queue][corrId] = responsePromise;
 
         //  Using given timeout or default one
-        const timeout = options.expiration || 0;
+        const timeout = options.expiration || options.timeout || this._connection.config.rpcTimeout || 0;
         if (timeout > 0) {
           this.prepareTimeoutRpc(queue, corrId, timeout);
         }
