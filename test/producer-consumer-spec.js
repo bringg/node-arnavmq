@@ -162,7 +162,8 @@ describe('producer/consumer', function () {
         });
     });
 
-    it('should not deliver message if timeout is reached ', (done) => {
+    // this test is skipped as corresponding changes were commented out due to breaking effect for services using this lib
+    it.skip('should not deliver message if timeout is reached ', (done) => {
       // (prefetch + 1) messages will be sent. The last one doesn't have to be consumed as it has to be discarded while waiting in the queue
       let receivedCounter = 0;
       const numMsgsToSend = arnavmq.connection._config.prefetch + 1;

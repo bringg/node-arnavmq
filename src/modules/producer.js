@@ -182,12 +182,13 @@ class Producer {
         // when the timeout appears.
         if (options.timeout && options.timeout > 0) {
           utils.emitWarn(ARNAVMQ_MSG_TIMEOUT_DEPRECATED);
-          options.expiration = options.timeout;
+          // next line is commented out as we cannot force this breakable change
+          // options.expiration = options.timeout;
         }
         // set expiration if it isn't set yet
-        if (!options.expiration && this._connection.config.rpcTimeout > 0) {
-          options.expiration = this._connection.config.rpcTimeout;
-        }
+        // if (!options.expiration && this._connection.config.rpcTimeout > 0) {
+        //   options.expiration = this._connection.config.rpcTimeout;
+        // }
 
         this.publishOrSendToQueue(queue, msg, options);
         // defered promise that will resolve when response is received
