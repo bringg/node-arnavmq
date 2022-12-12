@@ -15,7 +15,6 @@ class Connection {
   */
   getConnection() {
     const url = this._config.host;
-    const key = this._config.key || url;
     const { hostname } = this._config;
     let connection = this.connections[url];
 
@@ -28,7 +27,7 @@ class Connection {
       conn: null,
       channels: null
     };
-    connection = this.connections[key];
+    connection = this.connections[url];
     connection.conn = amqp.connect(url, {
       clientProperties: {
         hostname,
@@ -63,22 +62,25 @@ class Connection {
     const connection = this.connections[url];
 
     // cache handling, if channel already opened, return it
-    if (connection && connection.chann && connection.chann[key]) {
-      return Promise.resolve(connection.chann[key]);
+    if (connection && connection.channels && connection.channels[key]) {
+      return Promise.resolve(connection.channels[key]);
     }
 
-    connection.chann[key] = connection.conn.createChannel()
+    if(!connection.channels)
+      connection.channels = {};
+
+    connection.channels[key] = connection.conn.createChannel()
       .then((channel) => {
         channel.prefetch(prefetch);
 
         // on error we remove the channel so the next call will recreate it (auto-reconnect are handled by connection users)
-        channel.on('close', () => { delete connection.chann; });
+        channel.on('close', () => { delete connection.channels[key]; });
         channel.on('error', this._onError.bind(this));
 
-        connection.chann[key] = channel;
+        connection.channels[key] = channel;
         return channel;
       });
-    return connection.chann[key];
+    return connection.channels[key];
   }
 
   /**
