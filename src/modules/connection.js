@@ -66,8 +66,9 @@ class Connection {
       return Promise.resolve(connection.channels[key]);
     }
 
-    if(!connection.channels)
+    if (!connection.channels) {
       connection.channels = {};
+    }
 
     connection.channels[key] = connection.conn.createChannel()
       .then((channel) => {
