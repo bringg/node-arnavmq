@@ -58,23 +58,33 @@ class Consumer {
   }
 
   subscribe(queue, options, callback) {
+
+    const defaultOptions = { persistent: true, durable: true};
+
     if (typeof options === 'function') {
       callback = options;
       // default message options
-      options = { persistent: true, durable: true };
+      options = defaultOptions;
+    } else{
+      _.extend(defaultOptions, options);
+      options = defaultOptions;
     }
+
+    const prefetch = options["channel"] && options["channel"]["prefetch"] ? options["channel"]["prefetch"] : null;
 
     // consumer gets a suffix if one is set on the configuration, to suffix all queues names
     // ex: service-something with suffix :ci becomes service-suffix:ci etc.
     const suffixedQueue = `${queue}${this._connection.config.consumerSuffix || ''}`;
 
-    return this._connection.get().then((channel) => {
+    return this._connection.get(queue, prefetch).then((channel) => {
       this.channel = channel;
 
       // when channel is closed, we want to be sure we recreate the queue ASAP so we trigger a reconnect by recreating the consumer
       this.channel.addListener('close', () => {
         this.subscribe(queue, options, callback);
       });
+
+      delete options["channel"];
 
       return this.channel.assertQueue(suffixedQueue, options).then((q) => {
         this._connection.config.transport.debug(loggerAlias, 'init', q.queue);

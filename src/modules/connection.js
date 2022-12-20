@@ -2,6 +2,8 @@ const amqp = require('amqplib');
 const assert = require('assert');
 const packageVersion = require('../../package.json').version;
 
+const defaultChannel = 'DEFAULT_CHANNEL';
+
 class Connection {
   constructor(config) {
     this._config = config;
@@ -25,7 +27,7 @@ class Connection {
     // prepare the connection internal object, and reset channel if connection has been closed
     this.connections[url] = {
       conn: null,
-      channel: null
+      channels: {defaultChannel: null}
     };
     connection = this.connections[url];
     connection.conn = amqp.connect(url, {
@@ -55,28 +57,36 @@ class Connection {
    * Since RabbitMQ advise to open one channel by process and node is mono-core, we keep only 1 channel for the whole connection.
    * @return {Promise} A promise that resolve with an amqp.node channel object
   */
-  getChannel() {
+  getChannel(queue= defaultChannel, prefetch) {
     const url = this._config.host;
-    const { prefetch } = this._config;
     const connection = this.connections[url];
 
+    const channelToUse = prefetch ? queue : defaultChannel;
+
     // cache handling, if channel already opened, return it
-    if (connection && connection.chann) {
-      return Promise.resolve(connection.chann);
+    if (connection && connection.channels[channelToUse]) {
+      if(prefetch) {
+        throw new Error('Channel already exist for queue ' + queue);
+      }
+      return Promise.resolve(connection.channels[channelToUse]);
     }
 
-    connection.chann = connection.conn.createChannel()
+    if(!prefetch) {
+      prefetch = this._config;
+    }
+
+    connection.channels[channelToUse] = connection.conn.createChannel()
       .then((channel) => {
         channel.prefetch(prefetch);
 
         // on error we remove the channel so the next call will recreate it (auto-reconnect are handled by connection users)
-        channel.on('close', () => { delete connection.chann; });
+        channel.on('close', () => { delete connection.channels[channelToUse]; });
         channel.on('error', this._onError.bind(this));
 
-        connection.chann = channel;
+        connection.channels[channelToUse] = channel;
         return channel;
       });
-    return connection.chann;
+    return connection.channels[channelToUse];
   }
 
   /**
@@ -95,8 +105,8 @@ class Connection {
    * Connect to AMQP and create channel
    * @return {Promise} A promise that resolve with an amqp.node channel object
    */
-  get() {
-    return this.getConnection().then(() => this.getChannel());
+  get(queue, prefetch) {
+    return this.getConnection().then(() => this.getChannel(queue, prefetch));
   }
 
   /**
