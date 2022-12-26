@@ -27,7 +27,7 @@ class Connection {
     // prepare the connection internal object, and reset channel if connection has been closed
     this.connections[url] = {
       conn: null,
-      channels: {defaultChannel: null}
+      channels: { defaultChannel: null }
     };
     connection = this.connections[url];
     connection.conn = amqp.connect(url, {
@@ -57,27 +57,28 @@ class Connection {
    * Since RabbitMQ advise to open one channel by process and node is mono-core, we keep only 1 channel for the whole connection.
    * @return {Promise} A promise that resolve with an amqp.node channel object
   */
-  getChannel(queue= defaultChannel, prefetch) {
+  getChannel(queue, prefetch) {
     const url = this._config.host;
     const connection = this.connections[url];
 
-    const channelToUse = prefetch ? queue : defaultChannel;
+    const channelToUse = prefetch && queue ? queue : defaultChannel;
 
     // cache handling, if channel already opened, return it
     if (connection && connection.channels[channelToUse]) {
-      if(prefetch) {
-        throw new Error('Channel already exist for queue ' + queue);
+      if (prefetch) {
+        throw new Error(`Channel already exist for queue ${queue}`);
       }
       return Promise.resolve(connection.channels[channelToUse]);
     }
 
-    if(!prefetch) {
-      prefetch = this._config;
+    const configWithPrefetch = { ... this._config };
+    if (prefetch) {
+      configWithPrefetch.prefetch = prefetch;
     }
 
     connection.channels[channelToUse] = connection.conn.createChannel()
       .then((channel) => {
-        channel.prefetch(prefetch);
+        channel.prefetch(configWithPrefetch);
 
         // on error we remove the channel so the next call will recreate it (auto-reconnect are handled by connection users)
         channel.on('close', () => { delete connection.channels[channelToUse]; });
