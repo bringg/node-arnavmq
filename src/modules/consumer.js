@@ -1,3 +1,4 @@
+const _ = require('lodash');
 const parsers = require('./message-parsers');
 const utils = require('./utils');
 
@@ -58,19 +59,18 @@ class Consumer {
   }
 
   subscribe(queue, options, callback) {
-
-    const defaultOptions = { persistent: true, durable: true};
+    const defaultOptions = { persistent: true, durable: true };
 
     if (typeof options === 'function') {
       callback = options;
       // default message options
       options = defaultOptions;
-    } else{
+    } else {
       _.extend(defaultOptions, options);
       options = defaultOptions;
     }
 
-    const prefetch = options["channel"] && options["channel"]["prefetch"] ? options["channel"]["prefetch"] : null;
+    const prefetch = options.channel && options.channel.prefetch ? options.channel.prefetch : null;
 
     // consumer gets a suffix if one is set on the configuration, to suffix all queues names
     // ex: service-something with suffix :ci becomes service-suffix:ci etc.
@@ -84,7 +84,7 @@ class Consumer {
         this.subscribe(queue, options, callback);
       });
 
-      delete options["channel"];
+      delete options.channel;
 
       return this.channel.assertQueue(suffixedQueue, options).then((q) => {
         this._connection.config.transport.debug(loggerAlias, 'init', q.queue);
