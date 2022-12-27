@@ -1,13 +1,14 @@
 const _ = require('lodash');
 const parsers = require('./message-parsers');
 const utils = require('./utils');
+const { DEFAULT_CHANNEL } = require('./connection');
 
 const loggerAlias = 'arnav_mq:consumer';
 
 class Consumer {
   constructor(connection) {
     this._connection = connection;
-    this.channel = null;
+    this.channels = { [DEFAULT_CHANNEL]: null };
   }
 
   set connection(value) {
@@ -38,7 +39,7 @@ class Consumer {
           message: `${loggerAlias} [${queue}][${msg.properties.replyTo}] > ${content}`,
           params: { content }
         });
-        this.channel.sendToQueue(msg.properties.replyTo, parsers.out(content, options), options);
+        this.channels[DEFAULT_CHANNEL].sendToQueue(msg.properties.replyTo, parsers.out(content, options), options);
       }
 
       return msg;
@@ -77,23 +78,24 @@ class Consumer {
     const suffixedQueue = `${queue}${this._connection.config.consumerSuffix || ''}`;
 
     return this._connection.get(queue, prefetch).then((channel) => {
-      this.channel = channel;
+      const channelToUse = prefetch && queue ? queue : DEFAULT_CHANNEL;
+      this.channels[channelToUse] = channel;
 
       // when channel is closed, we want to be sure we recreate the queue ASAP so we trigger a reconnect by recreating the consumer
-      this.channel.addListener('close', () => {
+      this.channels[channelToUse].addListener('close', () => {
         this.subscribe(queue, options, callback);
       });
 
       delete options.channel;
 
-      return this.channel.assertQueue(suffixedQueue, options).then((q) => {
+      return this.channels[channelToUse].assertQueue(suffixedQueue, options).then((q) => {
         this._connection.config.transport.debug(loggerAlias, 'init', q.queue);
         this._connection.config.logger.debug({
           message: `${loggerAlias} init ${q.queue}`,
           params: { queue: q.queue }
         });
 
-        this.channel.consume(q.queue, (msg) => {
+        this.channels[channelToUse].consume(q.queue, (msg) => {
           const messageString = msg.content.toString();
           this._connection.config.transport.debug(loggerAlias, `[${q.queue}] < ${messageString}`);
           this._connection.config.logger.debug({
@@ -107,7 +109,7 @@ class Consumer {
             .then((body) => callback(body, msg.properties))
             .then(this.checkRpc(msg, q.queue))
             .then(() => {
-              this.channel.ack(msg);
+              this.channels[channelToUse].ack(msg);
             })
             .catch((error) => {
               // if something bad happened in the callback, reject the message so we can requeue it (or not)
@@ -118,7 +120,7 @@ class Consumer {
                 params: { queue: q.queue, message: messageString }
               });
 
-              this.channel.reject(msg, this._connection.config.requeue);
+              this.channels[channelToUse].reject(msg, this._connection.config.requeue);
             });
         }, { noAck: false });
 

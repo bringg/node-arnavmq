@@ -127,6 +127,7 @@ class Connection {
 
 let instance;
 
+module.exports.DEFAULT_CHANNEL = DEFAULT_CHANNEL;
 module.exports = (config) => {
   assert(instance || config, 'Connection can not be created because config does not exist');
   assert(config.hostname);
