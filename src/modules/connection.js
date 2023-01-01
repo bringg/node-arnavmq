@@ -4,6 +4,27 @@ const packageVersion = require('../../package.json').version;
 
 const DEFAULT_CHANNEL = 'DEFAULT_CHANNEL';
 
+const getChannelByQueue = (prefetch, queue) => {
+  if (prefetch && queue) {
+    return queue;
+  }
+  return DEFAULT_CHANNEL;
+};
+
+const getPrefetchFromChannelOptions = (channelOptions) => {
+  if (channelOptions && channelOptions.prefetch) {
+    return channelOptions.prefetch;
+  }
+  return null;
+};
+
+const getChannelOptions = (options) => {
+  if (options) {
+    return options.channel;
+  }
+  return undefined;
+};
+
 class Connection {
   constructor(config) {
     this._config = config;
@@ -57,11 +78,12 @@ class Connection {
    * Since RabbitMQ advise to open one channel by process and node is mono-core, we keep only 1 channel for the whole connection.
    * @return {Promise} A promise that resolve with an amqp.node channel object
   */
-  getChannel(queue, prefetch) {
+  getChannel(queue, options) {
     const url = this._config.host;
     const connection = this.connections[url];
-
-    const channelToUse = prefetch && queue ? queue : DEFAULT_CHANNEL;
+    const channelOptions = getChannelOptions(options);
+    const prefetch = channelOptions ? channelOptions.prefetch : undefined;
+    const channelToUse = getChannelByQueue(prefetch, queue);
 
     // cache handling, if channel already opened, return it
     if (connection && connection.channels[channelToUse]) {
@@ -101,8 +123,8 @@ class Connection {
    * Connect to AMQP and create channel
    * @return {Promise} A promise that resolve with an amqp.node channel object
    */
-  get(queue, prefetch) {
-    return this.getConnection().then(() => this.getChannel(queue, prefetch));
+  get(queue, options) {
+    return this.getConnection().then(() => this.getChannel(queue, options));
   }
 
   /**
@@ -127,8 +149,13 @@ class Connection {
 
 let instance;
 
+module.exports.getChannelToUse = (options, queue) => {
+  const channelOptions = getChannelOptions(options);
+  const prefetch = getPrefetchFromChannelOptions(channelOptions);
+  return getChannelByQueue(prefetch, queue);
+};
 module.exports.DEFAULT_CHANNEL = DEFAULT_CHANNEL;
-module.exports = (config) => {
+module.exports.instance = (config) => {
   assert(instance || config, 'Connection can not be created because config does not exist');
   assert(config.hostname);
   if (!instance) {

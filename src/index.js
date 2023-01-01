@@ -51,5 +51,5 @@ module.exports = (config) => {
   }
 
   configuration.prefetch = parseInt(configuration.prefetch, 10) || 0;
-  return require('./modules/arnavmq')(connection(configuration));
+  return require('./modules/arnavmq')(connection.instance(configuration));
 };

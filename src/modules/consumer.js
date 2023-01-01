@@ -1,14 +1,13 @@
-const _ = require('lodash');
 const parsers = require('./message-parsers');
 const utils = require('./utils');
-const { DEFAULT_CHANNEL } = require('./connection');
+const conn = require('./connection');
 
 const loggerAlias = 'arnav_mq:consumer';
 
 class Consumer {
   constructor(connection) {
     this._connection = connection;
-    this.channels = { [DEFAULT_CHANNEL]: null };
+    this.channels = { [conn.DEFAULT_CHANNEL]: null };
   }
 
   set connection(value) {
@@ -39,7 +38,7 @@ class Consumer {
           message: `${loggerAlias} [${queue}][${msg.properties.replyTo}] > ${content}`,
           params: { content }
         });
-        this.channels[DEFAULT_CHANNEL].sendToQueue(msg.properties.replyTo, parsers.out(content, options), options);
+        this.channels[conn.DEFAULT_CHANNEL].sendToQueue(msg.properties.replyTo, parsers.out(content, options), options);
       }
 
       return msg;
@@ -67,18 +66,15 @@ class Consumer {
       // default message options
       options = defaultOptions;
     } else {
-      _.extend(defaultOptions, options);
-      options = defaultOptions;
+      options = { ...defaultOptions, ...options };
     }
-
-    const prefetch = options.channel && options.channel.prefetch ? options.channel.prefetch : null;
 
     // consumer gets a suffix if one is set on the configuration, to suffix all queues names
     // ex: service-something with suffix :ci becomes service-suffix:ci etc.
     const suffixedQueue = `${queue}${this._connection.config.consumerSuffix || ''}`;
 
-    return this._connection.get(queue, prefetch).then((channel) => {
-      const channelToUse = prefetch && queue ? queue : DEFAULT_CHANNEL;
+    return this._connection.get(queue, options).then((channel) => {
+      const channelToUse = conn.getChannelToUse(options, queue);
       this.channels[channelToUse] = channel;
 
       // when channel is closed, we want to be sure we recreate the queue ASAP so we trigger a reconnect by recreating the consumer
