@@ -38,11 +38,24 @@ class Consumer {
           message: `${loggerAlias} [${queue}][${msg.properties.replyTo}] > ${content}`,
           params: { content }
         });
+        if (!this.channels[conn.DEFAULT_CHANNEL]) {
+          this.initDefaultChannel(queue);
+        }
         this.channels[conn.DEFAULT_CHANNEL].sendToQueue(msg.properties.replyTo, parsers.out(content, options), options);
       }
 
       return msg;
     };
+  }
+
+  initDefaultChannel() {
+    this._connection.get().then((channel) => {
+      this.channels[conn.DEFAULT_CHANNEL] = channel;
+      this.channels[conn.DEFAULT_CHANNEL].addListener('close', () => {
+        this.initDefaultChannel();
+      });
+    }).catch(() => utils.timeoutPromise(this._connection.config.timeout)
+      .then(() => this.initDefaultChannel()));
   }
 
   /**

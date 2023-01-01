@@ -5,7 +5,7 @@ const docker = require('./docker');
 const utils = require('../src/modules/utils');
 
 const fixtures = {
-  queues: ['rpc-queue-0', 'rpc-queue-1', 'rpc-queue-2']
+  queues: ['rpc-queue-0', 'rpc-queue-1', 'rpc-queue-2', 'rpc-queue-3']
 };
 
 describe('Producer/Consumer RPC messaging:', () => {
@@ -55,4 +55,10 @@ describe('Producer/Consumer RPC messaging:', () => {
       timeout: 500
     }))
     .catch((err) => assert.equal(err.name, 'SyntaxError')));
+  it('should be able to consume with custom prefetch & reply msg', () => arnavmq.consumer.consume(fixtures.queues[3], { channel: { prefetch: 2 } }, () => ({ powerRangerColor: 'Yellow' }))
+    .then(() => arnavmq.producer.produce(fixtures.queues[3], { msg: uuid.v4() }, { rpc: true }))
+    .then((response) => {
+      assert.equal(typeof response, 'object');
+      assert.equal(response.powerRangerColor, 'Yellow');
+    }));
 });
