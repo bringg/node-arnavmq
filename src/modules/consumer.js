@@ -39,9 +39,10 @@ class Consumer {
           params: { content }
         });
         if (!this.channels[conn.DEFAULT_CHANNEL]) {
-          this.initDefaultChannel(queue);
+          this.initDefaultChannel(queue).then((channel) => {channel.sendToQueue(msg.properties.replyTo, parsers.out(content, options), options);});
+        } else {
+          this.channels[conn.DEFAULT_CHANNEL].sendToQueue(msg.properties.replyTo, parsers.out(content, options), options);
         }
-        this.channels[conn.DEFAULT_CHANNEL].sendToQueue(msg.properties.replyTo, parsers.out(content, options), options);
       }
 
       return msg;

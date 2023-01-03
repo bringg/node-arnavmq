@@ -2,7 +2,7 @@ const amqp = require('amqplib');
 const assert = require('assert');
 const packageVersion = require('../../package.json').version;
 
-const DEFAULT_CHANNEL = 'DEFAULT_CHANNEL';
+const DEFAULT_CHANNEL = Symbol('DEFAULT_CHANNEL');
 
 const getChannelByQueue = (prefetch, queue) => {
   if (prefetch && queue) {
@@ -74,8 +74,9 @@ class Connection {
   }
 
   /**
-   * Create the channel on the broker, once connection is successfuly opened.
-   * Since RabbitMQ advise to open one channel by process and node is mono-core, we keep only 1 channel for the whole connection.
+   * Create the channel on the broker, once connection is successfully opened.
+   * By default, since RabbitMQ advise to open one channel by process and node is mono-core, we keep only 1 channel for the whole connection.
+   * If prefetch was given in options.channel.prefetch, it create a different channels per queue with the given prefetch.
    * @return {Promise} A promise that resolve with an amqp.node channel object
   */
   getChannel(queue, options) {

@@ -55,10 +55,24 @@ describe('Producer/Consumer RPC messaging:', () => {
       timeout: 500
     }))
     .catch((err) => assert.equal(err.name, 'SyntaxError')));
-  it('should be able to consume with custom prefetch & reply msg', () => arnavmq.consumer.consume(fixtures.queues[3], { channel: { prefetch: 2 } }, () => ({ powerRangerColor: 'Yellow' }))
+  it('should be able to consume with custom prefetch & reply msg', () => arnavmq.consumer.consume(fixtures.queues[3], { channel: { prefetch: 11 } }, () => ({ powerRangerColor: 'Yellow' }))
     .then(() => arnavmq.producer.produce(fixtures.queues[3], { msg: uuid.v4() }, { rpc: true }))
     .then((response) => {
       assert.equal(typeof response, 'object');
       assert.equal(response.powerRangerColor, 'Yellow');
     }));
+
+    it('should be able to consume multiple times with same custom prefetch & reply msg', () => arnavmq.consumer.consume(fixtures.queues[3], { channel: { prefetch: 11 } }, () => ({ powerRangerColor: 'Yellow' }))
+        .then(() => arnavmq.producer.produce(fixtures.queues[3], { msg: uuid.v4() }, { rpc: true }))
+        .then((response) => {
+            assert.equal(typeof response, 'object');
+            assert.equal(response.powerRangerColor, 'Yellow');
+        }));
+
+    it('should be able to consume multiple times without prefetch & reply msg', () => arnavmq.consumer.consume(fixtures.queues[3], { }, () => ({ powerRangerColor: 'Yellow' }))
+        .then(() => arnavmq.producer.produce(fixtures.queues[3], { msg: uuid.v4() }, { rpc: true }))
+        .then((response) => {
+            assert.equal(typeof response, 'object');
+            assert.equal(response.powerRangerColor, 'Yellow');
+        }));
 });
