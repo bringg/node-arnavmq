@@ -4,6 +4,10 @@ const packageVersion = require('../../package.json').version;
 
 const DEFAULT_CHANNEL = Symbol('DEFAULT_CHANNEL');
 
+class ChannelError extends Error {}
+
+class ChannelAlreadyExistError extends ChannelError {}
+
 const getChannelByQueue = (prefetch, queue) => {
   if (prefetch && queue) {
     return queue;
@@ -88,24 +92,30 @@ class Connection {
 
     // cache handling, if channel already opened, return it
     if (connection && connection.channels[channelToUse]) {
-      if (prefetch) {
-        throw new Error(`Channel already exist for queue ${queue}`);
+      const existingConnection = connection.channels[channelToUse];
+      const existingPrefetch = existingConnection.options && existingConnection.options.prefetch ? existingConnection.options.prefetch : this._config.prefetch;
+      if (prefetch && existingPrefetch !== prefetch) {
+        throw new ChannelAlreadyExistError(`Channel already exist for queue ${queue} with prefetch ${existingPrefetch}`);
       }
-      return Promise.resolve(connection.channels[channelToUse]);
+      return Promise.resolve(connection.channels[channelToUse].channel);
     }
 
-    connection.channels[channelToUse] = connection.conn.createChannel()
+    const createdChannel = connection.conn.createChannel()
       .then((channel) => {
         channel.prefetch(prefetch || this._config.prefetch);
 
         // on error we remove the channel so the next call will recreate it (auto-reconnect are handled by connection users)
-        channel.on('close', () => { delete connection.channels[channelToUse]; });
+        channel.on('close', () => {
+          delete connection.channels[channelToUse].channel;
+          delete connection.channels[channelToUse];
+        });
         channel.on('error', this._onError.bind(this));
 
-        connection.channels[channelToUse] = channel;
+        connection.channels[channelToUse] = { channel, options: channelOptions };
         return channel;
       });
-    return connection.channels[channelToUse];
+    connection.channels[channelToUse] = { channel: createdChannel, options: channelOptions };
+    return connection.channels[channelToUse].channel;
   }
 
   /**
@@ -150,11 +160,13 @@ class Connection {
 
 let instance;
 
+module.exports.getChannelOptions = getChannelOptions;
 module.exports.getChannelToUse = (options, queue) => {
   const channelOptions = getChannelOptions(options);
   const prefetch = getPrefetchFromChannelOptions(channelOptions);
   return getChannelByQueue(prefetch, queue);
 };
+module.exports.ChannelAlreadyExistError = ChannelAlreadyExistError;
 module.exports.DEFAULT_CHANNEL = DEFAULT_CHANNEL;
 module.exports.instance = (config) => {
   assert(instance || config, 'Connection can not be created because config does not exist');

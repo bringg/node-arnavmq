@@ -39,7 +39,7 @@ class Consumer {
           params: { content }
         });
         if (!this.channels[conn.DEFAULT_CHANNEL]) {
-          this.initDefaultChannel(queue).then((channel) => {channel.sendToQueue(msg.properties.replyTo, parsers.out(content, options), options);});
+          this.initDefaultChannel(queue).then((channel) => { channel.sendToQueue(msg.properties.replyTo, parsers.out(content, options), options); });
         } else {
           this.channels[conn.DEFAULT_CHANNEL].sendToQueue(msg.properties.replyTo, parsers.out(content, options), options);
         }
@@ -137,8 +137,14 @@ class Consumer {
         return true;
       });
       // in case of any error creating the channel, wait for some time and then try to reconnect again (to avoid overflow)
-    }).catch(() => utils.timeoutPromise(this._connection.config.timeout)
-      .then(() => this.subscribe(queue, options, callback)));
+    }).catch((e) => {
+      if (e instanceof conn.ChannelAlreadyExistError) {
+        throw e;
+      } else {
+        utils.timeoutPromise(this._connection.config.timeout)
+          .then(() => this.subscribe(queue, options, callback));
+      }
+    });
   }
 }
 

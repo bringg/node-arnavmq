@@ -62,17 +62,25 @@ describe('Producer/Consumer RPC messaging:', () => {
       assert.equal(response.powerRangerColor, 'Yellow');
     }));
 
-    it('should be able to consume multiple times with same custom prefetch & reply msg', () => arnavmq.consumer.consume(fixtures.queues[3], { channel: { prefetch: 11 } }, () => ({ powerRangerColor: 'Yellow' }))
-        .then(() => arnavmq.producer.produce(fixtures.queues[3], { msg: uuid.v4() }, { rpc: true }))
-        .then((response) => {
-            assert.equal(typeof response, 'object');
-            assert.equal(response.powerRangerColor, 'Yellow');
-        }));
+  it(
+    'should be able to consume multiple times with same custom prefetch & reply msg',
+    () => arnavmq.consumer.consume(fixtures.queues[3], { channel: { prefetch: 11 } }, () => ({ powerRangerColor: 'Yellow' }))
+      .then(() => arnavmq.producer.produce(fixtures.queues[3], { msg: uuid.v4() }, { rpc: true }))
+      .then((response) => {
+        assert.equal(typeof response, 'object');
+        assert.equal(response.powerRangerColor, 'Yellow');
+      })
+  );
 
-    it('should be able to consume multiple times without prefetch & reply msg', () => arnavmq.consumer.consume(fixtures.queues[3], { }, () => ({ powerRangerColor: 'Yellow' }))
-        .then(() => arnavmq.producer.produce(fixtures.queues[3], { msg: uuid.v4() }, { rpc: true }))
-        .then((response) => {
-            assert.equal(typeof response, 'object');
-            assert.equal(response.powerRangerColor, 'Yellow');
-        }));
+  it('should be able to consume multiple times without prefetch & reply msg', () => arnavmq.consumer.consume(fixtures.queues[3], { }, () => ({ powerRangerColor: 'Yellow' }))
+    .then(() => arnavmq.producer.produce(fixtures.queues[3], { msg: uuid.v4() }, { rpc: true }))
+    .then((response) => {
+      assert.equal(typeof response, 'object');
+      assert.equal(response.powerRangerColor, 'Yellow');
+    }));
+
+  it(
+    'should not be able to consume multiple times with different custom prefetch',
+    () => assert.rejects(() => arnavmq.consumer.consume(fixtures.queues[3], { channel: { prefetch: 7 } }, () => ({ powerRangerColor: 'Yellow' })))
+  );
 });
