@@ -39,7 +39,7 @@ class Consumer {
           params: { content }
         });
         if (!this.channels[conn.DEFAULT_CHANNEL]) {
-          this.initDefaultChannel(queue).then((channel) => { channel.sendToQueue(msg.properties.replyTo, parsers.out(content, options), options); });
+          this.initDefaultChannel().then((channel) => { channel.sendToQueue(msg.properties.replyTo, parsers.out(content, options), options); });
         } else {
           this.channels[conn.DEFAULT_CHANNEL].sendToQueue(msg.properties.replyTo, parsers.out(content, options), options);
         }
@@ -50,11 +50,12 @@ class Consumer {
   }
 
   initDefaultChannel() {
-    this._connection.get().then((channel) => {
+    return this._connection.get().then((channel) => {
       this.channels[conn.DEFAULT_CHANNEL] = channel;
       this.channels[conn.DEFAULT_CHANNEL].addListener('close', () => {
         this.initDefaultChannel();
       });
+      return channel;
     }).catch(() => utils.timeoutPromise(this._connection.config.timeout)
       .then(() => this.initDefaultChannel()));
   }

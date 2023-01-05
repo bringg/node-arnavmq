@@ -16,7 +16,6 @@ let letters = 0;
 describe('producer/consumer', function () {
   before(docker.rm);
   before(() => docker.run().then(docker.start));
-
   describe('msg delevering', () => {
     before(() => arnavmq.consumer.consume(fixtures.queues[0], () => {
       letters -= 1;
