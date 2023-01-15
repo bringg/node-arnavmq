@@ -1,3 +1,4 @@
+const { ChannelAlreadyExistsError } = require('./channels');
 const parsers = require('./message-parsers');
 const utils = require('./utils');
 
@@ -126,8 +127,12 @@ class Consumer {
         });
         // in case of any error creating the channel, wait for some time and then try to reconnect again (to avoid overflow)
       })
-      .catch(() => {
-        utils.timeoutPromise(this._connection.config.timeout).then(() => this.subscribe(queue, options, callback));
+      .catch((err) => {
+        if (err instanceof ChannelAlreadyExistsError) {
+          throw err;
+        } else {
+          utils.timeoutPromise(this._connection.config.timeout).then(() => this.subscribe(queue, options, callback));
+        }
       });
   }
 }

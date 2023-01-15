@@ -1,6 +1,6 @@
 const amqp = require('amqplib');
 const assert = require('assert');
-const Channels = require('./channels');
+const { Channels } = require('./channels');
 const packageVersion = require('../../package.json').version;
 
 class Connection {

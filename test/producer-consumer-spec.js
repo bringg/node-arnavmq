@@ -3,7 +3,7 @@ const uuid = require('uuid');
 const sinon = require('sinon');
 const arnavmq = require('../src/index')();
 const utils = require('../src/modules/utils');
-const Channels = require('../src/modules/channels');
+const { Channels, ChannelAlreadyExistsError } = require('../src/modules/channels');
 
 const fixtures = {
   queues: ['test-queue-0', 'test-queue-1', 'test-queue-2', 'test-queue-3'],
@@ -45,15 +45,14 @@ describe('producer/consumer', function () {
         const queueName = 'use-custom-prefetch';
         const prefetch = 6;
 
-        const getChannel = sandbox.spy(arnavmq.connection, 'getChannel');
-        const getChannelDefault = sandbox.spy(Channels.prototype, 'defaultChannel');
+        const conn = await arnavmq.connection.getConnection();
 
         const fakeChannel = createFakeChannel();
-        sandbox.stub(Channels.prototype, '_get').callsFake(function (k, _config) {
-          _config(fakeChannel);
-          return Promise.resolve(fakeChannel);
-        });
         sandbox.spy(fakeChannel, 'prefetch');
+        sandbox.stub(conn.conn, 'createChannel').resolves(fakeChannel);
+
+        const getChannel = sandbox.spy(arnavmq.connection, 'getChannel');
+        const getChannelDefault = sandbox.spy(Channels.prototype, 'defaultChannel');
 
         await arnavmq.consumer.consume(queueName, { channel: { prefetch } }, (message) =>
           Promise.resolve(`${message}-test`)
@@ -62,6 +61,23 @@ describe('producer/consumer', function () {
         sinon.assert.calledWith(getChannel, queueName, { prefetch });
         sinon.assert.calledWith(fakeChannel.prefetch, prefetch);
         sinon.assert.notCalled(getChannelDefault);
+      });
+
+      it('throws when existing channel with custom prefetch already exists', async () => {
+        const queueName = 'use-custom-prefetch-duplicate';
+        const prefetch = 6;
+
+        // This is the first one
+        await arnavmq.consumer.consume(queueName, { channel: { prefetch } }, (message) =>
+          Promise.resolve(`${message}-test`)
+        );
+
+        await assert.rejects(async () => {
+          // This is the second one
+          await arnavmq.consumer.consume(queueName, { channel: { prefetch: prefetch + 1 } }, (message) =>
+            Promise.resolve(`${message}-test`)
+          );
+        }, ChannelAlreadyExistsError);
       });
     });
   });
