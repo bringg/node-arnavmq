@@ -42,11 +42,14 @@ module.exports = (config) => {
      */
     logger: utils.emptyLogger,
 
-    ...config
+    ...config,
   };
 
   if (configuration.transport !== utils.emptyLogger) {
-    process.emitWarning("The 'transport' configuration option is deprecated. Please use the 'logger' option instead.", 'DeprecationWarning');
+    process.emitWarning(
+      "The 'transport' configuration option is deprecated. Please use the 'logger' option instead.",
+      'DeprecationWarning'
+    );
   }
 
   configuration.prefetch = parseInt(configuration.prefetch, 10) || 0;

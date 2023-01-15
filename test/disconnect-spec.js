@@ -8,7 +8,9 @@ const utils = require('../src/modules/utils');
 /* eslint prefer-arrow-callback: "off" */
 describe('disconnections', function () {
   let arnavmq;
-  beforeEach(() => { arnavmq = arnavmqFactory(); });
+  beforeEach(() => {
+    arnavmq = arnavmqFactory();
+  });
   const sandbox = sinon.createSandbox();
   afterEach(() => sandbox.restore());
   before(docker.rm);
@@ -19,12 +21,13 @@ describe('disconnections', function () {
 
     it('should be able to re-register to consume messages between connection failures', (done) => {
       let counter = 0;
-      arnavmq.consumer.consume(queue, () => {
-        counter += 1;
-        if (counter === 50) {
-          done();
-        }
-      })
+      arnavmq.consumer
+        .consume(queue, () => {
+          counter += 1;
+          if (counter === 50) {
+            done();
+          }
+        })
         .then(() => arnavmq.producer.produce(queue))
         .then(() => utils.timeoutPromise(500))
         .then(() => assert(counter))
@@ -65,10 +68,11 @@ describe('disconnections', function () {
         if (cnt === 50) done();
       };
       arnavmq.connection._config.rpcTimeout = 0;
-      arnavmq.consumer.consume(queue, () => {
-        counter += 1;
-        return counter;
-      })
+      arnavmq.consumer
+        .consume(queue, () => {
+          counter += 1;
+          return counter;
+        })
         .then(() => arnavmq.producer.produce(queue, undefined, { rpc: true }).then(checkReceived))
         .then(() => utils.timeoutPromise(500))
         .then(() => assert(counter))

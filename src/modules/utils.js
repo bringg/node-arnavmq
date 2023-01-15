@@ -5,7 +5,7 @@ const emptyLogger = {
   debug: empty,
   warn: empty,
   error: empty,
-  log: empty
+  log: empty,
 };
 
 module.exports = {
@@ -26,7 +26,8 @@ module.exports = {
    * @param  {number} timer How much ws to wait
    * @return {Promise}      A Promise that will resolve when timer is expired
    */
-  timeoutPromise: (timer) => new Promise((resolve) => {
-    setTimeout(resolve, timer);
-  })
+  timeoutPromise: (timer) =>
+    new Promise((resolve) => {
+      setTimeout(resolve, timer);
+    }),
 };

@@ -1,16 +1,15 @@
 {
-  "extends": ["eslint-config-airbnb-base"],
+  "extends": ["eslint-config-airbnb-base", "eslint-config-prettier"],
   "env": {
-    "node":true,
-    "mocha":true,
+    "node": true,
+    "mocha": true,
     "es6": true,
-    "mongo":true
+    "mongo": true
   },
   "rules": {
-    "implicit-arrow-linebreak": "warn",
     "comma-dangle": 0,
     "max-classes-per-file": 0,
-    "max-len": ["error", {"code": 190, "ignoreComments": true, "ignoreUrls": true}],
+    "max-len": ["error", { "code": 190, "ignoreComments": true, "ignoreUrls": true }],
     "no-underscore-dangle": [1, { "allow": ["_config", "_connection", "_maxListeners"], "allowAfterThis": true }]
   }
 }

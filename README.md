@@ -62,12 +62,11 @@ arnavmq.subscribe('queue:name', function (msg) {
 You can create RPC requests easily by adding the `rpc: true` option to the `produce` call:
 
 ```javascript
-arnavmq.subscribe('queue:name', function() {
+arnavmq.subscribe('queue:name', function () {
   return 'hello world!'; // you can also return a promise if you want to do async stuff
 });
 
-arnavmq.publish('queue:name', { message: 'content' }, { rpc: true, timeout: 1000 })
-.then(function(consumerResponse) {
+arnavmq.publish('queue:name', { message: 'content' }, { rpc: true, timeout: 1000 }).then(function (consumerResponse) {
   console.log(consumerResponse); // prints hello world!
 });
 ```
