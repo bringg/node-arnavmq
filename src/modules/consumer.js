@@ -67,7 +67,7 @@ class Consumer {
     if (typeof options === 'function') {
       callback = options;
       // default message options
-      options = { persistent: true, durable: true };
+      options = { persistent: true, durable: true, channel: {} };
     }
 
     // consumer gets a suffix if one is set on the configuration, to suffix all queues names
@@ -75,7 +75,7 @@ class Consumer {
     const suffixedQueue = `${queue}${this._connection.config.consumerSuffix || ''}`;
 
     return this._connection
-      .getDefaultChannel()
+      .getChannel(queue, options.channel || {})
       .then((channel) => {
         // when channel is closed, we want to be sure we recreate the queue ASAP so we trigger a reconnect by recreating the consumer
         channel.addListener('close', () => {

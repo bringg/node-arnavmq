@@ -69,6 +69,11 @@ class Connection {
     });
   }
 
+  async getChannel(queue, config) {
+    const connection = await this.getConnection();
+    return connection.channels.get(queue, config);
+  }
+
   async getDefaultChannel() {
     const connection = await this.getConnection();
     return connection.channels.defaultChannel();
