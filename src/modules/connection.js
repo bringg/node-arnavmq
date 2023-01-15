@@ -12,7 +12,7 @@ class Connection {
   /**
    * Connect to the broker. We keep only 1 connection for each connection string provided in config, as advised by RabbitMQ
    * @return {Promise} A promise that resolve with an amqp.node connection object
-  */
+   */
   getConnection() {
     const url = this._config.host;
     const { hostname } = this._config;
@@ -25,28 +25,31 @@ class Connection {
     // prepare the connection internal object, and reset channel if connection has been closed
     this.connections[url] = {
       conn: null,
-      channel: null
+      channel: null,
     };
     connection = this.connections[url];
-    connection.conn = amqp.connect(url, {
-      clientProperties: {
-        hostname,
-        arnavmq: packageVersion,
-        startedAt: this.startedAt,
-        connectedAt: new Date().toISOString()
-      }
-    }).then((conn) => {
-      // on connection close, delete connection
-      conn.on('close', () => {
-        delete connection.conn;
+    connection.conn = amqp
+      .connect(url, {
+        clientProperties: {
+          hostname,
+          arnavmq: packageVersion,
+          startedAt: this.startedAt,
+          connectedAt: new Date().toISOString(),
+        },
+      })
+      .then((conn) => {
+        // on connection close, delete connection
+        conn.on('close', () => {
+          delete connection.conn;
+        });
+        conn.on('error', this._onError.bind(this));
+        connection.conn = conn;
+        return conn;
+      })
+      .catch((e) => {
+        connection.conn = null;
+        throw e;
       });
-      conn.on('error', this._onError.bind(this));
-      connection.conn = conn;
-      return conn;
-    }).catch((e) => {
-      connection.conn = null;
-      throw e;
-    });
     return connection.conn;
   }
 
@@ -54,7 +57,7 @@ class Connection {
    * Create the channel on the broker, once connection is successfuly opened.
    * Since RabbitMQ advise to open one channel by process and node is mono-core, we keep only 1 channel for the whole connection.
    * @return {Promise} A promise that resolve with an amqp.node channel object
-  */
+   */
   getChannel() {
     const url = this._config.host;
     const { prefetch } = this._config;
@@ -65,17 +68,18 @@ class Connection {
       return Promise.resolve(connection.chann);
     }
 
-    connection.chann = connection.conn.createChannel()
-      .then((channel) => {
-        channel.prefetch(prefetch);
+    connection.chann = connection.conn.createChannel().then((channel) => {
+      channel.prefetch(prefetch);
 
-        // on error we remove the channel so the next call will recreate it (auto-reconnect are handled by connection users)
-        channel.on('close', () => { delete connection.chann; });
-        channel.on('error', this._onError.bind(this));
-
-        connection.chann = channel;
-        return channel;
+      // on error we remove the channel so the next call will recreate it (auto-reconnect are handled by connection users)
+      channel.on('close', () => {
+        delete connection.chann;
       });
+      channel.on('error', this._onError.bind(this));
+
+      connection.chann = channel;
+      return channel;
+    });
     return connection.chann;
   }
 
@@ -87,7 +91,7 @@ class Connection {
     this._config.transport.error(error);
     this._config.logger.error({
       message: error.message,
-      error
+      error,
     });
   }
 

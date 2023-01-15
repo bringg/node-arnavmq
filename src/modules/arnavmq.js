@@ -51,12 +51,12 @@ module.exports = (connection) => {
 
   const consumer = {
     consume: instance.consume.bind(instance),
-    subscribe: instance.subscribe.bind(instance)
+    subscribe: instance.subscribe.bind(instance),
   };
 
   const producer = {
     produce: instance.produce.bind(instance),
-    publish: instance.publish.bind(instance)
+    publish: instance.publish.bind(instance),
   };
 
   return {
@@ -66,6 +66,6 @@ module.exports = (connection) => {
     produce: producer.produce,
     publish: producer.publish,
     consumer,
-    producer
+    producer,
   };
 };

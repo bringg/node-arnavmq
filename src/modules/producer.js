@@ -50,27 +50,21 @@ class Producer {
 
       if (responsePromise === undefined) {
         const error = new Error(`Receiving RPC message from previous session: callback no more in memory. ${queue}`);
-        this._connection.config.transport.warn(
-          loggerAlias,
-          error
-        );
+        this._connection.config.transport.warn(loggerAlias, error);
         this._connection.config.logger.warn({
           message: `${loggerAlias} ${error.message}`,
           error,
-          params: { queue, rpcQueue }
+          params: { queue, rpcQueue },
         });
 
         return;
       }
 
       // if we found one, we execute the callback and delete it because it will never be received again anyway
-      this._connection.config.transport.info(
-        loggerAlias,
-        `[${queue}] < answer`
-      );
+      this._connection.config.transport.info(loggerAlias, `[${queue}] < answer`);
       this._connection.config.logger.debug({
         message: `${loggerAlias} [${queue}] < answer`,
-        params: { queue }
+        params: { queue },
       });
 
       try {
@@ -100,30 +94,30 @@ class Producer {
     const resQueue = `${queue}:${this._connection.config.hostname}:${process.pid}:res`;
     rpcQueue.queue = this._connection
       .get()
-      .then((channel) => channel
-        .assertQueue(resQueue, {
-          durable: true,
-          exclusive: true,
-        })
-        .then((q) => {
-          rpcQueue.queue = q.queue;
+      .then((channel) =>
+        channel
+          .assertQueue(resQueue, {
+            durable: true,
+            exclusive: true,
+          })
+          .then((q) => {
+            rpcQueue.queue = q.queue;
 
-          // if channel is closed, we want to make sure we cleanup the queue so future calls will recreate it
-          this._connection.addListener('close', () => {
-            delete rpcQueue.queue;
-            this.createRpcQueue(queue);
-          });
+            // if channel is closed, we want to make sure we cleanup the queue so future calls will recreate it
+            this._connection.addListener('close', () => {
+              delete rpcQueue.queue;
+              this.createRpcQueue(queue);
+            });
 
-          return channel.consume(q.queue, this.maybeAnswer(queue), {
-            noAck: true,
-          });
-        })
-        .then(() => rpcQueue.queue))
+            return channel.consume(q.queue, this.maybeAnswer(queue), {
+              noAck: true,
+            });
+          })
+          .then(() => rpcQueue.queue)
+      )
       .catch(() => {
         delete rpcQueue.queue;
-        return utils
-          .timeoutPromise(this._connection.config.timeout)
-          .then(() => this.createRpcQueue(queue));
+        return utils.timeoutPromise(this._connection.config.timeout).then(() => this.createRpcQueue(queue));
       });
 
     return rpcQueue.queue;
@@ -236,14 +230,10 @@ class Producer {
         // undefined can't be serialized/buffered :p
         if (!message) message = null;
 
-        this._connection.config.transport.info(
-          loggerAlias,
-          `[${queue}] > `,
-          message
-        );
+        this._connection.config.transport.info(loggerAlias, `[${queue}] > `, message);
         this._connection.config.logger.debug({
           message: `${loggerAlias} [${queue}] > ${message}`,
-          params: { queue, message }
+          params: { queue, message },
         });
 
         return this.checkRpc(queue, parsers.out(message, settings), settings);
@@ -258,7 +248,7 @@ class Producer {
         this._connection.config.logger.error({
           message: `${loggerAlias} Failed sending message to queue ${queue}: ${error.message}`,
           error,
-          params: { queue, message }
+          params: { queue, message },
         });
         return utils
           .timeoutPromise(this._connection.config.timeout)

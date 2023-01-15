@@ -13,9 +13,14 @@
   ],
   "main": "src/index.js",
   "scripts": {
-    "lint": "eslint .",
+    "lint": "eslint . && prettier -c .",
+    "format": "eslint --fix . && prettier --write .",
     "cover": "test -d .nyc_output && nyc report --reporter lcov",
     "test": "nyc mocha --recursive --timeout=30000 --exit"
+  },
+  "prettier": {
+    "singleQuote": true,
+    "printWidth": 120
   },
   "repository": {
     "type": "git",
@@ -37,9 +42,11 @@
     "child-process-promise": "^2.2.1",
     "eslint": "^8.25.0",
     "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-config-prettier": "^8.6.0",
     "eslint-plugin-import": "^2.26.0",
     "mocha": "^10.0.0",
     "nyc": "^15.1.0",
+    "prettier": "^2.8.3",
     "sinon": "^14.0.1"
   },
   "engines": {
