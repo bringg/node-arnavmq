@@ -1,7 +1,9 @@
 const assert = require('assert');
 const uuid = require('uuid');
+const sinon = require('sinon');
 const arnavmq = require('../src/index')();
 const utils = require('../src/modules/utils');
+const Channels = require('../src/modules/channels');
 
 const fixtures = {
   queues: ['test-queue-0', 'test-queue-1', 'test-queue-2', 'test-queue-3'],
@@ -10,9 +12,60 @@ const fixtures = {
 
 let letters = 0;
 
+function createFakeChannel() {
+  return {
+    prefetch: () => {},
+    addListener: () => {},
+    assertQueue: () => Promise.resolve({}),
+    consume: () => {},
+  };
+}
+
 /* eslint func-names: "off" */
 /* eslint prefer-arrow-callback: "off" */
 describe('producer/consumer', function () {
+  const sandbox = sinon.createSandbox();
+  afterEach(() => sandbox.restore());
+
+  describe('consuming messages', () => {
+    context('prefetch', () => {
+      it('when no custom prefetch specified is uses default channel', async () => {
+        const queueName = 'use-default-prefetch';
+
+        const getChannel = sandbox.spy(arnavmq.connection, 'getChannel');
+        const getChannelDefault = sandbox.spy(Channels.prototype, 'defaultChannel');
+
+        await arnavmq.consumer.consume(queueName, (message) => Promise.resolve(`${message}-test`));
+
+        sinon.assert.calledWith(getChannel, queueName, {});
+        sinon.assert.calledOnce(getChannelDefault);
+      });
+
+      it('when custom prefetch specified is creates new channel', async () => {
+        const queueName = 'use-custom-prefetch';
+        const prefetch = 6;
+
+        const getChannel = sandbox.spy(arnavmq.connection, 'getChannel');
+        const getChannelDefault = sandbox.spy(Channels.prototype, 'defaultChannel');
+
+        const fakeChannel = createFakeChannel();
+        sandbox.stub(Channels.prototype, '_get').callsFake(function (k, _config) {
+          _config(fakeChannel);
+          return Promise.resolve(fakeChannel);
+        });
+        sandbox.spy(fakeChannel, 'prefetch');
+
+        await arnavmq.consumer.consume(queueName, { channel: { prefetch } }, (message) =>
+          Promise.resolve(`${message}-test`)
+        );
+
+        sinon.assert.calledWith(getChannel, queueName, { prefetch });
+        sinon.assert.calledWith(fakeChannel.prefetch, prefetch);
+        sinon.assert.notCalled(getChannelDefault);
+      });
+    });
+  });
+
   describe('msg delivering', () => {
     before(() =>
       arnavmq.consumer

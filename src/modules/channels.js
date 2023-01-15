@@ -12,7 +12,7 @@ class Channels {
     // If we don't have custom prefetch create a new channel
     const defaultPrefetch = this._config.prefetch;
     const requestedPrefetch = config.prefetch || defaultPrefetch;
-    if (typeof (requestedPrefetch) === 'number' && requestedPrefetch !== defaultPrefetch) {
+    if (typeof requestedPrefetch === 'number' && requestedPrefetch !== defaultPrefetch) {
       return this._get(queue, (channel) => {
         channel.prefetch(requestedPrefetch);
       });

@@ -52,9 +52,11 @@ class Connection {
       })
       .catch((e) => {
         connection.conn = null;
+        connection.channels = null;
         throw e;
       });
-    return connection;
+
+    return connection.conn;
   }
 
   /**
