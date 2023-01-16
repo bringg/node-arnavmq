@@ -51,13 +51,14 @@ describe('disconnections', function () {
     it('should retry producing only as configured', async () => {
       const retryCount = 3;
       arnavmq.connection._config.producerMaxRetries = retryCount;
+      arnavmq.connection._config.timeout = 100;
       const expectedError = 'Fake connection error.';
-      sandbox.stub(arnavmq.connection, 'getDefaultChannel').rejects(new Error(expectedError));
+      sandbox.stub(arnavmq.connection, 'get').rejects(new Error(expectedError));
 
       await assert.rejects(
         () => arnavmq.producer.produce(queue),
         (err) => {
-          sinon.assert.callCount(arnavmq.connection.getDefaultChannel, retryCount + 1);
+          sinon.assert.callCount(arnavmq.connection.get, retryCount + 1);
           assert.strictEqual(err.message, expectedError);
           return true;
         }

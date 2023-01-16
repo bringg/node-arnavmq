@@ -167,10 +167,11 @@ class Producer {
         // reply to us if you receive this message!
         options.replyTo = this.amqpRPCQueues[queue].queue;
 
-        this.publishOrSendToQueue(queue, msg, options);
         // defered promise that will resolve when response is received
         const responsePromise = pDefer();
         this.amqpRPCQueues[queue][corrId] = responsePromise;
+
+        this.publishOrSendToQueue(queue, msg, options);
 
         //  Using given timeout or default one
         const timeout = options.timeout || this._connection.config.rpcTimeout || 0;
