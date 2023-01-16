@@ -7,6 +7,7 @@
     "mongo": true
   },
   "rules": {
+    "no-await-in-loop": 0,
     "comma-dangle": 0,
     "max-classes-per-file": 0,
     "max-len": ["error", { "code": 190, "ignoreComments": true, "ignoreUrls": true }],

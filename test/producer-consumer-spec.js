@@ -2,7 +2,6 @@ const assert = require('assert');
 const uuid = require('uuid');
 const arnavmq = require('../src/index')();
 const utils = require('../src/modules/utils');
-const docker = require('./docker');
 
 const fixtures = {
   queues: ['test-queue-0', 'test-queue-1', 'test-queue-2', 'test-queue-3'],
@@ -14,10 +13,7 @@ let letters = 0;
 /* eslint func-names: "off" */
 /* eslint prefer-arrow-callback: "off" */
 describe('producer/consumer', function () {
-  before(docker.rm);
-  before(() => docker.run().then(docker.start));
-
-  describe('msg delevering', () => {
+  describe('msg delivering', () => {
     before(() =>
       arnavmq.consumer
         .consume(fixtures.queues[0], () => {

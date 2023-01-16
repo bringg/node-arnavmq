@@ -13,7 +13,7 @@
   ],
   "main": "src/index.js",
   "scripts": {
-    "lint": "eslint . && prettier -c .",
+    "lint": "eslint . && prettier -c . && dot-only-hunter test",
     "format": "eslint --fix . && prettier --write .",
     "cover": "test -d .nyc_output && nyc report --reporter lcov",
     "test": "nyc mocha --recursive --timeout=30000 --exit"
@@ -40,6 +40,7 @@
   },
   "devDependencies": {
     "child-process-promise": "^2.2.1",
+    "dot-only-hunter": "^1.0.3",
     "eslint": "^8.25.0",
     "eslint-config-airbnb-base": "^15.0.0",
     "eslint-config-prettier": "^8.6.0",

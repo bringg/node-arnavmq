@@ -1,5 +1,6 @@
 const assert = require('assert');
 const sinon = require('sinon');
+const pDefer = require('p-defer');
 const docker = require('./docker');
 const arnavmqFactory = require('../src/index');
 const utils = require('../src/modules/utils');
@@ -8,82 +9,92 @@ const utils = require('../src/modules/utils');
 /* eslint prefer-arrow-callback: "off" */
 describe('disconnections', function () {
   let arnavmq;
+
   beforeEach(() => {
     arnavmq = arnavmqFactory();
   });
+
   const sandbox = sinon.createSandbox();
   afterEach(() => sandbox.restore());
-  before(docker.rm);
-  before(() => docker.run().then(docker.start));
 
   describe('regular pub/sub', () => {
     const queue = 'disco:test';
 
-    it('should be able to re-register to consume messages between connection failures', (done) => {
+    it('should be able to re-register to consume messages between connection failures', async () => {
       let counter = 0;
-      arnavmq.consumer
-        .consume(queue, () => {
-          counter += 1;
-          if (counter === 50) {
-            done();
-          }
-        })
-        .then(() => arnavmq.producer.produce(queue))
-        .then(() => utils.timeoutPromise(500))
-        .then(() => assert(counter))
-        .then(docker.stop)
-        .then(() => {
-          for (let i = counter; i < 50; i += 1) {
-            arnavmq.producer.produce(queue);
-          }
-        })
-        .then(docker.start)
-        .catch(done);
+      const consumedAllPromise = pDefer();
+
+      await arnavmq.consumer.consume(queue, () => {
+        counter += 1;
+
+        if (counter === 50) {
+          consumedAllPromise.resolve();
+        }
+      });
+
+      await arnavmq.producer.produce(queue);
+      await utils.timeoutPromise(500);
+      assert.equal(counter, 1);
+      await docker.disconnectNetwork();
+
+      const producePromises = [];
+      for (let i = counter; i < 50; i += 1) {
+        producePromises.push(arnavmq.producer.produce(queue));
+      }
+
+      await docker.connectNetwork();
+      await Promise.all(producePromises);
+      await consumedAllPromise.promise;
+      assert.equal(counter, 50);
     });
 
     it('should retry producing only as configured', async () => {
       const retryCount = 3;
       arnavmq.connection._config.producerMaxRetries = retryCount;
       const expectedError = 'Fake connection error.';
-      sandbox.stub(arnavmq.connection, 'get').rejects(new Error(expectedError));
-      try {
-        await arnavmq.producer.produce(queue);
-        assert.fail('Should fail to produce and throw error, but did not.');
-      } catch (e) {
-        if (e instanceof assert.AssertionError) {
-          throw e;
+      sandbox.stub(arnavmq.connection, 'getDefaultChannel').rejects(new Error(expectedError));
+
+      await assert.rejects(
+        () => arnavmq.producer.produce(queue),
+        (err) => {
+          sinon.assert.callCount(arnavmq.connection.getDefaultChannel, retryCount + 1);
+          assert.strictEqual(err.message, expectedError);
+          return true;
         }
-        sinon.assert.callCount(arnavmq.connection.get, retryCount + 1);
-        assert.strictEqual(e.message, expectedError);
-      }
+      );
     });
   });
 
   describe('RPC', () => {
     const queue = 'disco:test:2';
 
-    it('should be able to re-register to consume messages between connection failures', (done) => {
+    it('should be able to re-register to consume messages between connection failures', async () => {
       let counter = 0;
-      const checkReceived = (cnt) => {
-        if (cnt === 50) done();
-      };
       arnavmq.connection._config.rpcTimeout = 0;
-      arnavmq.consumer
-        .consume(queue, () => {
-          counter += 1;
-          return counter;
-        })
-        .then(() => arnavmq.producer.produce(queue, undefined, { rpc: true }).then(checkReceived))
-        .then(() => utils.timeoutPromise(500))
-        .then(() => assert(counter))
-        .then(docker.stop)
-        .then(() => {
-          for (let i = counter; i < 50; i += 1) {
-            arnavmq.producer.produce(queue, undefined, { rpc: true }).then(checkReceived);
-          }
-        })
-        .then(docker.start)
-        .catch(done);
+
+      await arnavmq.consumer.consume(queue, () => {
+        counter += 1;
+        return counter;
+      });
+
+      await arnavmq.producer.produce(queue, undefined, { rpc: true });
+      await utils.timeoutPromise(500);
+      assert.equal(counter, 1);
+
+      await docker.disconnectNetwork();
+
+      const producePromises = [];
+      for (let i = counter; i < 50; i += 1) {
+        producePromises.push(arnavmq.producer.produce(queue, undefined, { rpc: true }));
+      }
+
+      await docker.connectNetwork();
+      let responses = await Promise.all(producePromises);
+      responses = responses.sort((a, b) => a - b);
+
+      const lastResponse = responses[responses.length - 1];
+      assert.equal(lastResponse, 50, 'last response should be 50');
+      assert.equal(counter, 50, 'consumer counter should be 50');
     });
   });
 });
