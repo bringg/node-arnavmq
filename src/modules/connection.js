@@ -14,14 +14,14 @@ class Connection {
    * Connect to the broker. We keep only 1 connection for each connection string provided in config, as advised by RabbitMQ
    * @return {Promise} A promise that resolve with an amqp.node connection object
    */
-  getConnection() {
+  async getConnection() {
     const url = this._config.host;
     const { hostname } = this._config;
     let connection = this.connections[url];
 
     // cache handling, if connection already opened, return it
     if (connection && connection.conn) {
-      return Promise.resolve(connection);
+      return connection;
     }
 
     // prepare the connection internal object, and reset channel if connection has been closed
@@ -31,7 +31,7 @@ class Connection {
       channels: null,
     };
     connection = this.connections[url];
-    connection.conn = amqp
+    connection.conn = await amqp
       .connect(url, {
         clientProperties: {
           hostname,
@@ -44,11 +44,12 @@ class Connection {
         // on connection close, delete connection
         conn.on('close', () => {
           delete connection.conn;
+          delete connection.channels;
         });
         conn.on('error', this._onError.bind(this));
         connection.conn = conn;
         connection.channels = new Channels(conn, this._config);
-        return connection;
+        return conn;
       })
       .catch((e) => {
         connection.conn = null;
@@ -56,7 +57,7 @@ class Connection {
         throw e;
       });
 
-    return connection.conn;
+    return connection;
   }
 
   /**

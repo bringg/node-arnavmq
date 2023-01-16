@@ -45,11 +45,11 @@ describe('producer/consumer', function () {
         const queueName = 'use-custom-prefetch';
         const prefetch = 6;
 
-        const conn = await arnavmq.connection.getConnection();
+        const connection = await arnavmq.connection.getConnection();
 
         const fakeChannel = createFakeChannel();
         sandbox.spy(fakeChannel, 'prefetch');
-        sandbox.stub(conn.conn, 'createChannel').resolves(fakeChannel);
+        sandbox.stub(connection.conn, 'createChannel').resolves(fakeChannel);
 
         const getChannel = sandbox.spy(arnavmq.connection, 'getChannel');
         const getChannelDefault = sandbox.spy(Channels.prototype, 'defaultChannel');
