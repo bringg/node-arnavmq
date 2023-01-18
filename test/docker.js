@@ -60,5 +60,4 @@ class Docker {
   }
 }
 
-const docker = new Docker();
-module.exports = docker;
+module.exports = new Docker();

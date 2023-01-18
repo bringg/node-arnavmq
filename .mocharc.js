@@ -1,5 +1,5 @@
 module.exports = {
-  timeout: 450000,
+  timeout: 30000,
   recursive: true,
   require: 'test/env.js',
 };
