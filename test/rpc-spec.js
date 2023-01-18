@@ -7,7 +7,7 @@ const fixtures = {
   queues: ['rpc-queue-0', 'rpc-queue-1', 'rpc-queue-2'],
 };
 
-describe('Producer/Consumer RPC messaging:', async () => {
+describe('Producer/Consumer RPC messaging:', () => {
   it('should be able to create a consumer that returns a message if called as RPC [rpc-queue-0]', () =>
     arnavmq.consumer
       .consume(fixtures.queues[0], () => 'Power Ranger Red')

@@ -13,10 +13,10 @@
   ],
   "main": "src/index.js",
   "scripts": {
-    "lint": "eslint . && prettier -c . && dot-only-hunter test",
+    "lint": "eslint . && prettier -c .",
     "format": "eslint --fix . && prettier --write .",
     "cover": "test -d .nyc_output && nyc report --reporter lcov",
-    "test": "nyc mocha --recursive --timeout=30000 --exit"
+    "test": "dot-only-hunter test && nyc mocha --recursive --timeout=30000 --exit"
   },
   "prettier": {
     "singleQuote": true,
