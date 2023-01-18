@@ -77,13 +77,6 @@ class Channels {
   defaultChannel() {
     return this._get(DEFAULT_CHANNEL, { prefetch: this._config.prefetch });
   }
-
-  _onError(error) {
-    this._config.logger.error({
-      message: error.message,
-      error,
-    });
-  }
 }
 
 module.exports = { Channels, ChannelAlreadyExistsError };
