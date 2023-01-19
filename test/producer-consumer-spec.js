@@ -49,7 +49,7 @@ describe('producer/consumer', function () {
 
         const fakeChannel = createFakeChannel();
         sandbox.spy(fakeChannel, 'prefetch');
-        sandbox.stub(connection.conn, 'createChannel').resolves(fakeChannel);
+        sandbox.stub(connection, 'createChannel').resolves(fakeChannel);
 
         const getChannel = sandbox.spy(arnavmq.connection, 'getChannel');
         const getChannelDefault = sandbox.spy(Channels.prototype, 'defaultChannel');

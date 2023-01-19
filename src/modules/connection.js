@@ -6,7 +6,9 @@ const packageVersion = require('../../package.json').version;
 class Connection {
   constructor(config) {
     this._config = config;
-    this.connections = {};
+
+    this._connection = null; // Promise of amqp connection
+    this._channels = null;
     this.startedAt = new Date().toISOString();
   }
 
@@ -17,21 +19,14 @@ class Connection {
   async getConnection() {
     const url = this._config.host;
     const { hostname } = this._config;
-    let connection = this.connections[url];
 
     // cache handling, if connection already opened, return it
-    if (connection && connection.conn) {
-      return connection;
+    if (this._connection) {
+      return this._connection;
     }
 
     // prepare the connection internal object, and reset channel if connection has been closed
-    this.connections[url] = {
-      conn: null,
-      // Is going to be empty until we created a connection
-      channels: null,
-    };
-    connection = this.connections[url];
-    connection.conn = await amqp
+    this._connection = amqp
       .connect(url, {
         clientProperties: {
           hostname,
@@ -41,23 +36,22 @@ class Connection {
         },
       })
       .then((conn) => {
+        this._channels = new Channels(conn, this._config);
         // on connection close, delete connection
         conn.on('close', () => {
-          delete connection.conn;
-          delete connection.channels;
+          this._connection = null;
+          this._channels = null;
         });
         conn.on('error', this._onError.bind(this));
-        connection.conn = conn;
-        connection.channels = new Channels(conn, this._config);
         return conn;
       })
       .catch((e) => {
-        connection.conn = null;
-        connection.channels = null;
+        this._connection = null;
+        this._channels = null;
         throw e;
       });
 
-    return connection;
+    return this._connection;
   }
 
   /**
@@ -73,13 +67,11 @@ class Connection {
   }
 
   async getChannel(queue, config) {
-    const connection = await this.getConnection();
-    return connection.channels.get(queue, config);
+    return this.getConnection().then(() => this._channels.get(queue, config));
   }
 
   async getDefaultChannel() {
-    const connection = await this.getConnection();
-    return connection.channels.defaultChannel();
+    return this.getConnection().then(() => this._channels.defaultChannel());
   }
 
   /**
