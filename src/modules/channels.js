@@ -38,8 +38,7 @@ class Channels {
   }
 
   /**
-   * Create the channel on the broker, once connection is successfuly opened.
-   * Since RabbitMQ advise to open one channel by process and node is mono-core, we keep only 1 channel for the whole connection.
+   * Creates or returns an existing channel by it's key and config.
    * @return {Promise} A promise that resolve with an amqp.node channel object
    */
   _get(key, config = {}) {
@@ -47,30 +46,43 @@ class Channels {
 
     if (channel) {
       if (!isSameConfig(channel.config, config)) {
-        throw new ChannelAlreadyExistsError(key, config);
+        return Promise.reject(new ChannelAlreadyExistsError(key, config));
       }
 
       // cache handling, if channel already opened, return it
-      return Promise.resolve(channel.chann);
+      return channel.chann;
     }
 
-    channel = this._connection.createChannel().then((_channel) => {
-      _channel.prefetch(config.prefetch);
+    channel = this._connection
+      .createChannel()
+      .then((_channel) => {
+        _channel.prefetch(config.prefetch);
 
-      // on error we remove the channel so the next call will recreate it (auto-reconnect are handled by connection users)
-      _channel.on('close', () => {
+        // on error we remove the channel so the next call will recreate it (auto-reconnect are handled by connection users)
+        _channel.on('close', () => {
+          this._channels.delete(key);
+        });
+        _channel.on('error', (error) => {
+          this._config.logger.error({
+            message: `Got channel error [${error.message}] for [${key}]`,
+            error,
+          });
+        });
+
+        return _channel;
+      })
+      .catch((error) => {
         this._channels.delete(key);
-      });
-      _channel.on('error', (error) => {
         this._config.logger.error({
-          message: `Got channel error [${error.message}] for [${key}]`,
+          message: `Failed to create channel for [${key}] - [${error.message}]`,
           error,
         });
+
+        return Promise.reject(error);
       });
 
-      return _channel;
-    });
     this._channels.set(key, { chann: channel, config });
+
     return channel;
   }
 

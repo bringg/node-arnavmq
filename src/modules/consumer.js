@@ -55,7 +55,7 @@ class Consumer {
    * Create a durable queue on RabbitMQ and consumes messages from it - executing a callback function.
    * Automatically answers with the callback response (can be a Promise)
    * @param  {string}   queue    The RabbitMQ queue name
-   * @param  {object}   options  (Optional) Options for the queue (durable, persistent, etc.)
+   * @param  {object}   options  (Optional) Options for the queue (durable, persistent, etc.) and channel (with prefetch, `{ channel: { prefetch: 100 } }`)
    * @param  {Function} callback Callback function executed when a message is received on the queue name, can return a promise
    * @return {Promise}           A promise that resolves when connection is established and consumer is ready
    */
