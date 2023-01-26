@@ -57,6 +57,29 @@ arnavmq.subscribe('queue:name', function (msg) {
 });
 ```
 
+You can pass to consumer options, like:
+
+```javascript
+const arnavmq = require('arnavmq')({ host: 'amqp://localhost' });
+
+const options = {
+  persistent: true,
+  durable: true,
+  channel: {
+    // You can override the global prefetch for this specific consumer
+    //
+    // Calling multiple times to "subscribe" with same queue but different custom prefetch
+    // will throw an error
+    prefetch: 10,
+  },
+};
+
+arnavmq.subscribe('queue:name', options, function (msg) {
+  // msg is the exact item sent by a producer as payload
+  // if it is an object, it is already parsed as object
+});
+```
+
 ## RPC Support
 
 You can create RPC requests easily by adding the `rpc: true` option to the `produce` call:
