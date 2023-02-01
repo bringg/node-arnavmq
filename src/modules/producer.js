@@ -24,7 +24,6 @@ class Producer {
   constructor(connection) {
     this.amqpRPCQueues = {};
     this._connection = connection;
-    this.channel = null;
   }
 
   set connection(value) {
@@ -93,7 +92,7 @@ class Producer {
     // it is important to have different hostname or no hostname on each module sending message or there will be conflicts
     const resQueue = `${queue}:${this._connection.config.hostname}:${process.pid}:res`;
     rpcQueue.queue = this._connection
-      .get()
+      .getDefaultChannel()
       .then((channel) =>
         channel
           .assertQueue(resQueue, {
@@ -123,11 +122,13 @@ class Producer {
     return rpcQueue.queue;
   }
 
-  publishOrSendToQueue(queue, msg, options) {
+  async publishOrSendToQueue(queue, msg, options) {
+    const channel = await this._connection.getDefaultChannel();
+
     if (!options.routingKey) {
-      return this.channel.sendToQueue(queue, msg, options);
+      return channel.sendToQueue(queue, msg, options);
     }
-    return this.channel.publish(queue, options.routingKey, msg, options);
+    return channel.publish(queue, options.routingKey, msg, options);
   }
 
   /**
@@ -223,38 +224,31 @@ class Producer {
   }
 
   _sendToQueue(queue, message, settings, currentRetryNumber) {
-    return this._connection
-      .get()
-      .then((channel) => {
-        this.channel = channel;
+    // undefined can't be serialized/buffered :p
+    if (!message) message = null;
 
-        // undefined can't be serialized/buffered :p
-        if (!message) message = null;
+    this._connection.config.transport.info(loggerAlias, `[${queue}] > `, message);
+    this._connection.config.logger.debug({
+      message: `${loggerAlias} [${queue}] > ${message}`,
+      params: { queue, message },
+    });
 
-        this._connection.config.transport.info(loggerAlias, `[${queue}] > `, message);
-        this._connection.config.logger.debug({
-          message: `${loggerAlias} [${queue}] > ${message}`,
-          params: { queue, message },
-        });
+    return this.checkRpc(queue, parsers.out(message, settings), settings).catch((error) => {
+      if (!this._shouldRetry(error, currentRetryNumber)) {
+        throw error;
+      }
 
-        return this.checkRpc(queue, parsers.out(message, settings), settings);
-      })
-      .catch((error) => {
-        if (!this._shouldRetry(error, currentRetryNumber)) {
-          throw error;
-        }
-
-        // add timeout between retries because we don't want to overflow the CPU
-        this._connection.config.transport.error(loggerAlias, error);
-        this._connection.config.logger.error({
-          message: `${loggerAlias} Failed sending message to queue ${queue}: ${error.message}`,
-          error,
-          params: { queue, message },
-        });
-        return utils
-          .timeoutPromise(this._connection.config.timeout)
-          .then(() => this._sendToQueue(queue, message, settings, currentRetryNumber + 1));
+      // add timeout between retries because we don't want to overflow the CPU
+      this._connection.config.transport.error(loggerAlias, error);
+      this._connection.config.logger.error({
+        message: `${loggerAlias} Failed sending message to queue ${queue}: ${error.message}`,
+        error,
+        params: { queue, message },
       });
+      return utils
+        .timeoutPromise(this._connection.config.timeout)
+        .then(() => this._sendToQueue(queue, message, settings, currentRetryNumber + 1));
+    });
   }
 
   _shouldRetry(error, currentRetryNumber) {
