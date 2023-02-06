@@ -14,8 +14,10 @@ let letters = 0;
 
 function createFakeChannel() {
   return {
+    isFake: true,
     prefetch: () => {},
     addListener: () => {},
+    on: () => {},
     assertQueue: () => Promise.resolve({}),
     consume: () => {},
   };
@@ -32,13 +34,23 @@ describe('producer/consumer', function () {
       it('when no custom prefetch specified is uses default channel', async () => {
         const queueName = 'use-default-prefetch';
 
+        const channel = createFakeChannel();
+        sandbox.stub(channel, 'assertQueue').resolves({ queue: queueName });
+
         const getChannel = sandbox.spy(arnavmq.connection, 'getChannel');
-        const getChannelDefault = sandbox.spy(Channels.prototype, 'defaultChannel');
+        const getChannelDefault = sandbox.stub(Channels.prototype, 'defaultChannel').resolves(channel);
 
         await arnavmq.consumer.consume(queueName, (message) => Promise.resolve(`${message}-test`));
 
-        sinon.assert.calledWith(getChannel, queueName, {});
+        sinon.assert.calledWith(getChannel, queueName, { prefetch: 5 });
         sinon.assert.calledOnce(getChannelDefault);
+        sinon.assert.calledWith(channel.assertQueue, queueName, {
+          durable: true,
+          persistent: true,
+          channel: {
+            prefetch: 5,
+          },
+        });
       });
 
       it('when custom prefetch specified is creates new channel', async () => {
@@ -49,6 +61,7 @@ describe('producer/consumer', function () {
 
         const fakeChannel = createFakeChannel();
         sandbox.spy(fakeChannel, 'prefetch');
+        sandbox.stub(fakeChannel, 'assertQueue').resolves({ queue: queueName });
         sandbox.stub(connection, 'createChannel').resolves(fakeChannel);
 
         const getChannel = sandbox.spy(arnavmq.connection, 'getChannel');
@@ -61,6 +74,13 @@ describe('producer/consumer', function () {
         sinon.assert.calledWith(getChannel, queueName, { prefetch });
         sinon.assert.calledWith(fakeChannel.prefetch, prefetch);
         sinon.assert.notCalled(getChannelDefault);
+        sinon.assert.calledWith(fakeChannel.assertQueue, queueName, {
+          durable: true,
+          persistent: true,
+          channel: {
+            prefetch,
+          },
+        });
       });
 
       it('throws when existing channel with custom prefetch already exists', async () => {

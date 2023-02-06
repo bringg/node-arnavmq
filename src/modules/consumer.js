@@ -7,10 +7,12 @@ const loggerAlias = 'arnav_mq:consumer';
 class Consumer {
   constructor(connection) {
     this._connection = connection;
+    this._configuration = this._connection.config;
   }
 
   set connection(value) {
     this._connection = value;
+    this._configuration = value.config;
   }
 
   get connection() {
@@ -65,10 +67,26 @@ class Consumer {
   }
 
   subscribe(queue, options, callback) {
+    const defaultOptions = {
+      persistent: true,
+      durable: true,
+      channel: {
+        prefetch: this._configuration.prefetch,
+      },
+    };
+
     if (typeof options === 'function') {
       callback = options;
-      // default message options
-      options = { persistent: true, durable: true, channel: {} };
+      options = defaultOptions;
+    } else {
+      options = {
+        ...defaultOptions,
+        ...options,
+        channel: {
+          ...defaultOptions.channel,
+          ...(options.channel || {}),
+        },
+      };
     }
 
     // consumer gets a suffix if one is set on the configuration, to suffix all queues names
@@ -131,7 +149,9 @@ class Consumer {
         if (err instanceof ChannelAlreadyExistsError) {
           throw err;
         } else {
-          utils.timeoutPromise(this._connection.config.timeout).then(() => this.subscribe(queue, options, callback));
+          return utils
+            .timeoutPromise(this._connection.config.timeout)
+            .then(() => this.subscribe(queue, options, callback));
         }
       });
   }
