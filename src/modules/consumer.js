@@ -108,40 +108,7 @@ class Consumer {
             params: { queue: q.queue },
           });
 
-          channel.consume(
-            q.queue,
-            (msg) => {
-              const messageString = msg.content.toString();
-              this._connection.config.transport.debug(loggerAlias, `[${q.queue}] < ${messageString}`);
-              this._connection.config.logger.debug({
-                message: `${loggerAlias} [${q.queue}] < ${messageString}`,
-                params: { queue: q.queue, message: messageString },
-              });
-
-              // main answer management chaining
-              // receive message, parse it, execute callback, check if should answer, ack/reject message
-              Promise.resolve(parsers.in(msg))
-                .then((body) => callback(body, msg.properties))
-                .then(this.checkRpc(msg, q.queue))
-                .then(() => {
-                  channel.ack(msg);
-                })
-                .catch((error) => {
-                  // if something bad happened in the callback, reject the message so we can requeue it (or not)
-                  this._connection.config.transport.error(loggerAlias, error);
-                  this._connection.config.logger.error({
-                    message: `${loggerAlias} Failed processing message from queue ${q.queue}: ${error.message}`,
-                    error,
-                    params: { queue: q.queue, message: messageString },
-                  });
-
-                  channel.reject(msg, this._connection.config.requeue);
-                });
-            },
-            { noAck: false }
-          );
-
-          return true;
+          return this._consumeQueue(channel, q.queue, callback);
         });
         // in case of any error creating the channel, wait for some time and then try to reconnect again (to avoid overflow)
       })
@@ -153,6 +120,52 @@ class Consumer {
             .timeoutPromise(this._connection.config.timeout)
             .then(() => this.subscribe(queue, options, callback));
         }
+      });
+  }
+
+  _consumeQueue(channel, queue, callback) {
+    channel
+      .consume(
+        queue,
+        (msg) => {
+          const messageString = msg.content.toString();
+          this._connection.config.transport.debug(loggerAlias, `[${queue}] < ${messageString}`);
+          this._connection.config.logger.debug({
+            message: `${loggerAlias} [${queue}] < ${messageString}`,
+            params: { queue, message: messageString },
+          });
+
+          // main answer management chaining
+          // receive message, parse it, execute callback, check if should answer, ack/reject message
+          Promise.resolve(parsers.in(msg))
+            .then((body) => callback(body, msg.properties))
+            .then(this.checkRpc(msg, queue))
+            .then(() => {
+              channel.ack(msg);
+            })
+            .catch((error) => {
+              // if something bad happened in the callback, reject the message so we can requeue it (or not)
+              this._connection.config.transport.error(loggerAlias, error);
+              this._connection.config.logger.error({
+                message: `${loggerAlias} Failed processing message from queue ${queue}: ${error.message}`,
+                error,
+                params: { queue, message: messageString },
+              });
+
+              channel.reject(msg, this._connection.config.requeue);
+            });
+        },
+        { noAck: false }
+      )
+      .then(() => true)
+      .catch((error) => {
+        this._connection.config.transport.error(loggerAlias, error);
+        this._connection.config.logger.error({
+          message: `${loggerAlias} Failed to start consuming from queue ${queue}: ${error.message}`,
+          error,
+          params: { queue },
+        });
+        return false;
       });
   }
 }
