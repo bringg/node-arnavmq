@@ -19,7 +19,7 @@ function createFakeChannel() {
     addListener: () => {},
     on: () => {},
     assertQueue: () => Promise.resolve({}),
-    consume: () => {},
+    consume: () => Promise.resolve(),
   };
 }
 

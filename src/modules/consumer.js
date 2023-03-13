@@ -124,10 +124,22 @@ class Consumer {
   }
 
   _consumeQueue(channel, queue, callback) {
-    channel
+    return channel
       .consume(
         queue,
         (msg) => {
+          if (!msg) {
+            // When forcefully cancelled by rabbitmq, consumer would receive a null message.
+            // https://amqp-node.github.io/amqplib/channel_api.html#channel_consume
+            this._connection.config.transport.warn(loggerAlias, null);
+            this._connection.config.logger.warn({
+              message: `${loggerAlias} Consumer was cancelled by server for queue '${queue}'`,
+              error: null,
+              params: { queue },
+            });
+            return;
+          }
+
           const messageString = msg.content.toString();
           this._connection.config.transport.debug(loggerAlias, `[${queue}] < ${messageString}`);
           this._connection.config.logger.debug({
@@ -141,7 +153,17 @@ class Consumer {
             .then((body) => callback(body, msg.properties))
             .then(this.checkRpc(msg, queue))
             .then(() => {
-              channel.ack(msg);
+              try {
+                // This is synchronous
+                channel.ack(msg);
+              } catch (ackError) {
+                this._connection.config.transport.error(loggerAlias, ackError);
+                this._connection.config.logger.error({
+                  message: `${loggerAlias} Failed to ack message after processing finished on queue ${queue}: ${ackError.message}`,
+                  error: ackError,
+                  params: { queue },
+                });
+              }
             })
             .catch((error) => {
               // if something bad happened in the callback, reject the message so we can requeue it (or not)
@@ -152,7 +174,17 @@ class Consumer {
                 params: { queue, message: messageString },
               });
 
-              channel.reject(msg, this._connection.config.requeue);
+              try {
+                // This is synchronous
+                channel.reject(msg, this._connection.config.requeue);
+              } catch (rejectError) {
+                this._connection.config.transport.error(loggerAlias, rejectError);
+                this._connection.config.logger.error({
+                  message: `${loggerAlias} Failed to reject message after processing failure on queue ${queue}: ${rejectError.message}`,
+                  error: rejectError,
+                  params: { queue },
+                });
+              }
             });
         },
         { noAck: false }
