@@ -100,6 +100,23 @@ describe('producer/consumer', function () {
         }, ChannelAlreadyExistsError);
       });
     });
+
+    it('does not throw unhandled rejection when consume got error', async () => {
+      const queueName = 'test-consume-error';
+      const prefetch = 6;
+
+      const channel = createFakeChannel();
+      sandbox.stub(channel, 'assertQueue').resolves({ queue: queueName });
+
+      sandbox.stub(arnavmq.connection, 'getChannel').resolves(channel);
+      sandbox.stub(Channels.prototype, 'defaultChannel').resolves(channel);
+      const consume = sandbox.stub(channel, 'consume').rejects(new Error('Error simulating connection closed.'));
+
+      await arnavmq.consumer.consume(queueName, { channel: { prefetch } }, (message) =>
+        Promise.resolve(`${message}-test`)
+      );
+      sinon.assert.called(consume);
+    });
   });
 
   describe('msg delivering', () => {
