@@ -1,6 +1,6 @@
 {
   "name": "arnavmq",
-  "version": "0.14.2",
+  "version": "0.14.1",
   "description": "ArnavMQ is a RabbitMQ wrapper",
   "keywords": [
     "rabbitmq",
