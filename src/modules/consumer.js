@@ -101,15 +101,25 @@ class Consumer {
           this.subscribe(queue, options, callback);
         });
 
-        return channel.assertQueue(suffixedQueue, options).then((q) => {
-          this._connection.config.transport.debug(loggerAlias, 'init', q.queue);
-          this._connection.config.logger.debug({
-            message: `${loggerAlias} init ${q.queue}`,
-            params: { queue: q.queue },
-          });
+        return channel
+          .assertQueue(suffixedQueue, options)
+          .then((q) => {
+            this._connection.config.transport.debug(loggerAlias, 'init', q.queue);
+            this._connection.config.logger.debug({
+              message: `${loggerAlias} init ${q.queue}`,
+              params: { queue: q.queue },
+            });
 
-          return this._consumeQueue(channel, q.queue, callback);
-        });
+            return this._consumeQueue(channel, q.queue, callback);
+          })
+          .catch((error) => {
+            this._connection.config.transport.error(loggerAlias, error);
+            this._connection.config.logger.error({
+              message: `${loggerAlias} Failed to assert queue ${queue}: ${error.message}`,
+              error,
+              params: { queue },
+            });
+          });
         // in case of any error creating the channel, wait for some time and then try to reconnect again (to avoid overflow)
       })
       .catch((err) => {
@@ -154,7 +164,6 @@ class Consumer {
             .then(this.checkRpc(msg, queue))
             .then(() => {
               try {
-                // This is synchronous
                 channel.ack(msg);
               } catch (ackError) {
                 this._connection.config.transport.error(loggerAlias, ackError);
@@ -175,7 +184,6 @@ class Consumer {
               });
 
               try {
-                // This is synchronous
                 channel.reject(msg, this._connection.config.requeue);
               } catch (rejectError) {
                 this._connection.config.transport.error(loggerAlias, rejectError);
@@ -197,7 +205,6 @@ class Consumer {
           error,
           params: { queue },
         });
-        return false;
       });
   }
 }
