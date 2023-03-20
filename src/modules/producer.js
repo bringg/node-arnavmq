@@ -97,8 +97,8 @@ class Producer {
 
     try {
       const channel = await this._connection.getDefaultChannel();
-      const q = await channel.assertQueue(resQueue, { durable: true, exclusive: true });
-      rpcQueue.queue = q.queue;
+      await channel.assertQueue(resQueue, { durable: true, exclusive: true });
+      rpcQueue.queue = resQueue;
 
       // if channel is closed, we want to make sure we cleanup the queue so future calls will recreate it
       this._connection.addListener('close', () => {
@@ -106,7 +106,7 @@ class Producer {
         this.createRpcQueue(queue);
       });
 
-      await channel.consume(q.queue, this.maybeAnswer(queue), {
+      await channel.consume(resQueue, this.maybeAnswer(queue), {
         noAck: true,
       });
       return rpcQueue.queue;

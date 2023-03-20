@@ -110,13 +110,13 @@ class Consumer {
       });
     }
 
-    this._connection.config.transport.debug(loggerAlias, 'init', queue.queue);
+    this._connection.config.transport.debug(loggerAlias, 'init', queue);
     this._connection.config.logger.debug({
-      message: `${loggerAlias} init ${queue.queue}`,
-      params: { queue: queue.queue },
+      message: `${loggerAlias} init ${queue}`,
+      params: { queue },
     });
 
-    await this._consumeQueue(channel, queue.queue, callback);
+    await this._consumeQueue(channel, queue, callback);
     return true;
   }
 
