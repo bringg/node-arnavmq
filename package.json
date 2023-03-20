@@ -16,7 +16,7 @@
     "lint": "eslint . && prettier -c .",
     "format": "eslint --fix . && prettier --write .",
     "cover": "test -d .nyc_output && nyc report --reporter lcov",
-    "test": "dot-only-hunter test && nyc mocha --recursive --timeout=30000 --exit"
+    "test": "dot-only-hunter test && nyc mocha --recursive --exit"
   },
   "prettier": {
     "singleQuote": true,
