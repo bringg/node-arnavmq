@@ -253,7 +253,7 @@ describe('producer/consumer', function () {
           }
           throw new Error('Any kind of error');
         })
-        .then(() => arnavmq.producer.produce(fixtures.queues[3], { msg: uuid.v4() }))
+        .then(() => arnavmq.producer.produce(fixtures.queues[4], { msg: uuid.v4() }))
         .then((response) => {
           assert(response === true);
           letters += 1;
