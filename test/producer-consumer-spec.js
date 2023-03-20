@@ -6,7 +6,7 @@ const utils = require('../src/modules/utils');
 const { Channels, ChannelAlreadyExistsError } = require('../src/modules/channels');
 
 const fixtures = {
-  queues: ['test-queue-0', 'test-queue-1', 'test-queue-2', 'test-queue-3'],
+  queues: ['test-queue-0', 'test-queue-1', 'test-queue-2', 'test-queue-3', 'test-queue-4'],
   routingKey: 'queue-routing-key',
 };
 
@@ -239,16 +239,17 @@ describe('producer/consumer', function () {
   });
 
   describe('msg requeueing', () => {
-    it('should requeue the message again on error [test-queue-0]', (done) => {
+    it('should requeue the message again on error [test-queue-4]', (done) => {
       let attempt = 3;
 
       arnavmq.consumer
-        .consume(fixtures.queues[3], (msg) => {
+        .consume(fixtures.queues[4], (msg) => {
           assert(typeof msg === 'object');
 
           attempt -= 1;
-          if (!attempt) {
-            return done();
+          if (attempt === 0) {
+            done();
+            return;
           }
           throw new Error('Any kind of error');
         })

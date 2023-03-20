@@ -90,12 +90,14 @@ describe('disconnections', function () {
       }
 
       await docker.connectNetwork();
-      let responses = await Promise.all(producePromises);
-      responses = responses.sort((a, b) => a - b);
+      const responses = await Promise.all(producePromises);
+      responses.sort((a, b) => a - b);
 
-      const lastResponse = responses[responses.length - 1];
-      assert.equal(lastResponse, 50, 'last response should be 50');
-      assert.equal(counter, 50, 'consumer counter should be 50');
+      assert.equal(
+        responses,
+        Array.from({ length: 50 }, (_, i) => i + 1)
+      );
+      assert.equal(counter, 50, `consumer counter should be 50, but it is ${counter}`);
     });
   });
 });
