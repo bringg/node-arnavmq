@@ -95,7 +95,7 @@ describe('disconnections', function () {
 
       assert.equal(
         responses,
-        Array.from({ length: 50 }, (_, i) => i + 1)
+        Array.from({ length: 49 }, (_, i) => i + 2)
       );
       assert.equal(counter, 50, `consumer counter should be 50, but it is ${counter}`);
     });

@@ -1,5 +1,4 @@
 const uuid = require('uuid');
-const pDefer = require('p-defer');
 const utils = require('./utils');
 const parsers = require('./message-parsers');
 
@@ -45,9 +44,11 @@ class Producer {
     return (msg) => {
       // check the correlation ID sent by the initial message using RPC
       const { correlationId } = msg.properties;
-      const responsePromise = rpcQueue[correlationId];
+      // An object containing the `resolve` and `reject` functions for the promise for waiting the rpc response.
+      const responseWaiter = rpcQueue[correlationId];
 
-      if (responsePromise === undefined) {
+      // On timeout the waiter is deleted, so we need to handle the race when the response arrives too late.
+      if (responseWaiter === undefined) {
         const error = new Error(`Receiving RPC message from previous session: callback no more in memory. ${queue}`);
         this._connection.config.transport.warn(loggerAlias, error);
         this._connection.config.logger.warn({
@@ -67,9 +68,9 @@ class Producer {
       });
 
       try {
-        responsePromise.resolve(parsers.in(msg));
+        responseWaiter.resolve(parsers.in(msg));
       } catch (e) {
-        responsePromise.reject(new ProducerError(e));
+        responseWaiter.reject(new ProducerError(e));
       } finally {
         delete rpcQueue[correlationId];
       }
@@ -81,45 +82,39 @@ class Producer {
    * @param  {string} queue the queue name in which we send a RPC request
    * @return {Promise}       Resolves when answer response queue is ready to receive messages
    */
-  createRpcQueue(queue) {
+  async createRpcQueue(queue) {
     this.amqpRPCQueues[queue] = this.amqpRPCQueues[queue] || {};
 
     const rpcQueue = this.amqpRPCQueues[queue];
-    if (rpcQueue.queue) return Promise.resolve(rpcQueue.queue);
+    if (rpcQueue.queue) {
+      return rpcQueue.queue;
+    }
 
     // we create the callback queue using base queue name + appending config hostname and :res for clarity
     // ie. if hostname is gateway-http and queue is service-oauth, response queue will be service-oauth:gateway-http:res
     // it is important to have different hostname or no hostname on each module sending message or there will be conflicts
     const resQueue = `${queue}:${this._connection.config.hostname}:${process.pid}:res`;
-    rpcQueue.queue = this._connection
-      .getDefaultChannel()
-      .then((channel) =>
-        channel
-          .assertQueue(resQueue, {
-            durable: true,
-            exclusive: true,
-          })
-          .then((q) => {
-            rpcQueue.queue = q.queue;
 
-            // if channel is closed, we want to make sure we cleanup the queue so future calls will recreate it
-            this._connection.addListener('close', () => {
-              delete rpcQueue.queue;
-              this.createRpcQueue(queue);
-            });
+    try {
+      const channel = await this._connection.getDefaultChannel();
+      const q = await channel.assertQueue(resQueue, { durable: true, exclusive: true });
+      rpcQueue.queue = q.queue;
 
-            return channel.consume(q.queue, this.maybeAnswer(queue), {
-              noAck: true,
-            });
-          })
-          .then(() => rpcQueue.queue)
-      )
-      .catch(() => {
+      // if channel is closed, we want to make sure we cleanup the queue so future calls will recreate it
+      this._connection.addListener('close', () => {
         delete rpcQueue.queue;
-        return utils.timeoutPromise(this._connection.config.timeout).then(() => this.createRpcQueue(queue));
+        this.createRpcQueue(queue);
       });
 
-    return rpcQueue.queue;
+      await channel.consume(q.queue, this.maybeAnswer(queue), {
+        noAck: true,
+      });
+      return rpcQueue.queue;
+    } catch (error) {
+      delete rpcQueue.queue;
+      await utils.timeoutPromise(this._connection.config.timeout);
+      return this.createRpcQueue(queue);
+    }
   }
 
   async publishOrSendToQueue(queue, msg, options) {
@@ -156,31 +151,29 @@ class Producer {
    * @param  {object} options contain rpc property (if true, enable rpc for this message)
    * @return {Promise}         Resolves when message is correctly sent, or when response is received when rpc is enabled
    */
-  checkRpc(queue, msg, options) {
+  async checkRpc(queue, msg, options) {
     // messages are persistent
     options.persistent = true;
 
     if (options.rpc) {
-      return this.createRpcQueue(queue).then(() => {
-        // generates a correlationId (random uuid) so we know which callback to execute on received response
-        const corrId = uuid.v4();
-        options.correlationId = corrId;
-        // reply to us if you receive this message!
-        options.replyTo = this.amqpRPCQueues[queue].queue;
+      await this.createRpcQueue(queue);
+      // generates a correlationId (random uuid) so we know which callback to execute on received response
+      const corrId = uuid.v4();
+      options.correlationId = corrId;
+      // reply to us if you receive this message!
+      options.replyTo = this.amqpRPCQueues[queue].queue;
 
-        // defered promise that will resolve when response is received
-        const responsePromise = pDefer();
-        this.amqpRPCQueues[queue][corrId] = responsePromise;
+      // a promise that will resolve when response is received
+      return new Promise((resolve, reject) => {
+        this.amqpRPCQueues[queue][corrId] = { resolve, reject };
 
         this.publishOrSendToQueue(queue, msg, options);
 
-        //  Using given timeout or default one
+        // Using given timeout or default one
         const timeout = options.timeout || this._connection.config.rpcTimeout || 0;
         if (timeout > 0) {
           this.prepareTimeoutRpc(queue, corrId, timeout);
         }
-
-        return responsePromise.promise;
       });
     }
 
@@ -223,9 +216,11 @@ class Producer {
     return this._sendToQueue(queue, message, settings, 0);
   }
 
-  _sendToQueue(queue, message, settings, currentRetryNumber) {
+  async _sendToQueue(queue, message, settings, currentRetryNumber) {
     // undefined can't be serialized/buffered :p
-    if (!message) message = null;
+    if (!message) {
+      message = null;
+    }
 
     this._connection.config.transport.info(loggerAlias, `[${queue}] > `, message);
     this._connection.config.logger.debug({
@@ -233,7 +228,9 @@ class Producer {
       params: { queue, message },
     });
 
-    return this.checkRpc(queue, parsers.out(message, settings), settings).catch((error) => {
+    try {
+      return await this.checkRpc(queue, parsers.out(message, settings), settings);
+    } catch (error) {
       if (!this._shouldRetry(error, currentRetryNumber)) {
         throw error;
       }
@@ -245,10 +242,9 @@ class Producer {
         error,
         params: { queue, message },
       });
-      return utils
-        .timeoutPromise(this._connection.config.timeout)
-        .then(() => this._sendToQueue(queue, message, settings, currentRetryNumber + 1));
-    });
+      await utils.timeoutPromise(this._connection.config.timeout);
+      return this._sendToQueue(queue, message, settings, currentRetryNumber + 1);
+    }
   }
 
   _shouldRetry(error, currentRetryNumber) {
