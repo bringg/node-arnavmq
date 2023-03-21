@@ -283,35 +283,30 @@ describe('producer/consumer', function () {
   });
 
   describe('rpc timeouts', () => {
-    it('should reject on timeout, if no answer received', (done) => {
-      arnavmq.producer
-        .produce('non-existing-queue', { msg: 'ok' }, { rpc: true, timeout: 1000 })
-        .then(() => {
-          assert.fail('Did not get the expected error.');
-        })
-        .catch((e) => {
-          if (e instanceof assert.AssertionError) {
-            throw e;
-          }
-          assert.equal(e.message, 'Timeout reached');
-          done();
-        });
+    it('should reject on timeout, if no answer received', async () => {
+      try {
+        await arnavmq.producer.produce('non-existing-queue', { msg: 'ok' }, { rpc: true, timeout: 1000 });
+        assert.fail('Did not get the expected error.');
+      } catch (error) {
+        if (error instanceof assert.AssertionError) {
+          throw error;
+        }
+        assert.equal(error.message, 'Timeout reached');
+      }
     });
 
-    it('should reject on default timeout, if no answer received', () => {
+    it('should reject on default timeout, if no answer received', async () => {
       arnavmq.connection._config.rpcTimeout = 1000;
-      arnavmq.producer
-        .produce('non-existing-queue', { msg: 'ok' }, { rpc: true })
-        .then(() => {
-          assert.fail('Did not get the expected error.');
-        })
-        .catch((e) => {
-          if (e instanceof assert.AssertionError) {
-            throw e;
-          }
+      try {
+        await arnavmq.producer.produce('non-existing-queue', { msg: 'ok' }, { rpc: true });
+        assert.fail('Did not get the expected error.');
+      } catch (error) {
+        if (error instanceof assert.AssertionError) {
+          throw error;
+        }
 
-          assert.equal(e.message, 'Timeout reached');
-        });
+        assert.equal(error.message, 'Timeout reached');
+      }
     });
   });
 
