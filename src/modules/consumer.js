@@ -21,35 +21,29 @@ class Consumer {
 
   /**
    * Get a function to execute on incoming messages to handle RPC
-   * @param  {any} msg   An amqp.node message object
+   * @param  {any} messageProperties   An amqp.node message properties object, containing the rpc settings
    * @param  {string} queue The initial queue on which the handler received the message
-   * @return {function}       a function to use in a chaining on incoming messages
+   * @param  {any} reply the received message to reply the rpc if needed:
+   * @return {any}       object, string, number... the current received message
    */
-  checkRpc(msg, queue) {
-    /**
-     * When message contains a replyTo property, we try to send the answer back
-     * @param  {any} content the received message:
-     * @return {any}          object, string, number... the current received message
-     */
-    return async (content) => {
-      if (msg.properties.replyTo) {
-        const options = {
-          correlationId: msg.properties.correlationId,
-          persistent: true,
-          durable: true,
-        };
-        this._connection.config.transport.debug(loggerAlias, `[${queue}][${msg.properties.replyTo}] >`, content);
-        this._connection.config.logger.debug({
-          message: `${loggerAlias} [${queue}][${msg.properties.replyTo}] > ${content}`,
-          params: { content },
-        });
+  async checkRpc(messageProperties, queue, reply) {
+    if (messageProperties.replyTo) {
+      const options = {
+        correlationId: messageProperties.correlationId,
+        persistent: true,
+        durable: true,
+      };
+      this._connection.config.transport.debug(loggerAlias, `[${queue}][${messageProperties.replyTo}] >`, reply);
+      this._connection.config.logger.debug({
+        message: `${loggerAlias} [${queue}][${messageProperties.replyTo}] > ${reply}`,
+        params: { content: reply },
+      });
 
-        const defaultChannel = await this._connection.getDefaultChannel();
-        return defaultChannel.sendToQueue(msg.properties.replyTo, parsers.out(content, options), options);
-      }
+      const defaultChannel = await this._connection.getDefaultChannel();
+      return defaultChannel.sendToQueue(messageProperties.replyTo, parsers.out(reply, options), options);
+    }
 
-      return msg;
-    };
+    return messageProperties;
   }
 
   /**
@@ -177,7 +171,7 @@ class Consumer {
       const body = await Promise.resolve(parsers.in(msg));
       try {
         const res = await callback(body, msg.properties);
-        await this.checkRpc(msg, queue)(res);
+        await this.checkRpc(msg.properties, queue, res);
       } catch (error) {
         // if something bad happened in the callback, reject the message so we can requeue it (or not)
         this._connection.config.transport.error(loggerAlias, error);
