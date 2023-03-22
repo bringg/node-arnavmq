@@ -1,4 +1,5 @@
 const uuid = require('uuid');
+const pDefer = require('p-defer');
 const utils = require('./utils');
 const parsers = require('./message-parsers');
 
@@ -44,11 +45,10 @@ class Producer {
     return (msg) => {
       // check the correlation ID sent by the initial message using RPC
       const { correlationId } = msg.properties;
-      // An object containing the `resolve` and `reject` functions for the promise for waiting the rpc response.
-      const responseWaiter = rpcQueue[correlationId];
+      const responsePromise = rpcQueue[correlationId];
 
       // On timeout the waiter is deleted, so we need to handle the race when the response arrives too late.
-      if (responseWaiter === undefined) {
+      if (responsePromise === undefined) {
         const error = new Error(`Receiving RPC message from previous session: callback no more in memory. ${queue}`);
         this._connection.config.transport.warn(loggerAlias, error);
         this._connection.config.logger.warn({
@@ -68,9 +68,9 @@ class Producer {
       });
 
       try {
-        responseWaiter.resolve(parsers.in(msg));
+        responsePromise.resolve(parsers.in(msg));
       } catch (e) {
-        responseWaiter.reject(new ProducerError(e));
+        responsePromise.reject(new ProducerError(e));
       } finally {
         delete rpcQueue[correlationId];
       }
@@ -163,18 +163,19 @@ class Producer {
       // reply to us if you receive this message!
       options.replyTo = this.amqpRPCQueues[queue].queue;
 
-      // a promise that will resolve when response is received
-      return new Promise((resolve, reject) => {
-        this.amqpRPCQueues[queue][corrId] = { resolve, reject };
+      // deferred promise that will resolve when response is received
+      const responsePromise = pDefer();
+      this.amqpRPCQueues[queue][corrId] = responsePromise;
 
-        this.publishOrSendToQueue(queue, msg, options);
+      await this.publishOrSendToQueue(queue, msg, options);
 
-        // Using given timeout or default one
-        const timeout = options.timeout || this._connection.config.rpcTimeout || 0;
-        if (timeout > 0) {
-          this.prepareTimeoutRpc(queue, corrId, timeout);
-        }
-      });
+      // Using given timeout or default one
+      const timeout = options.timeout || this._connection.config.rpcTimeout || 0;
+      if (timeout > 0) {
+        this.prepareTimeoutRpc(queue, corrId, timeout);
+      }
+
+      return responsePromise.promise;
     }
 
     return this.publishOrSendToQueue(queue, msg, options);
