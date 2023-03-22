@@ -43,31 +43,48 @@ describe('Producer/Consumer RPC messaging:', () => {
     assert.strictEqual(response, undefined);
   });
 
-  it('should return syntax error when we fail to parse response', async () => {
-    await arnavmq.consumer.consume(fixtures.queues[3], (msg, properties) => {
-      // call produce here manually to simulate client sending invalid json
-      arnavmq.producer.produce(properties.replyTo, 'invalid_json', {
-        correlationId: properties.correlationId,
-        contentType: 'application/json',
+  it('should return syntax error when we fail to parse response', (done) => {
+    arnavmq.consumer
+      .consume(fixtures.queues[3], async (msg, properties) => {
+        // call produce here manually to simulate client sending invalid json
+        try {
+          await arnavmq.producer.produce(properties.replyTo, 'invalid_json', {
+            correlationId: properties.correlationId,
+            contentType: 'application/json',
+          });
+        } catch (error) {
+          done(error);
+        }
+        // delete the replyTo so we don't return rpc to client
+        delete properties.replyTo; // eslint-disable-line
+      })
+      .then(() =>
+        arnavmq.producer
+          .produce(fixtures.queues[3], undefined, {
+            contentType: 'application/json',
+            rpc: true,
+            timeout: 2000,
+          })
+          .then(() => {
+            assert.fail('Did not get the expected error.');
+          })
+      )
+      .catch((error) => {
+        if (error instanceof assert.AssertionError) {
+          done(error);
+          return;
+        }
+
+        try {
+          assert.strictEqual(
+            error.name,
+            'SyntaxError',
+            `Got unexpected error of type '${error.name}': ${error.message}`
+          );
+          done();
+        } catch (assertError) {
+          done(assertError);
+        }
       });
-
-      // delete the replyTo so we don't return rpc to client
-      delete properties.replyTo; // eslint-disable-line
-    });
-
-    try {
-      await arnavmq.producer.produce(fixtures.queues[3], undefined, {
-        contentType: 'application/json',
-        rpc: true,
-        timeout: 5000,
-      });
-      assert.fail('Did not get the expected error.');
-    } catch (error) {
-      if (error instanceof assert.AssertionError) {
-        throw error;
-      }
-
-      assert.strictEqual(error.name, 'SyntaxError', `Got unexpected error of type ' ${error.name}': ${error.message}`);
-    }
   });
 });
