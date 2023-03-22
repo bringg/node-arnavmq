@@ -197,6 +197,8 @@ class Consumer {
             params: { queue },
           });
         }
+
+        return;
       }
 
       try {
