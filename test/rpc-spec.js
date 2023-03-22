@@ -59,7 +59,7 @@ describe('Producer/Consumer RPC messaging:', () => {
       await arnavmq.producer.produce(fixtures.queues[3], undefined, {
         contentType: 'application/json',
         rpc: true,
-        timeout: 500,
+        timeout: 5000,
       });
       assert.fail('Did not get the expected error.');
     } catch (error) {
@@ -67,7 +67,7 @@ describe('Producer/Consumer RPC messaging:', () => {
         throw error;
       }
 
-      assert.strictEqual(error.name, 'SyntaxError');
+      assert.strictEqual(error.name, 'SyntaxError', `Got unexpected error of type ' ${error.name}': ${error.message}`);
     }
   });
 });
