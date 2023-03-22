@@ -33,7 +33,6 @@ class Consumer {
         persistent: true,
         durable: true,
       };
-      this._connection.config.transport.debug(loggerAlias, `[${queue}][${messageProperties.replyTo}] >`, reply);
       this._connection.config.logger.debug({
         message: `${loggerAlias} [${queue}][${messageProperties.replyTo}] > ${reply}`,
         params: { content: reply },
@@ -96,7 +95,6 @@ class Consumer {
     try {
       await channel.assertQueue(suffixedQueue, options);
     } catch (error) {
-      this._connection.config.transport.error(loggerAlias, error);
       this._connection.config.logger.error({
         message: `${loggerAlias} Failed to assert queue ${queue}: ${error.message}`,
         error,
@@ -104,7 +102,6 @@ class Consumer {
       });
     }
 
-    this._connection.config.transport.debug(loggerAlias, 'init', queue);
     this._connection.config.logger.debug({
       message: `${loggerAlias} init ${queue}`,
       params: { queue },
@@ -133,7 +130,6 @@ class Consumer {
           // Just in the odd chance the channel was open but the listener failed.
           await channel.close();
         } catch (closeError) {
-          this._connection.config.transport.error(loggerAlias, closeError);
           this._connection.config.logger.error({
             message: `${loggerAlias} Failed to close channel after initialization error ${queue}: ${closeError.message}`,
             error: closeError,
@@ -150,7 +146,6 @@ class Consumer {
       if (!msg) {
         // When forcefully cancelled by rabbitmq, consumer would receive a null message.
         // https://amqp-node.github.io/amqplib/channel_api.html#channel_consume
-        this._connection.config.transport.warn(loggerAlias, null);
         this._connection.config.logger.warn({
           message: `${loggerAlias} Consumer was cancelled by server for queue '${queue}'`,
           error: null,
@@ -160,7 +155,6 @@ class Consumer {
       }
 
       const messageString = msg.content.toString();
-      this._connection.config.transport.debug(loggerAlias, `[${queue}] < ${messageString}`);
       this._connection.config.logger.debug({
         message: `${loggerAlias} [${queue}] < ${messageString}`,
         params: { queue, message: messageString },
@@ -174,7 +168,6 @@ class Consumer {
         await this.checkRpc(msg.properties, queue, res);
       } catch (error) {
         // if something bad happened in the callback, reject the message so we can requeue it (or not)
-        this._connection.config.transport.error(loggerAlias, error);
         this._connection.config.logger.error({
           message: `${loggerAlias} Failed processing message from queue ${queue}: ${error.message}`,
           error,
@@ -184,7 +177,6 @@ class Consumer {
         try {
           channel.reject(msg, this._connection.config.requeue);
         } catch (rejectError) {
-          this._connection.config.transport.error(loggerAlias, rejectError);
           this._connection.config.logger.error({
             message: `${loggerAlias} Failed to reject message after processing failure on queue ${queue}: ${rejectError.message}`,
             error: rejectError,
@@ -198,7 +190,6 @@ class Consumer {
       try {
         channel.ack(msg);
       } catch (ackError) {
-        this._connection.config.transport.error(loggerAlias, ackError);
         this._connection.config.logger.error({
           message: `${loggerAlias} Failed to ack message after processing finished on queue ${queue}: ${ackError.message}`,
           error: ackError,
@@ -210,7 +201,6 @@ class Consumer {
     try {
       await channel.consume(queue, consumeFunc, { noAck: false });
     } catch (error) {
-      this._connection.config.transport.error(loggerAlias, error);
       this._connection.config.logger.error({
         message: `${loggerAlias} Failed to start consuming from queue ${queue}: ${error.message}`,
         error,

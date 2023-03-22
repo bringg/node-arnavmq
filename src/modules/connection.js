@@ -57,7 +57,6 @@ class Connection {
    * @param {Error} error
    */
   _onError(error) {
-    this._config.transport.error(error);
     this._config.logger.error({
       message: error.message,
       error,

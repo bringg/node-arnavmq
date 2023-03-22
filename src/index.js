@@ -30,9 +30,6 @@ module.exports = (config) => {
     // generate a hostname so we can track this connection on the broker (rabbitmq management plugin)
     hostname: process.env.HOSTNAME || process.env.USER || uuid.v4(),
 
-    // Deprecated. Use 'logger' instead. The transport to use to debug. If provided, arnavmq will show some logs
-    transport: utils.emptyLogger,
-
     /**
      * A logger object with a log function for each of the log levels ("debug", "info", "warn", or "error").
      * Each log function receives one parameter containing a log event with the following fields:
@@ -45,11 +42,8 @@ module.exports = (config) => {
     ...config,
   };
 
-  if (configuration.transport !== utils.emptyLogger) {
-    process.emitWarning(
-      "The 'transport' configuration option is deprecated. Please use the 'logger' option instead.",
-      'DeprecationWarning'
-    );
+  if (configuration.transport) {
+    throw new Error('Using removed deprecated "transport" option. Use the "logger" option instead.');
   }
 
   configuration.prefetch = parseInt(configuration.prefetch, 10) || 0;

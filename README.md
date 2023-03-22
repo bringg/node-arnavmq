@@ -137,9 +137,6 @@ const arnavmq = require('arnavmq')({
   // generate a hostname so we can track this connection on the broker (rabbitmq management plugin)
   hostname: process.env.HOSTNAME || process.env.USER || uuid.v4(),
 
-  // Deprecated. Use 'logger' instead. The transport to use to debug. If provided, arnavmq will show some logs
-  transport: utils.emptyLogger,
-
   /**
    * A logger object with a log function for each of the log levels ("debug", "info", "warn", or "error").
    * Each log function receives one parameter containing a log event with the following fields:
@@ -153,7 +150,7 @@ const arnavmq = require('arnavmq')({
 
 You can override any or no of the property above.
 
-**Note:** if you enable the debug mode using the `AMQP_DEBUG=true` env var, but you do not attach any transport logger, the module will fallback to console.
+**Note:** if you enable the debug mode using the `AMQP_DEBUG=true` env var, but you do not attach any logger, the module will fallback to console.
 
 ## Documentation & resources
 

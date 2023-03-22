@@ -50,7 +50,6 @@ class Producer {
       // On timeout the waiter is deleted, so we need to handle the race when the response arrives too late.
       if (responsePromise === undefined) {
         const error = new Error(`Receiving RPC message from previous session: callback no more in memory. ${queue}`);
-        this._connection.config.transport.warn(loggerAlias, error);
         this._connection.config.logger.warn({
           message: `${loggerAlias} ${error.message}`,
           error,
@@ -61,7 +60,6 @@ class Producer {
       }
 
       // if we found one, we execute the callback and delete it because it will never be received again anyway
-      this._connection.config.transport.info(loggerAlias, `[${queue}] < answer`);
       this._connection.config.logger.debug({
         message: `${loggerAlias} [${queue}] < answer`,
         params: { queue },
@@ -228,7 +226,6 @@ class Producer {
       message = null;
     }
 
-    this._connection.config.transport.info(loggerAlias, `[${queue}] > `, message);
     this._connection.config.logger.debug({
       message: `${loggerAlias} [${queue}] > ${message}`,
       params: { queue, message },
@@ -242,7 +239,6 @@ class Producer {
       }
 
       // add timeout between retries because we don't want to overflow the CPU
-      this._connection.config.transport.error(loggerAlias, error);
       this._connection.config.logger.error({
         message: `${loggerAlias} Failed sending message to queue ${queue}: ${error.message}`,
         error,
