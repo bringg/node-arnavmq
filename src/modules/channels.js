@@ -45,7 +45,7 @@ class Channels {
    * Creates or returns an existing channel by it's key and config.
    * @return {Promise} A promise that resolve with an amqp.node channel object
    */
-  async _get(key, config = {}) {
+  _get(key, config = {}) {
     const existingChannel = this._channels.get(key);
 
     if (existingChannel) {
@@ -57,13 +57,17 @@ class Channels {
       return existingChannel.chann;
     }
 
-    return this._initNewChannel(key, config);
+    const channelPromise = this._initNewChannel(key, config);
+    this._channels.set(key, { chann: channelPromise, config });
+
+    return channelPromise;
   }
 
   async _initNewChannel(key, config) {
     let channel;
     try {
       channel = await this._connection.createChannel();
+
       channel.prefetch(config.prefetch);
 
       // on error we remove the channel so the next call will recreate it (auto-reconnect are handled by connection users)
@@ -77,7 +81,6 @@ class Channels {
         });
       });
 
-      this._channels.set(key, { chann: channel, config });
       return channel;
     } catch (error) {
       this._channels.delete(key);

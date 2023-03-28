@@ -168,7 +168,7 @@ class Consumer {
 
       // main answer management chaining
       // receive message, parse it, execute callback, check if should answer, ack/reject message
-      const body = await Promise.resolve(parsers.in(msg));
+      const body = parsers.in(msg);
       try {
         const res = await callback(body, msg.properties);
         await this.checkRpc(msg.properties, queue, res);

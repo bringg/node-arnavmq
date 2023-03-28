@@ -54,7 +54,7 @@ class Producer {
         this._connection.config.logger.warn({
           message: `${loggerAlias} ${error.message}`,
           error,
-          params: { queue, rpcQueue },
+          params: { queue, correlationId },
         });
 
         return;
@@ -80,40 +80,45 @@ class Producer {
   /**
    * Create a RPC-ready queue
    * @param  {string} queue the queue name in which we send a RPC request
-   * @return {Promise}       Resolves when answer response queue is ready to receive messages
+   * @return {Promise}       Resolves with the the response queue name when the answer response queue is ready to receive messages
    */
-  async createRpcQueue(queue) {
+  createRpcQueue(queue) {
     this.amqpRPCQueues[queue] = this.amqpRPCQueues[queue] || {};
 
-    const rpcQueue = this.amqpRPCQueues[queue];
-    if (rpcQueue.queue) {
-      return rpcQueue.queue;
+    const rpcData = this.amqpRPCQueues[queue];
+    if (rpcData.resQueuePromise) {
+      return rpcData.resQueuePromise;
     }
+
+    rpcData.resQueuePromise = this._initializeRpcQueue(queue);
+    return rpcData.resQueuePromise;
+  }
+
+  async _initializeRpcQueue(sourceQueue) {
+    const rpcQueue = this.amqpRPCQueues[sourceQueue];
 
     // we create the callback queue using base queue name + appending config hostname and :res for clarity
     // ie. if hostname is gateway-http and queue is service-oauth, response queue will be service-oauth:gateway-http:res
     // it is important to have different hostname or no hostname on each module sending message or there will be conflicts
-    const resQueue = `${queue}:${this._connection.config.hostname}:${process.pid}:res`;
-
+    const resQueue = `${sourceQueue}:${this._connection.config.hostname}:${process.pid}:res`;
     try {
       const channel = await this._connection.getDefaultChannel();
       await channel.assertQueue(resQueue, { durable: true, exclusive: true });
-      rpcQueue.queue = resQueue;
 
       // if channel is closed, we want to make sure we cleanup the queue so future calls will recreate it
       this._connection.addListener('close', () => {
-        delete rpcQueue.queue;
-        this.createRpcQueue(queue);
+        delete rpcQueue.resQueuePromise;
+        this.createRpcQueue(sourceQueue);
       });
 
-      await channel.consume(resQueue, this.maybeAnswer(queue), {
+      await channel.consume(resQueue, this.maybeAnswer(sourceQueue), {
         noAck: true,
       });
-      return rpcQueue.queue;
+      return resQueue;
     } catch (error) {
-      delete rpcQueue.queue;
+      delete rpcQueue.resQueuePromise;
       await utils.timeoutPromise(this._connection.config.timeout);
-      return this.createRpcQueue(queue);
+      return this.createRpcQueue(sourceQueue);
     }
   }
 
@@ -161,7 +166,7 @@ class Producer {
       const corrId = uuid.v4();
       options.correlationId = corrId;
       // reply to us if you receive this message!
-      options.replyTo = this.amqpRPCQueues[queue].queue;
+      options.replyTo = await this.amqpRPCQueues[queue].resQueuePromise;
 
       // deferred promise that will resolve when response is received
       const responsePromise = pDefer();
