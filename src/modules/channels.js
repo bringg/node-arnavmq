@@ -26,41 +26,41 @@ class Channels {
     this._channels = new Map();
   }
 
-  get(queue, config) {
+  async get(queue, config) {
     // If we don't have custom prefetch create a new channel
     const defaultPrefetch = this._config.prefetch;
     const requestedPrefetch = config.prefetch || defaultPrefetch;
     if (typeof requestedPrefetch === 'number' && requestedPrefetch !== defaultPrefetch) {
-      return this._get(queue, config);
+      return await this._get(queue, config);
     }
 
-    return this.defaultChannel();
+    return await this.defaultChannel();
   }
 
-  defaultChannel() {
-    return this._get(DEFAULT_CHANNEL, { prefetch: this._config.prefetch });
+  async defaultChannel() {
+    return await this._get(DEFAULT_CHANNEL, { prefetch: this._config.prefetch });
   }
 
   /**
    * Creates or returns an existing channel by it's key and config.
    * @return {Promise} A promise that resolve with an amqp.node channel object
    */
-  _get(key, config = {}) {
+  async _get(key, config = {}) {
     const existingChannel = this._channels.get(key);
 
     if (existingChannel) {
       if (!isSameConfig(existingChannel.config, config)) {
-        return Promise.reject(new ChannelAlreadyExistsError(key, config));
+        throw new ChannelAlreadyExistsError(key, config);
       }
 
       // cache handling, if channel already opened, return it
-      return existingChannel.chann;
+      return await existingChannel.chann;
     }
 
     const channelPromise = this._initNewChannel(key, config);
     this._channels.set(key, { chann: channelPromise, config });
 
-    return channelPromise;
+    return await channelPromise;
   }
 
   async _initNewChannel(key, config) {

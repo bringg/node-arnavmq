@@ -40,7 +40,7 @@ class Consumer {
       });
 
       const defaultChannel = await this._connection.getDefaultChannel();
-      return defaultChannel.sendToQueue(messageProperties.replyTo, parsers.out(reply, options), options);
+      return await defaultChannel.sendToQueue(messageProperties.replyTo, parsers.out(reply, options), options);
     }
 
     return messageProperties;
@@ -90,7 +90,7 @@ class Consumer {
     if (!channel) {
       // in case of any error creating the channel, wait for some time and then try to reconnect again (to avoid overflow)
       await utils.timeoutPromise(this._connection.config.timeout);
-      return this.subscribe(queue, options, callback);
+      return await this.subscribe(queue, options, callback);
     }
 
     try {

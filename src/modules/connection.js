@@ -16,15 +16,15 @@ class Connection {
    * Connect to the broker. We keep only 1 connection for each connection string provided in config, as advised by RabbitMQ
    * @return {Promise} A promise that resolve with an amqp.node connection object
    */
-  getConnection() {
+  async getConnection() {
     // cache handling, if connection already opened, return it
     if (this._connectionPromise) {
-      return this._connectionPromise;
+      return await this._connectionPromise;
     }
 
     this._connectionPromise = this._connect();
 
-    return this._connectionPromise;
+    return await this._connectionPromise;
   }
 
   async _connect() {
@@ -68,12 +68,12 @@ class Connection {
 
   async getChannel(queue, config) {
     await this.getConnection();
-    return this._channels.get(queue, config);
+    return await this._channels.get(queue, config);
   }
 
   async getDefaultChannel() {
     await this.getConnection();
-    return this._channels.defaultChannel();
+    return await this._channels.defaultChannel();
   }
 
   /**

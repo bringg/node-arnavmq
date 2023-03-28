@@ -82,16 +82,16 @@ class Producer {
    * @param  {string} queue the queue name in which we send a RPC request
    * @return {Promise}       Resolves with the the response queue name when the answer response queue is ready to receive messages
    */
-  createRpcQueue(queue) {
+  async createRpcQueue(queue) {
     this.amqpRPCQueues[queue] = this.amqpRPCQueues[queue] || {};
 
     const rpcData = this.amqpRPCQueues[queue];
     if (rpcData.resQueuePromise) {
-      return rpcData.resQueuePromise;
+      return await rpcData.resQueuePromise;
     }
 
     rpcData.resQueuePromise = this._initializeRpcQueue(queue);
-    return rpcData.resQueuePromise;
+    return await rpcData.resQueuePromise;
   }
 
   async _initializeRpcQueue(sourceQueue) {
@@ -118,7 +118,7 @@ class Producer {
     } catch (error) {
       delete rpcQueue.resQueuePromise;
       await utils.timeoutPromise(this._connection.config.timeout);
-      return this.createRpcQueue(sourceQueue);
+      return await this.createRpcQueue(sourceQueue);
     }
   }
 
@@ -126,9 +126,9 @@ class Producer {
     const channel = await this._connection.getDefaultChannel();
 
     if (!options.routingKey) {
-      return channel.sendToQueue(queue, msg, options);
+      return await channel.sendToQueue(queue, msg, options);
     }
-    return channel.publish(queue, options.routingKey, msg, options);
+    return await channel.publish(queue, options.routingKey, msg, options);
   }
 
   /**
@@ -180,10 +180,10 @@ class Producer {
         this.prepareTimeoutRpc(queue, corrId, timeout);
       }
 
-      return responsePromise.promise;
+      return await responsePromise.promise;
     }
 
-    return this.publishOrSendToQueue(queue, msg, options);
+    return await this.publishOrSendToQueue(queue, msg, options);
   }
 
   /**
@@ -207,7 +207,7 @@ class Producer {
    * @return {Promise}         checkRpc response
    */
   /* eslint no-param-reassign: "off" */
-  publish(queue, msg, options) {
+  async publish(queue, msg, options) {
     // default options are persistent and durable because we do not want to miss any outgoing message
     // unless user specify it
     const settings = { persistent: true, durable: true, ...options };
@@ -219,7 +219,7 @@ class Producer {
       message = { ...msg };
     }
 
-    return this._sendToQueue(queue, message, settings, 0);
+    return await this._sendToQueue(queue, message, settings, 0);
   }
 
   async _sendToQueue(queue, message, settings, currentRetryNumber) {
@@ -249,7 +249,7 @@ class Producer {
         params: { queue, message },
       });
       await utils.timeoutPromise(this._connection.config.timeout);
-      return this._sendToQueue(queue, message, settings, currentRetryNumber + 1);
+      return await this._sendToQueue(queue, message, settings, currentRetryNumber + 1);
     }
   }
 
