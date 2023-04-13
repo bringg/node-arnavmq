@@ -80,7 +80,7 @@ describe('disconnections', function () {
 
       await arnavmq.producer.produce(queue, undefined, { rpc: true });
       await utils.timeoutPromise(500);
-      assert.equal(counter, 1);
+      assert.strictEqual(counter, 1);
 
       await docker.disconnectNetwork();
 
@@ -90,12 +90,14 @@ describe('disconnections', function () {
       }
 
       await docker.connectNetwork();
-      let responses = await Promise.all(producePromises);
-      responses = responses.sort((a, b) => a - b);
+      const responses = await Promise.all(producePromises);
+      responses.sort((a, b) => a - b);
 
-      const lastResponse = responses[responses.length - 1];
-      assert.equal(lastResponse, 50, 'last response should be 50');
-      assert.equal(counter, 50, 'consumer counter should be 50');
+      assert.deepStrictEqual(
+        responses,
+        Array.from({ length: 49 }, (_, i) => i + 2)
+      );
+      assert.strictEqual(counter, 50, `consumer counter should be 50, but it is ${counter}`);
     });
   });
 });

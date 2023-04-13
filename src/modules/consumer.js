@@ -21,36 +21,29 @@ class Consumer {
 
   /**
    * Get a function to execute on incoming messages to handle RPC
-   * @param  {any} msg   An amqp.node message object
+   * @param  {any} messageProperties   An amqp.node message properties object, containing the rpc settings
    * @param  {string} queue The initial queue on which the handler received the message
-   * @return {function}       a function to use in a chaining on incoming messages
+   * @param  {any} reply the received message to reply the rpc if needed:
+   * @return {any}       object, string, number... the current received message
    */
-  checkRpc(msg, queue) {
-    /**
-     * When message contains a replyTo property, we try to send the answer back
-     * @param  {any} content the received message:
-     * @return {any}          object, string, number... the current received message
-     */
-    return (content) => {
-      if (msg.properties.replyTo) {
-        const options = {
-          correlationId: msg.properties.correlationId,
-          persistent: true,
-          durable: true,
-        };
-        this._connection.config.transport.debug(loggerAlias, `[${queue}][${msg.properties.replyTo}] >`, content);
-        this._connection.config.logger.debug({
-          message: `${loggerAlias} [${queue}][${msg.properties.replyTo}] > ${content}`,
-          params: { content },
-        });
+  async checkRpc(messageProperties, queue, reply) {
+    if (messageProperties.replyTo) {
+      const options = {
+        correlationId: messageProperties.correlationId,
+        persistent: true,
+        durable: true,
+      };
+      this._connection.config.transport.debug(loggerAlias, `[${queue}][${messageProperties.replyTo}] >`, reply);
+      this._connection.config.logger.debug({
+        message: `${loggerAlias} [${queue}][${messageProperties.replyTo}] > ${reply}`,
+        params: { content: reply },
+      });
 
-        return this._connection.getDefaultChannel().then((channel) => {
-          return channel.sendToQueue(msg.properties.replyTo, parsers.out(content, options), options);
-        });
-      }
+      const defaultChannel = await this._connection.getDefaultChannel();
+      return await defaultChannel.sendToQueue(messageProperties.replyTo, parsers.out(reply, options), options);
+    }
 
-      return msg;
-    };
+    return messageProperties;
   }
 
   /**
@@ -66,7 +59,7 @@ class Consumer {
     return this.subscribe(queue, options, callback);
   }
 
-  subscribe(queue, options, callback) {
+  async subscribe(queue, options, callback) {
     const defaultOptions = {
       persistent: true,
       durable: true,
@@ -93,119 +86,137 @@ class Consumer {
     // ex: service-something with suffix :ci becomes service-suffix:ci etc.
     const suffixedQueue = `${queue}${this._connection.config.consumerSuffix || ''}`;
 
-    return this._connection
-      .getChannel(queue, options.channel || {})
-      .then((channel) => {
-        // when channel is closed, we want to be sure we recreate the queue ASAP so we trigger a reconnect by recreating the consumer
-        channel.addListener('close', () => {
-          this.subscribe(queue, options, callback);
-        });
+    const channel = await this._initializeChannel(queue, options || {}, callback);
+    if (!channel) {
+      // in case of any error creating the channel, wait for some time and then try to reconnect again (to avoid overflow)
+      await utils.timeoutPromise(this._connection.config.timeout);
+      return await this.subscribe(queue, options, callback);
+    }
 
-        return channel
-          .assertQueue(suffixedQueue, options)
-          .then((q) => {
-            this._connection.config.transport.debug(loggerAlias, 'init', q.queue);
-            this._connection.config.logger.debug({
-              message: `${loggerAlias} init ${q.queue}`,
-              params: { queue: q.queue },
-            });
-
-            return this._consumeQueue(channel, q.queue, callback);
-          })
-          .catch((error) => {
-            this._connection.config.transport.error(loggerAlias, error);
-            this._connection.config.logger.error({
-              message: `${loggerAlias} Failed to assert queue ${queue}: ${error.message}`,
-              error,
-              params: { queue },
-            });
-          });
-        // in case of any error creating the channel, wait for some time and then try to reconnect again (to avoid overflow)
-      })
-      .catch((err) => {
-        if (err instanceof ChannelAlreadyExistsError) {
-          throw err;
-        } else {
-          return utils
-            .timeoutPromise(this._connection.config.timeout)
-            .then(() => this.subscribe(queue, options, callback));
-        }
+    try {
+      await channel.assertQueue(suffixedQueue, options);
+    } catch (error) {
+      this._connection.config.transport.error(loggerAlias, error);
+      this._connection.config.logger.error({
+        message: `${loggerAlias} Failed to assert queue ${queue}: ${error.message}`,
+        error,
+        params: { queue },
       });
+    }
+
+    this._connection.config.transport.debug(loggerAlias, 'init', queue);
+    this._connection.config.logger.debug({
+      message: `${loggerAlias} init ${queue}`,
+      params: { queue },
+    });
+
+    await this._consumeQueue(channel, queue, callback);
+    return true;
   }
 
-  _consumeQueue(channel, queue, callback) {
-    return channel
-      .consume(
-        queue,
-        (msg) => {
-          if (!msg) {
-            // When forcefully cancelled by rabbitmq, consumer would receive a null message.
-            // https://amqp-node.github.io/amqplib/channel_api.html#channel_consume
-            this._connection.config.transport.warn(loggerAlias, null);
-            this._connection.config.logger.warn({
-              message: `${loggerAlias} Consumer was cancelled by server for queue '${queue}'`,
-              error: null,
-              params: { queue },
-            });
-            return;
-          }
+  async _initializeChannel(queue, options, callback) {
+    let channel;
+    try {
+      channel = await this._connection.getChannel(queue, options.channel || {});
+      // when channel is closed, we want to be sure we recreate the queue ASAP so we trigger a reconnect by recreating the consumer
+      channel.addListener('close', () => {
+        this.subscribe(queue, options, callback);
+      });
+      return channel;
+    } catch (err) {
+      if (err instanceof ChannelAlreadyExistsError) {
+        throw err;
+      }
 
-          const messageString = msg.content.toString();
-          this._connection.config.transport.debug(loggerAlias, `[${queue}] < ${messageString}`);
-          this._connection.config.logger.debug({
-            message: `${loggerAlias} [${queue}] < ${messageString}`,
-            params: { queue, message: messageString },
+      if (channel) {
+        try {
+          // Just in the odd chance the channel was open but the listener failed.
+          await channel.close();
+        } catch (closeError) {
+          this._connection.config.transport.error(loggerAlias, closeError);
+          this._connection.config.logger.error({
+            message: `${loggerAlias} Failed to close channel after initialization error ${queue}: ${closeError.message}`,
+            error: closeError,
+            params: { queue },
           });
+        }
+      }
+      return null;
+    }
+  }
 
-          // main answer management chaining
-          // receive message, parse it, execute callback, check if should answer, ack/reject message
-          Promise.resolve(parsers.in(msg))
-            .then((body) => callback(body, msg.properties))
-            .then(this.checkRpc(msg, queue))
-            .then(() => {
-              try {
-                channel.ack(msg);
-              } catch (ackError) {
-                this._connection.config.transport.error(loggerAlias, ackError);
-                this._connection.config.logger.error({
-                  message: `${loggerAlias} Failed to ack message after processing finished on queue ${queue}: ${ackError.message}`,
-                  error: ackError,
-                  params: { queue },
-                });
-              }
-            })
-            .catch((error) => {
-              // if something bad happened in the callback, reject the message so we can requeue it (or not)
-              this._connection.config.transport.error(loggerAlias, error);
-              this._connection.config.logger.error({
-                message: `${loggerAlias} Failed processing message from queue ${queue}: ${error.message}`,
-                error,
-                params: { queue, message: messageString },
-              });
-
-              try {
-                channel.reject(msg, this._connection.config.requeue);
-              } catch (rejectError) {
-                this._connection.config.transport.error(loggerAlias, rejectError);
-                this._connection.config.logger.error({
-                  message: `${loggerAlias} Failed to reject message after processing failure on queue ${queue}: ${rejectError.message}`,
-                  error: rejectError,
-                  params: { queue },
-                });
-              }
-            });
-        },
-        { noAck: false }
-      )
-      .then(() => true)
-      .catch((error) => {
-        this._connection.config.transport.error(loggerAlias, error);
-        this._connection.config.logger.error({
-          message: `${loggerAlias} Failed to start consuming from queue ${queue}: ${error.message}`,
-          error,
+  async _consumeQueue(channel, queue, callback) {
+    const consumeFunc = async (msg) => {
+      if (!msg) {
+        // When forcefully cancelled by rabbitmq, consumer would receive a null message.
+        // https://amqp-node.github.io/amqplib/channel_api.html#channel_consume
+        this._connection.config.transport.warn(loggerAlias, null);
+        this._connection.config.logger.warn({
+          message: `${loggerAlias} Consumer was cancelled by server for queue '${queue}'`,
+          error: null,
           params: { queue },
         });
+        return;
+      }
+
+      const messageString = msg.content.toString();
+      this._connection.config.transport.debug(loggerAlias, `[${queue}] < ${messageString}`);
+      this._connection.config.logger.debug({
+        message: `${loggerAlias} [${queue}] < ${messageString}`,
+        params: { queue, message: messageString },
       });
+
+      // main answer management chaining
+      // receive message, parse it, execute callback, check if should answer, ack/reject message
+      const body = parsers.in(msg);
+      try {
+        const res = await callback(body, msg.properties);
+        await this.checkRpc(msg.properties, queue, res);
+      } catch (error) {
+        // if something bad happened in the callback, reject the message so we can requeue it (or not)
+        this._connection.config.transport.error(loggerAlias, error);
+        this._connection.config.logger.error({
+          message: `${loggerAlias} Failed processing message from queue ${queue}: ${error.message}`,
+          error,
+          params: { queue, message: messageString },
+        });
+
+        try {
+          channel.reject(msg, this._connection.config.requeue);
+        } catch (rejectError) {
+          this._connection.config.transport.error(loggerAlias, rejectError);
+          this._connection.config.logger.error({
+            message: `${loggerAlias} Failed to reject message after processing failure on queue ${queue}: ${rejectError.message}`,
+            error: rejectError,
+            params: { queue },
+          });
+        }
+
+        return;
+      }
+
+      try {
+        channel.ack(msg);
+      } catch (ackError) {
+        this._connection.config.transport.error(loggerAlias, ackError);
+        this._connection.config.logger.error({
+          message: `${loggerAlias} Failed to ack message after processing finished on queue ${queue}: ${ackError.message}`,
+          error: ackError,
+          params: { queue },
+        });
+      }
+    };
+
+    try {
+      await channel.consume(queue, consumeFunc, { noAck: false });
+    } catch (error) {
+      this._connection.config.transport.error(loggerAlias, error);
+      this._connection.config.logger.error({
+        message: `${loggerAlias} Failed to start consuming from queue ${queue}: ${error.message}`,
+        error,
+        params: { queue },
+      });
+    }
   }
 }
 

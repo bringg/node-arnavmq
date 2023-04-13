@@ -26,68 +26,82 @@ class Channels {
     this._channels = new Map();
   }
 
-  get(queue, config) {
+  async get(queue, config) {
     // If we don't have custom prefetch create a new channel
     const defaultPrefetch = this._config.prefetch;
     const requestedPrefetch = config.prefetch || defaultPrefetch;
     if (typeof requestedPrefetch === 'number' && requestedPrefetch !== defaultPrefetch) {
-      return this._get(queue, config);
+      return await this._get(queue, config);
     }
 
-    return this.defaultChannel();
+    return await this.defaultChannel();
+  }
+
+  async defaultChannel() {
+    return await this._get(DEFAULT_CHANNEL, { prefetch: this._config.prefetch });
   }
 
   /**
    * Creates or returns an existing channel by it's key and config.
    * @return {Promise} A promise that resolve with an amqp.node channel object
    */
-  _get(key, config = {}) {
-    let channel = this._channels.get(key);
+  async _get(key, config = {}) {
+    const existingChannel = this._channels.get(key);
 
-    if (channel) {
-      if (!isSameConfig(channel.config, config)) {
-        return Promise.reject(new ChannelAlreadyExistsError(key, config));
+    if (existingChannel) {
+      if (!isSameConfig(existingChannel.config, config)) {
+        throw new ChannelAlreadyExistsError(key, config);
       }
 
       // cache handling, if channel already opened, return it
-      return channel.chann;
+      return await existingChannel.chann;
     }
 
-    channel = this._connection
-      .createChannel()
-      .then((_channel) => {
-        _channel.prefetch(config.prefetch);
+    const channelPromise = this._initNewChannel(key, config);
+    this._channels.set(key, { chann: channelPromise, config });
 
-        // on error we remove the channel so the next call will recreate it (auto-reconnect are handled by connection users)
-        _channel.on('close', () => {
-          this._channels.delete(key);
-        });
-        _channel.on('error', (error) => {
-          this._config.logger.error({
-            message: `Got channel error [${error.message}] for [${key}]`,
-            error,
-          });
-        });
-
-        return _channel;
-      })
-      .catch((error) => {
-        this._channels.delete(key);
-        this._config.logger.error({
-          message: `Failed to create channel for [${key}] - [${error.message}]`,
-          error,
-        });
-
-        return Promise.reject(error);
-      });
-
-    this._channels.set(key, { chann: channel, config });
-
-    return channel;
+    return await channelPromise;
   }
 
-  defaultChannel() {
-    return this._get(DEFAULT_CHANNEL, { prefetch: this._config.prefetch });
+  async _initNewChannel(key, config) {
+    let channel;
+    try {
+      channel = await this._connection.createChannel();
+
+      channel.prefetch(config.prefetch);
+
+      // on error we remove the channel so the next call will recreate it (auto-reconnect are handled by connection users)
+      channel.on('close', () => {
+        this._channels.delete(key);
+      });
+      channel.on('error', (error) => {
+        this._config.logger.error({
+          message: `Got channel error [${error.message}] for [${key}]`,
+          error,
+        });
+      });
+
+      return channel;
+    } catch (error) {
+      this._channels.delete(key);
+      this._config.logger.error({
+        message: `Failed to create channel for [${key}] - [${error.message}]`,
+        error,
+      });
+
+      // Should not happen, but just in case
+      if (channel) {
+        try {
+          await channel.close();
+        } catch (closeError) {
+          this._config.logger.error({
+            message: `Failed to cleanup channel after failed initialization for [${key}] - [${closeError.message}]`,
+            error: closeError,
+          });
+        }
+      }
+      throw error;
+    }
   }
 }
 

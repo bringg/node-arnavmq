@@ -6,7 +6,7 @@ const utils = require('../src/modules/utils');
 const { Channels, ChannelAlreadyExistsError } = require('../src/modules/channels');
 
 const fixtures = {
-  queues: ['test-queue-0', 'test-queue-1', 'test-queue-2', 'test-queue-3'],
+  queues: ['test-queue-0', 'test-queue-1', 'test-queue-2', 'test-queue-3', 'test-queue-4'],
   routingKey: 'queue-routing-key',
 };
 
@@ -120,111 +120,108 @@ describe('producer/consumer', function () {
   });
 
   describe('msg delivering', () => {
-    before(() =>
-      arnavmq.consumer
-        .consume(fixtures.queues[0], () => {
-          letters -= 1;
-        })
-        .then(() =>
-          arnavmq.consumer.consume(fixtures.queues[1], () => {
-            letters -= 1;
-          })
-        )
-    );
+    before(async () => {
+      await arnavmq.consumer.consume(fixtures.queues[0], () => {
+        letters -= 1;
+      });
 
-    it('should receive message that is only string', () => {
+      await arnavmq.consumer.consume(fixtures.queues[1], () => {
+        letters -= 1;
+      });
+    });
+
+    it('should receive message that is only string', async () => {
       const queueName = 'test-only-string-queue';
-      return arnavmq.consumer
-        .consume(queueName, (message) => Promise.resolve(`${message}-test`))
-        .then(() => arnavmq.producer.produce(queueName, '85.69.30.121', { rpc: true }))
-        .then((result) => {
-          assert.equal(result, '85.69.30.121-test');
-        });
+
+      await arnavmq.consumer.consume(queueName, (message) => Promise.resolve(`${message}-test`));
+      const result = await arnavmq.producer.produce(queueName, '85.69.30.121', { rpc: true });
+
+      assert.equal(result, '85.69.30.121-test');
     });
 
-    it('should receive message that is only array', () => {
+    it('should receive message that is only array', async () => {
       const queueName = 'test-only-array-queue';
-      return arnavmq.consumer
-        .consume(queueName, (message) => Promise.resolve({ message }))
-        .then(() => arnavmq.producer.produce(queueName, [1, '2'], { rpc: true }))
-        .then((result) => {
-          assert.deepEqual(result, { message: [1, '2'] });
-        });
+
+      await arnavmq.consumer.consume(queueName, (message) => Promise.resolve({ message }));
+      const result = await arnavmq.producer.produce(queueName, [1, '2'], { rpc: true });
+
+      assert.deepEqual(result, { message: [1, '2'] });
     });
 
-    it('should receive message headers', () => {
+    it('should receive message headers', async () => {
       const headers = { header1: 'Header1', header2: 'Header2' };
       const queueName = 'test-headers';
-      return arnavmq.consumer
-        .consume(queueName, (message, properties) => Promise.resolve({ message, properties }))
-        .then(() => arnavmq.producer.produce(queueName, [1, '2'], { rpc: true, headers }))
-        .then((result) => {
-          assert.deepEqual(result.message, [1, '2']);
-          assert.deepEqual(result.properties.headers, headers);
-        });
+
+      await arnavmq.consumer.consume(queueName, (message, properties) => Promise.resolve({ message, properties }));
+      const result = await arnavmq.producer.produce(queueName, [1, '2'], { rpc: true, headers });
+
+      assert.deepEqual(result.message, [1, '2']);
+      assert.deepEqual(result.properties.headers, headers);
     });
 
-    it('should receive message properties', () => {
+    it('should receive message properties', async () => {
       const queueName = 'test-headers';
-      return arnavmq.consumer
-        .consume(queueName, (message, properties) => Promise.resolve({ message, properties }))
-        .then(() => arnavmq.producer.produce(queueName, [1, '2'], { rpc: true }))
-        .then((result) => {
-          assert.deepEqual(result.message, [1, '2']);
-          assert.deepEqual(result.properties.contentType, 'application/json');
-        });
+
+      await arnavmq.consumer.consume(queueName, (message, properties) => Promise.resolve({ message, properties }));
+      const result = await arnavmq.producer.produce(queueName, [1, '2'], { rpc: true });
+
+      assert.deepEqual(result.message, [1, '2']);
+      assert.deepEqual(result.properties.contentType, 'application/json');
     });
 
-    it('should receive contentLength property', () => {
+    it('should receive contentLength property', async () => {
       const queueName = 'test-headers';
       const payload = { a: 1 };
       const messageSize = Buffer.byteLength(JSON.stringify(payload));
-      return arnavmq.consumer
-        .consume(queueName, (message, properties) => Promise.resolve({ message, properties }))
-        .then(() => arnavmq.producer.produce(queueName, payload, { rpc: true }))
-        .then((result) => {
-          assert.deepEqual(result.message, payload);
-          assert.deepEqual(result.properties.contentType, 'application/json');
-          assert.deepEqual(result.properties.contentLength, messageSize);
-        });
+
+      await arnavmq.consumer.consume(queueName, (message, properties) => Promise.resolve({ message, properties }));
+      const result = await arnavmq.producer.produce(queueName, payload, { rpc: true });
+
+      assert.deepEqual(result.message, payload);
+      assert.deepEqual(result.properties.contentType, 'application/json');
+      assert.deepEqual(result.properties.contentLength, messageSize);
     });
 
-    it('should be able to consume message sent by producer to queue [test-queue-0]', () => {
+    it('should be able to consume message sent by producer to queue [test-queue-0]', async () => {
       letters += 1;
-      return arnavmq.producer
-        .produce(fixtures.queues[0], { msg: uuid.v4() })
-        .then(() => utils.timeoutPromise(300))
-        .then(() => assert.equal(letters, 0));
+
+      await arnavmq.producer.produce(fixtures.queues[0], { msg: uuid.v4() });
+      await utils.timeoutPromise(300);
+
+      assert.equal(letters, 0);
     });
 
-    it('should be able to consume message sent by producer to queue [test-queue-0] (no message)', () => {
+    it('should be able to consume message sent by producer to queue [test-queue-0] (no message)', async () => {
       letters += 1;
-      return arnavmq.producer
-        .produce(fixtures.queues[0])
-        .then(() => utils.timeoutPromise(300))
-        .then(() => assert.equal(letters, 0));
+
+      await arnavmq.producer.produce(fixtures.queues[0]);
+      await utils.timeoutPromise(300);
+
+      assert.equal(letters, 0);
     });
 
-    it('should be able to consume message sent by producer to queue [test-queue-0] (null message)', () => {
+    it('should be able to consume message sent by producer to queue [test-queue-0] (null message)', async () => {
       letters += 1;
-      return arnavmq.producer
-        .produce(fixtures.queues[0], null)
-        .then(() => utils.timeoutPromise(300))
-        .then(() => assert.equal(letters, 0));
+
+      await arnavmq.producer.produce(fixtures.queues[0], null);
+      await utils.timeoutPromise(300);
+
+      assert.equal(letters, 0);
     });
 
-    it('should not be able to consume message sent by producer to queue [test-queue-1]', () => {
+    it('should not be able to consume message sent by producer to queue [test-queue-1]', async () => {
       letters += 1;
-      return arnavmq.producer
-        .produce(fixtures.queues[1], null)
-        .then(() => utils.timeoutPromise(300))
-        .then(() => assert.equal(letters, 0));
+
+      await arnavmq.producer.produce(fixtures.queues[1], null);
+      await utils.timeoutPromise(300);
+
+      assert.equal(letters, 0);
     });
 
     it(
       'should be able to consume all message populated by producer to all queues [test-queue-0,' +
         ' test-queue-1, test-queue-2]',
-      () => {
+      async () => {
         const count = 100;
         const messages = [];
         letters += 200;
@@ -233,58 +230,83 @@ describe('producer/consumer', function () {
           messages.push(arnavmq.producer.produce(fixtures.queues[0], null));
           messages.push(arnavmq.producer.produce(fixtures.queues[1], null));
         }
+        await Promise.all(messages);
+        await utils.timeoutPromise(500);
 
-        return Promise.all(messages)
-          .then(() => utils.timeoutPromise(500))
-          .then(() => assert.equal(letters, 0));
+        assert.equal(letters, 0);
       }
     );
   });
 
   describe('msg requeueing', () => {
-    it('should requeue the message again on error [test-queue-0]', (done) => {
+    it('should requeue the message again on error [test-queue-4]', (done) => {
       let attempt = 3;
 
       arnavmq.consumer
-        .consume(fixtures.queues[3], (msg) => {
+        .consume(fixtures.queues[4], (msg) => {
           assert(typeof msg === 'object');
 
           attempt -= 1;
-          if (!attempt) {
-            return done();
+          if (attempt === 0) {
+            done();
+            return;
           }
           throw new Error('Any kind of error');
         })
-        .then(() =>
-          arnavmq.producer.produce(fixtures.queues[3], { msg: uuid.v4() }).then((response) => {
-            assert(response === true);
-            letters += 1;
-          })
-        )
+        .then(() => arnavmq.producer.produce(fixtures.queues[4], { msg: uuid.v4() }))
+        .then((response) => {
+          assert(response === true);
+          letters += 1;
+        })
         .catch(done);
     });
   });
 
   describe('routing keys', () => {
-    it('should be able to send a message to a rounting key exchange', () =>
+    it('should be able to send a message to a routing key exchange', (done) => {
       arnavmq.consumer
-        .consume(fixtures.routingKey, (message) => {
-          assert.equal(message.content, 'ok');
-        })
-        .then(() => arnavmq.producer.produce(fixtures.rountingKey, { content: 'ok' }, { routingKey: 'route' })));
+        .consume(
+          fixtures.routingKey,
+          (message) => {
+            try {
+              assert.equal(message.content, 'ok');
+              done();
+            } catch (error) {
+              done(error);
+            }
+          },
+          {}
+        )
+        .then(() => arnavmq.producer.produce('', { content: 'ok' }, { routingKey: fixtures.routingKey }))
+        .catch(done);
+    });
   });
 
   describe('rpc timeouts', () => {
-    it('should reject on timeout, if no answer received', () =>
-      arnavmq.producer.produce('non-existing-queue', { msg: 'ok' }, { rpc: true, timeout: 1000 }).catch((e) => {
-        assert.equal(e.message, 'Timeout reached');
-      }));
+    it('should reject on timeout, if no answer received', async () => {
+      try {
+        await arnavmq.producer.produce('non-existing-queue', { msg: 'ok' }, { rpc: true, timeout: 1000 });
+        assert.fail('Did not get the expected error.');
+      } catch (error) {
+        if (error instanceof assert.AssertionError) {
+          throw error;
+        }
+        assert.equal(error.message, 'Timeout reached');
+      }
+    });
 
-    it('should reject on default timeout, if no answer received', () => {
+    it('should reject on default timeout, if no answer received', async () => {
       arnavmq.connection._config.rpcTimeout = 1000;
-      arnavmq.producer.produce('non-existing-queue', { msg: 'ok' }, { rpc: true }).catch((e) => {
-        assert.equal(e.message, 'Timeout reached');
-      });
+      try {
+        await arnavmq.producer.produce('non-existing-queue', { msg: 'ok' }, { rpc: true });
+        assert.fail('Did not get the expected error.');
+      } catch (error) {
+        if (error instanceof assert.AssertionError) {
+          throw error;
+        }
+
+        assert.equal(error.message, 'Timeout reached');
+      }
     });
   });
 
@@ -307,10 +329,15 @@ describe('producer/consumer', function () {
       arnavmq.connection._config.consumerSuffix = undefined;
     });
 
-    it('should receive message', () => {
+    it('should receive message', (done) => {
       arnavmq.consumer
         .consume('queue-name-undefined-suffix', (message) => {
-          assert.equal(message.msg, 'test for undefined queue suffix');
+          try {
+            assert.equal(message.msg, 'test for undefined queue suffix');
+            done();
+          } catch (error) {
+            done(error);
+          }
         })
         .then(() =>
           arnavmq.producer.produce('queue-name-undefined-suffix', {
