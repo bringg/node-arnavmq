@@ -10,16 +10,10 @@ const emptyLogger = {
 
 module.exports = {
   /**
-   * Default transport to prevent any printing in the terminal
+   * Default logger to prevent any printing in the terminal
    * @type {Object} - empty logger overwriting the console object methods
    */
   emptyLogger,
-
-  /**
-   * @deprecated
-   * For backwards compatibility with the `transport` configuration.
-   */
-  emptyTransport: emptyLogger,
 
   /**
    * A function to generate a pause in promise chaining
