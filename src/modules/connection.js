@@ -18,11 +18,9 @@ class Connection {
    */
   async getConnection() {
     // cache handling, if connection already opened, return it
-    if (this._connectionPromise) {
-      return await this._connectionPromise;
+    if (!this._connectionPromise) {
+      this._connectionPromise = this._connect();
     }
-
-    this._connectionPromise = this._connect();
 
     return await this._connectionPromise;
   }
