@@ -2,11 +2,11 @@ const DEFAULT_CHANNEL = Symbol('DEFAULT_CHANNEL');
 
 class ChannelAlreadyExistsError extends Error {
   constructor(name, config) {
-    const message = `Channel "${name}" already exists with config ${JSON.stringify(config)}`;
+    const message = `Channel "${name.toString()}" already exists with config ${JSON.stringify(config)}`;
 
     super(message);
 
-    this.name = name;
+    this.name = name.toString();
     this.config = config;
     this.message = message;
 
@@ -76,16 +76,18 @@ class Channels {
       });
       channel.on('error', (error) => {
         this._config.logger.error({
-          message: `Got channel error [${error.message}] for [${key}]`,
+          message: `Got channel error [${error.message}] for [${key.toString()}]`,
           error,
         });
       });
+
+      this._config.logger.debug(`Created channel for [${key.toString()}]`);
 
       return channel;
     } catch (error) {
       this._channels.delete(key);
       this._config.logger.error({
-        message: `Failed to create channel for [${key}] - [${error.message}]`,
+        message: `Failed to create channel for [${key.toString()}] - [${error.message}]`,
         error,
       });
 
@@ -95,7 +97,9 @@ class Channels {
           await channel.close();
         } catch (closeError) {
           this._config.logger.error({
-            message: `Failed to cleanup channel after failed initialization for [${key}] - [${closeError.message}]`,
+            message: `Failed to cleanup channel after failed initialization for [${key.toString()}] - [${
+              closeError.message
+            }]`,
             error: closeError,
           });
         }
