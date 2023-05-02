@@ -1,4 +1,4 @@
-const DEFAULT_CHANNEL = Symbol('DEFAULT_CHANNEL');
+const DEFAULT_CHANNEL = 'DEFAULT_CHANNEL';
 
 class ChannelAlreadyExistsError extends Error {
   constructor(name, config) {
