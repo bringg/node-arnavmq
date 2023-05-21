@@ -22,8 +22,14 @@ class ProducerError extends Error {
 
 class Producer {
   constructor(connection) {
-    this.amqpRPCQueues = {};
     this._connection = connection;
+
+    /**
+     * Map of rpc queues
+     *
+     * [queue: string] -> [correlationId: string] -> {responsePromise, timeoutId}
+     */
+    this.amqpRPCQueues = {};
   }
 
   set connection(value) {
@@ -45,10 +51,10 @@ class Producer {
     return (msg) => {
       // check the correlation ID sent by the initial message using RPC
       const { correlationId } = msg.properties;
-      const responsePromise = rpcQueue[correlationId];
+      const waiter = rpcQueue[correlationId];
 
       // On timeout the waiter is deleted, so we need to handle the race when the response arrives too late.
-      if (responsePromise === undefined) {
+      if (waiter === undefined) {
         const error = new Error(`Receiving RPC message from previous session: callback no more in memory. ${queue}`);
         this._connection.config.logger.warn({
           message: `${loggerAlias} ${error.message}`,
@@ -66,10 +72,11 @@ class Producer {
       });
 
       try {
-        responsePromise.resolve(parsers.in(msg));
+        waiter.responsePromise.resolve(parsers.in(msg));
       } catch (e) {
-        responsePromise.reject(new ProducerError(e));
+        waiter.responsePromise.reject(new ProducerError(e));
       } finally {
+        clearTimeout(waiter.timeoutId);
         delete rpcQueue[correlationId];
       }
     };
@@ -138,10 +145,15 @@ class Producer {
    */
   prepareTimeoutRpc(queue, corrId, time) {
     const producer = this;
-    setTimeout(() => {
-      const rpcCallback = producer.amqpRPCQueues[queue][corrId];
-      if (rpcCallback) {
-        rpcCallback.reject(new Error(ERRORS.TIMEOUT));
+    let waiter = producer.amqpRPCQueues[queue][corrId];
+    if (!waiter) {
+      return;
+    }
+
+    waiter.timeoutId = setTimeout(() => {
+      waiter = producer.amqpRPCQueues[queue][corrId];
+      if (waiter) {
+        waiter.responsePromise.reject(new Error(ERRORS.TIMEOUT));
         delete producer.amqpRPCQueues[queue][corrId];
       }
     }, time);
@@ -168,7 +180,7 @@ class Producer {
 
       // deferred promise that will resolve when response is received
       const responsePromise = pDefer();
-      this.amqpRPCQueues[queue][corrId] = responsePromise;
+      this.amqpRPCQueues[queue][corrId] = { responsePromise, timeoutId: null };
 
       await this.publishOrSendToQueue(queue, msg, options);
 
