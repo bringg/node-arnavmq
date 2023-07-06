@@ -61,7 +61,7 @@ describe('disconnections', function () {
           sinon.assert.callCount(arnavmq.connection.getDefaultChannel, retryCount + 1);
           assert.strictEqual(err.message, expectedError);
           return true;
-        }
+        },
       );
     });
   });
@@ -95,7 +95,7 @@ describe('disconnections', function () {
 
       assert.deepStrictEqual(
         responses,
-        Array.from({ length: 49 }, (_, i) => i + 2)
+        Array.from({ length: 49 }, (_, i) => i + 2),
       );
       assert.strictEqual(counter, 50, `consumer counter should be 50, but it is ${counter}`);
     });
