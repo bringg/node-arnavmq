@@ -67,7 +67,7 @@ describe('Producer/Consumer RPC messaging:', () => {
           })
           .then(() => {
             assert.fail('Did not get the expected error.');
-          })
+          }),
       )
       .catch((error) => {
         if (error instanceof assert.AssertionError) {
@@ -79,7 +79,7 @@ describe('Producer/Consumer RPC messaging:', () => {
           assert.strictEqual(
             error.name,
             'SyntaxError',
-            `Got unexpected error of type '${error.name}': ${error.message}`
+            `Got unexpected error of type '${error.name}': ${error.message}`,
           );
           done();
         } catch (assertError) {

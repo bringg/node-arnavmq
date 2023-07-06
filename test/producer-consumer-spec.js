@@ -68,7 +68,7 @@ describe('producer/consumer', function () {
         const getChannelDefault = sandbox.spy(Channels.prototype, 'defaultChannel');
 
         await arnavmq.consumer.consume(queueName, { channel: { prefetch } }, (message) =>
-          Promise.resolve(`${message}-test`)
+          Promise.resolve(`${message}-test`),
         );
 
         sinon.assert.calledWith(getChannel, queueName, { prefetch });
@@ -89,13 +89,13 @@ describe('producer/consumer', function () {
 
         // This is the first one
         await arnavmq.consumer.consume(queueName, { channel: { prefetch } }, (message) =>
-          Promise.resolve(`${message}-test`)
+          Promise.resolve(`${message}-test`),
         );
 
         await assert.rejects(async () => {
           // This is the second one
           await arnavmq.consumer.consume(queueName, { channel: { prefetch: prefetch + 1 } }, (message) =>
-            Promise.resolve(`${message}-test`)
+            Promise.resolve(`${message}-test`),
           );
         }, ChannelAlreadyExistsError);
       });
@@ -113,7 +113,7 @@ describe('producer/consumer', function () {
       const consume = sandbox.stub(channel, 'consume').rejects(new Error('Error simulating connection closed.'));
 
       await arnavmq.consumer.consume(queueName, { channel: { prefetch } }, (message) =>
-        Promise.resolve(`${message}-test`)
+        Promise.resolve(`${message}-test`),
       );
       sinon.assert.called(consume);
     });
@@ -234,7 +234,7 @@ describe('producer/consumer', function () {
         await utils.timeoutPromise(500);
 
         assert.equal(letters, 0);
-      }
+      },
     );
   });
 
@@ -275,7 +275,7 @@ describe('producer/consumer', function () {
               done(error);
             }
           },
-          {}
+          {},
         )
         .then(() => arnavmq.producer.produce('', { content: 'ok' }, { routingKey: fixtures.routingKey }))
         .catch(done);
@@ -342,7 +342,7 @@ describe('producer/consumer', function () {
         .then(() =>
           arnavmq.producer.produce('queue-name-undefined-suffix', {
             msg: 'test for undefined queue suffix',
-          })
+          }),
         );
     });
   });
