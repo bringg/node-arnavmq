@@ -43,7 +43,7 @@
     "dot-only-hunter": "^1.0.3",
     "eslint": "^8.25.0",
     "eslint-config-airbnb-base": "^15.0.0",
-    "eslint-config-prettier": "^8.6.0",
+    "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-import": "^2.26.0",
     "mocha": "^10.0.0",
     "nyc": "^15.1.0",
