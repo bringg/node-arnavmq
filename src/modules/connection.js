@@ -1,5 +1,5 @@
-const amqp = require('amqplib');
 const assert = require('assert');
+const amqp = require('amqplib');
 const { Channels } = require('./channels');
 const packageVersion = require('../../package.json').version;
 
