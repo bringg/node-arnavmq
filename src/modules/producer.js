@@ -1,7 +1,7 @@
-const uuid = require('uuid');
 const pDefer = require('p-defer');
 const utils = require('./utils');
 const parsers = require('./message-parsers');
+const { ProducerHooks } = require('./hooks');
 
 const ERRORS = {
   TIMEOUT: 'Timeout reached',
@@ -23,6 +23,8 @@ class ProducerError extends Error {
 class Producer {
   constructor(connection) {
     this._connection = connection;
+    const { hooks } = this._connection.config;
+    this.hooks = new ProducerHooks(hooks && hooks.producer);
 
     /**
      * Map of rpc queues
@@ -173,8 +175,7 @@ class Producer {
     if (options.rpc) {
       await this.createRpcQueue(queue);
       // generates a correlationId (random uuid) so we know which callback to execute on received response
-      const corrId = uuid.v4();
-      options.correlationId = corrId;
+      const corrId = utils.setCorrelationId(options);
       // reply to us if you receive this message!
       options.replyTo = await this.amqpRPCQueues[queue].resQueuePromise;
 
@@ -242,11 +243,43 @@ class Producer {
       message: `${loggerAlias} [${queue}] > ${message}`,
       params: { queue, message },
     });
-
+    const parsedMessage = parsers.out(message, settings);
+    if (settings.rpc) {
+      // Set correlation id before the trigger, so we have it on the payload going for it.
+      utils.setCorrelationId(settings);
+    }
     try {
-      return await this.checkRpc(queue, parsers.out(message, settings), settings);
+      await this.hooks.trigger(this, ProducerHooks.beforePublish, {
+        queue,
+        message,
+        parsedMessage,
+        properties: settings,
+        currentRetry: currentRetryNumber,
+      });
+
+      const result = await this.checkRpc(queue, parsedMessage, settings);
+
+      await this.hooks.trigger(this, ProducerHooks.afterPublish, {
+        queue,
+        message,
+        parsedMessage,
+        properties: settings,
+        currentRetry: currentRetryNumber,
+        result,
+      });
+      return result;
     } catch (error) {
-      if (!this._shouldRetry(error, currentRetryNumber)) {
+      const shouldRetry = this._shouldRetry(error, currentRetryNumber);
+      await this.hooks.trigger(this, ProducerHooks.afterPublish, {
+        queue,
+        message,
+        parsedMessage,
+        properties: settings,
+        currentRetry: currentRetryNumber,
+        shouldRetry,
+        error,
+      });
+      if (!shouldRetry) {
         throw error;
       }
 

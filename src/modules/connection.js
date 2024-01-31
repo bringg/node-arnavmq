@@ -1,6 +1,7 @@
 const assert = require('assert');
 const amqp = require('amqplib');
 const { Channels } = require('./channels');
+const { ConnectionHooks } = require('./hooks');
 const packageVersion = require('../../package.json').version;
 
 class Connection {
@@ -9,6 +10,7 @@ class Connection {
 
     this._connectionPromise = null; // Promise of amqp connection
     this._channels = null;
+    this.hooks = new ConnectionHooks(config.hooks && config.hooks.connection);
     this.startedAt = new Date().toISOString();
   }
 
@@ -27,6 +29,7 @@ class Connection {
 
   async _connect() {
     try {
+      await this.hooks.trigger(this, ConnectionHooks.beforeConnectEvent, { config: this._config });
       const connection = await amqp.connect(this._config.host, {
         clientProperties: {
           hostname: this._config.hostname,
@@ -44,8 +47,11 @@ class Connection {
       });
       connection.on('error', this._onError.bind(this));
 
+      await this.hooks.trigger(this, ConnectionHooks.afterConnectEvent, { config: this._config, connection });
+
       return connection;
     } catch (error) {
+      await this.hooks.trigger(this, ConnectionHooks.afterConnectEvent, { config: this._config, error });
       this._connectionPromise = null;
       this._channels = null;
       throw error;

@@ -1,3 +1,5 @@
+const uuid = require('uuid');
+
 function empty() {}
 
 const emptyLogger = {
@@ -7,6 +9,17 @@ const emptyLogger = {
   error: empty,
   log: empty,
 };
+
+function setCorrelationId(options) {
+  if (options.correlationId) {
+    return options.correlationId;
+  }
+  const corrId = uuid.v4();
+  const updatedOptions = options;
+  updatedOptions.correlationId = corrId;
+
+  return corrId;
+}
 
 module.exports = {
   /**
@@ -24,4 +37,9 @@ module.exports = {
     new Promise((resolve) => {
       setTimeout(resolve, timer);
     }),
+
+  /**
+   * Generates a uuid and sets it as the 'correlationId' of the given message properties, if there isn't any already.
+   */
+  setCorrelationId,
 };

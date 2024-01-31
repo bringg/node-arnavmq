@@ -1,4 +1,5 @@
 const { ChannelAlreadyExistsError } = require('./channels');
+const { ConsumerHooks } = require('./hooks');
 const parsers = require('./message-parsers');
 const utils = require('./utils');
 
@@ -8,6 +9,7 @@ class Consumer {
   constructor(connection) {
     this._connection = connection;
     this._configuration = this._connection.config;
+    this.hooks = new ConsumerHooks(this._configuration.hooks && this._configuration.hooks.consumer);
   }
 
   set connection(value) {
@@ -27,22 +29,52 @@ class Consumer {
    * @return {any}       object, string, number... the current received message
    */
   async checkRpc(messageProperties, queue, reply) {
-    if (messageProperties.replyTo) {
-      const options = {
-        correlationId: messageProperties.correlationId,
-        persistent: true,
-        durable: true,
-      };
-      this._connection.config.logger.debug({
-        message: `${loggerAlias} [${queue}][${messageProperties.replyTo}] > ${reply}`,
-        params: { content: reply },
-      });
-
-      const defaultChannel = await this._connection.getDefaultChannel();
-      return await defaultChannel.sendToQueue(messageProperties.replyTo, parsers.out(reply, options), options);
+    if (!messageProperties.replyTo) {
+      return messageProperties;
     }
 
-    return messageProperties;
+    const options = {
+      correlationId: messageProperties.correlationId,
+      persistent: true,
+      durable: true,
+    };
+    const serializedReply = parsers.out(reply, options);
+    await this.hooks.trigger(this, ConsumerHooks.beforeRpcReplyEvent, {
+      receiveProperties: messageProperties,
+      replyProperties: options,
+      queue,
+      reply,
+      serializedReply,
+    });
+    this._connection.config.logger.debug({
+      message: `${loggerAlias} [${queue}][${messageProperties.replyTo}] > ${reply}`,
+      params: { content: reply },
+    });
+
+    try {
+      const defaultChannel = await this._connection.getDefaultChannel();
+      const written = await defaultChannel.sendToQueue(messageProperties.replyTo, serializedReply, options);
+      await this.hooks.trigger(this, ConsumerHooks.afterRpcReplyEvent, {
+        receiveProperties: messageProperties,
+        queue,
+        reply,
+        serializedReply,
+        replyProperties: options,
+        written,
+      });
+
+      return written;
+    } catch (error) {
+      await this.hooks.trigger(this, ConsumerHooks.afterRpcReplyEvent, {
+        receiveProperties: messageProperties,
+        queue,
+        reply,
+        serializedReply,
+        replyProperties: options,
+        error,
+      });
+      throw error;
+    }
   }
 
   /**
@@ -164,6 +196,7 @@ class Consumer {
       // receive message, parse it, execute callback, check if should answer, ack/reject message
       const body = parsers.in(msg);
       try {
+        await this.hooks.trigger(this, ConsumerHooks.beforeProcessMessageEvent, { queue, message: msg, content: body });
         const res = await callback(body, msg.properties);
         await this.checkRpc(msg.properties, queue, res);
       } catch (error) {
@@ -177,25 +210,47 @@ class Consumer {
         try {
           channel.reject(msg, this._connection.config.requeue);
         } catch (rejectError) {
+          await this.hooks.trigger(this, ConsumerHooks.afterProcessMessageEvent, {
+            queue,
+            message: msg,
+            content: body,
+            error,
+            rejectError,
+          });
           this._connection.config.logger.error({
             message: `${loggerAlias} Failed to reject message after processing failure on queue ${queue}: ${rejectError.message}`,
             error: rejectError,
             params: { queue },
           });
+          return;
         }
 
+        await this.hooks.trigger(this, ConsumerHooks.afterProcessMessageEvent, {
+          queue,
+          message: msg,
+          content: body,
+          error,
+        });
         return;
       }
 
       try {
         channel.ack(msg);
       } catch (ackError) {
+        await this.hooks.trigger(this, ConsumerHooks.afterProcessMessageEvent, {
+          queue,
+          message: msg,
+          content: body,
+          ackError,
+        });
         this._connection.config.logger.error({
           message: `${loggerAlias} Failed to ack message after processing finished on queue ${queue}: ${ackError.message}`,
           error: ackError,
           params: { queue },
         });
+        return;
       }
+      await this.hooks.trigger(this, ConsumerHooks.afterProcessMessageEvent, { queue, message: msg, content: body });
     };
 
     try {
