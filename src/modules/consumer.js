@@ -45,6 +45,7 @@ class Consumer {
       queue,
       reply,
       serializedReply,
+      error: reply && reply.error ? reply.error : undefined,
     });
     this._connection.config.logger.debug({
       message: `${loggerAlias} [${queue}][${messageProperties.replyTo}] > ${reply}`,

@@ -29,6 +29,42 @@ describe('producer/consumer', function () {
   const sandbox = sinon.createSandbox();
   afterEach(() => sandbox.restore());
 
+  let beforePublishHook;
+  let afterPublishHook;
+  let beforeProcessMessageHook;
+  let afterProcessMessageHook;
+  let beforeRpcReplyHook;
+  let afterRpcReplyHook;
+
+  function setupHooks() {
+    beforePublishHook = sandbox.spy();
+    afterPublishHook = sandbox.spy();
+    beforeProcessMessageHook = sandbox.spy();
+    afterProcessMessageHook = sandbox.spy();
+    beforeRpcReplyHook = sandbox.spy();
+    afterRpcReplyHook = sandbox.spy();
+    arnavmq.hooks.producer.beforePublish(beforePublishHook);
+    arnavmq.hooks.producer.afterPublish(afterPublishHook);
+    arnavmq.hooks.consumer.beforeProcessMessage(beforeProcessMessageHook);
+    arnavmq.hooks.consumer.afterProcessMessage(afterProcessMessageHook);
+    arnavmq.hooks.consumer.beforeRpcReply(beforeRpcReplyHook);
+    arnavmq.hooks.consumer.afterRpcReply(afterRpcReplyHook);
+  }
+
+  function cleanupHooks() {
+    if (!beforePublishHook) {
+      return;
+    }
+
+    arnavmq.hooks.producer.removeBeforePublish(beforePublishHook);
+    arnavmq.hooks.producer.removeAfterPublish(afterPublishHook);
+    arnavmq.hooks.consumer.removeBeforeProcessMessage(beforeProcessMessageHook);
+    arnavmq.hooks.consumer.removeAfterProcessMessage(afterProcessMessageHook);
+    arnavmq.hooks.consumer.removeBeforeRpcReply(beforeRpcReplyHook);
+    arnavmq.hooks.consumer.removeAfterRpcReply(afterRpcReplyHook);
+    beforePublishHook = undefined;
+  }
+
   describe('consuming messages', () => {
     context('prefetch', () => {
       it('when no custom prefetch specified is uses default channel', async () => {
@@ -130,13 +166,71 @@ describe('producer/consumer', function () {
       });
     });
 
+    afterEach(() => {
+      cleanupHooks();
+    });
+
     it('should receive message that is only string', async () => {
       const queueName = 'test-only-string-queue';
+      const sentMessage = '85.69.30.121';
+      setupHooks();
 
       await arnavmq.consumer.consume(queueName, (message) => Promise.resolve(`${message}-test`));
       const result = await arnavmq.producer.produce(queueName, '85.69.30.121', { rpc: true });
 
       assert.equal(result, '85.69.30.121-test');
+
+      // Test hooks were called
+      sinon.assert.calledWith(beforePublishHook, {
+        queue: queueName,
+        message: sentMessage,
+        parsedMessage: sinon.match.instanceOf(Buffer),
+        properties: sinon.match({ rpc: true }),
+        currentRetry: 0,
+      });
+      sinon.assert.calledWith(afterPublishHook, {
+        queue: queueName,
+        message: sentMessage,
+        parsedMessage: sinon.match.instanceOf(Buffer),
+        properties: sinon.match({ rpc: true }),
+        currentRetry: 0,
+        result,
+        error: undefined,
+      });
+      sinon.assert.calledWith(beforeProcessMessageHook, {
+        queue: queueName,
+        message: sinon.match({ content: sinon.match.instanceOf(Buffer) }),
+        content: sentMessage,
+      });
+      sinon.assert.calledWith(afterProcessMessageHook, {
+        queue: queueName,
+        message: sinon.match({ content: sinon.match.instanceOf(Buffer) }),
+        content: sentMessage,
+      });
+      sinon.assert.calledWith(beforeRpcReplyHook, {
+        queue: queueName,
+        reply: result,
+        serializedReply: sinon.match.instanceOf(Buffer),
+        replyProperties: {
+          correlationId: sinon.match.string,
+          persistent: true,
+          durable: true,
+        },
+        receiveProperties: sinon.match.object,
+        error: undefined,
+      });
+      sinon.assert.calledWith(afterRpcReplyHook, {
+        queue: queueName,
+        reply: result,
+        serializedReply: sinon.match.instanceOf(Buffer),
+        replyProperties: {
+          correlationId: sinon.match.string,
+          persistent: true,
+          durable: true,
+        },
+        receiveProperties: sinon.match.object,
+        written: true,
+      });
     });
 
     it('should receive message that is only array', async () => {
@@ -242,6 +336,7 @@ describe('producer/consumer', function () {
     it('should requeue the message again on error [test-queue-4]', (done) => {
       let attempt = 3;
 
+      const expectedMessage = { msg: uuid.v4() };
       arnavmq.consumer
         .consume(fixtures.queues[4], (msg) => {
           assert(typeof msg === 'object');
@@ -251,9 +346,9 @@ describe('producer/consumer', function () {
             done();
             return;
           }
-          throw new Error('Any kind of error');
+          throw new Error(`Any kind of error ${attempt}`);
         })
-        .then(() => arnavmq.producer.produce(fixtures.queues[4], { msg: uuid.v4() }))
+        .then(() => arnavmq.producer.produce(fixtures.queues[4], expectedMessage))
         .then((response) => {
           assert(response === true);
           letters += 1;
@@ -284,6 +379,8 @@ describe('producer/consumer', function () {
 
   describe('rpc timeouts', () => {
     it('should reject on timeout, if no answer received', async () => {
+      setupHooks();
+
       try {
         await arnavmq.producer.produce('non-existing-queue', { msg: 'ok' }, { rpc: true, timeout: 1000 });
         assert.fail('Did not get the expected error.');
@@ -291,6 +388,7 @@ describe('producer/consumer', function () {
         if (error instanceof assert.AssertionError) {
           throw error;
         }
+        sinon.assert.calledWith(afterPublishHook, sinon.match({ error: sinon.match({ message: 'Timeout reached' }) }));
         assert.equal(error.message, 'Timeout reached');
       }
     });
@@ -312,12 +410,19 @@ describe('producer/consumer', function () {
 
   describe('error', () => {
     it('should not be consumed', (done) => {
+      setupHooks();
+      const expectedMessage = { msg: uuid.v4() };
+
       arnavmq.consumer
         .consume('test-queue-5', () => ({ error: new Error('Error test') }))
-        .then(() => arnavmq.producer.produce('test-queue-5', {}, { rpc: true }))
+        .then(() => arnavmq.producer.produce('test-queue-5', expectedMessage, { rpc: true }))
         .then((response) => {
           assert(response.error);
           assert(response.error instanceof Error);
+
+          // Should include error in the hook if given.
+          sinon.assert.calledWith(beforeRpcReplyHook, sinon.match({ error: sinon.match({ message: 'Error test' }) }));
+          sinon.assert.calledWith(afterPublishHook, sinon.match({ error: sinon.match({ message: 'Error test' }) }));
           done();
         })
         .catch(done);

@@ -266,6 +266,7 @@ class Producer {
         properties: settings,
         currentRetry: currentRetryNumber,
         result,
+        error: result && result.error ? result.error : undefined,
       });
       return result;
     } catch (error) {
