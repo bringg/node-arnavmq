@@ -106,6 +106,40 @@ You can send publish commands with routing keys (thanks to @nekrasoft)
 arnavmq.publish('queue:name', { message: 'content' }, { routingKey: 'my-routing-key' });
 ```
 
+## Hooks
+
+You can register callbacks to be invoked on certain events:
+
+```javascript
+const arnavmq = require('arnavmq')({
+   host: 'amqp://localhost',
+   // Can pass hooks directly on connection configuration.
+   hooks: {
+    connection: {
+      beforeConnect: () => {/*...*/}
+    }
+   }
+});
+
+arnavmq.hooks.connection.afterConnect(({connection, config}) => {
+  console.log('Connected to ' + config.host)
+})
+
+arnavmq.hooks.producer.beforePublish(({properties, /*... other parameters ...*/}) => {
+  // Message properties and other options objects can be changed, for example to set a message id:
+  properties.messageId = randomUUID()
+})
+
+// Can register a single callback at a time or multiple callbacks at once.
+arnavmq.hooks.consumer.afterProcessMessage([afterProcessCallback1, afterProcessCallback2])
+```
+
+For full details of the available hooks and callback signatures, check the documentation on the files:
+
+- [Connection](src/modules/hooks/connection_hooks.js)
+- [Consumer](src/modules/hooks/consumer_hooks.js)
+- [Producer](src/modules/hooks/producer_hooks.js)
+
 ## Config
 
 You can specify a config object, properties and default values are:
@@ -145,6 +179,11 @@ const arnavmq = require('arnavmq')({
    * * params - An optional object containing extra parameters that can provide extra context for the event.
    */
   logger: utils.emptyLogger,
+
+  /**
+   * Configure hooks to register on the connection, consumer and producer.
+   */
+  hooks: undefined
 });
 ```
 
