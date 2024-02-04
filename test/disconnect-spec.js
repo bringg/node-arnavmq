@@ -64,6 +64,41 @@ describe('disconnections', function () {
         },
       );
     });
+
+    describe('hooks', () => {
+      let beforeConnectHook;
+      let afterConnectHook;
+
+      beforeEach(() => {
+        beforeConnectHook = sandbox.spy();
+        afterConnectHook = sandbox.spy();
+      });
+
+      afterEach(() => {
+        arnavmq.hooks.connection.removeBeforeConnect(beforeConnectHook);
+        arnavmq.hooks.connection.removeAfterConnect(afterConnectHook);
+      });
+
+      it('calls event hooks on connecting', async () => {
+        const consumedAllPromise = pDefer();
+        await arnavmq.consumer.consume(queue, () => {
+          consumedAllPromise.resolve();
+        });
+
+        await docker.disconnectNetwork();
+
+        arnavmq.hooks.connection.beforeConnect(beforeConnectHook);
+        arnavmq.hooks.connection.afterConnect(afterConnectHook);
+
+        await docker.connectNetwork();
+        await arnavmq.producer.produce(queue);
+
+        await consumedAllPromise.promise;
+
+        sinon.assert.called(beforeConnectHook);
+        sinon.assert.called(afterConnectHook);
+      });
+    });
   });
 
   describe('RPC', () => {

@@ -176,61 +176,9 @@ describe('producer/consumer', function () {
       setupHooks();
 
       await arnavmq.consumer.consume(queueName, (message) => Promise.resolve(`${message}-test`));
-      const result = await arnavmq.producer.produce(queueName, '85.69.30.121', { rpc: true });
+      const result = await arnavmq.producer.produce(queueName, sentMessage, { rpc: true });
 
-      assert.equal(result, '85.69.30.121-test');
-
-      // Test hooks were called
-      sinon.assert.calledWith(beforePublishHook, {
-        queue: queueName,
-        message: sentMessage,
-        parsedMessage: sinon.match.instanceOf(Buffer),
-        properties: sinon.match({ rpc: true }),
-        currentRetry: 0,
-      });
-      sinon.assert.calledWith(afterPublishHook, {
-        queue: queueName,
-        message: sentMessage,
-        parsedMessage: sinon.match.instanceOf(Buffer),
-        properties: sinon.match({ rpc: true }),
-        currentRetry: 0,
-        result,
-        error: undefined,
-      });
-      sinon.assert.calledWith(beforeProcessMessageHook, {
-        queue: queueName,
-        message: sinon.match({ content: sinon.match.instanceOf(Buffer) }),
-        content: sentMessage,
-      });
-      sinon.assert.calledWith(afterProcessMessageHook, {
-        queue: queueName,
-        message: sinon.match({ content: sinon.match.instanceOf(Buffer) }),
-        content: sentMessage,
-      });
-      sinon.assert.calledWith(beforeRpcReplyHook, {
-        queue: queueName,
-        reply: result,
-        serializedReply: sinon.match.instanceOf(Buffer),
-        replyProperties: {
-          correlationId: sinon.match.string,
-          persistent: true,
-          durable: true,
-        },
-        receiveProperties: sinon.match.object,
-        error: undefined,
-      });
-      sinon.assert.calledWith(afterRpcReplyHook, {
-        queue: queueName,
-        reply: result,
-        serializedReply: sinon.match.instanceOf(Buffer),
-        replyProperties: {
-          correlationId: sinon.match.string,
-          persistent: true,
-          durable: true,
-        },
-        receiveProperties: sinon.match.object,
-        written: true,
-      });
+      assert.equal(result, `${sentMessage}-test`);
     });
 
     it('should receive message that is only array', async () => {
@@ -330,6 +278,87 @@ describe('producer/consumer', function () {
         assert.equal(letters, 0);
       },
     );
+
+    describe('hooks', () => {
+      beforeEach(() => setupHooks());
+
+      it('calls the producer "before and after publish" hooks', async () => {
+        const queueName = 'test-only-string-queue';
+        const sentMessage = uuid.v4();
+
+        await arnavmq.consumer.consume(queueName, (message) => Promise.resolve(`${message}-test`));
+        const result = await arnavmq.producer.produce(queueName, sentMessage, { rpc: true });
+
+        sinon.assert.calledWith(beforePublishHook, {
+          queue: queueName,
+          message: sentMessage,
+          parsedMessage: sinon.match.instanceOf(Buffer),
+          properties: sinon.match({ rpc: true }),
+          currentRetry: 0,
+        });
+        sinon.assert.calledWith(afterPublishHook, {
+          queue: queueName,
+          message: sentMessage,
+          parsedMessage: sinon.match.instanceOf(Buffer),
+          properties: sinon.match({ rpc: true }),
+          currentRetry: 0,
+          result,
+          error: undefined,
+        });
+      });
+
+      it('calls the consumer "before and after process message" hooks', async () => {
+        const queueName = 'test-only-string-queue';
+        const sentMessage = uuid.v4();
+
+        await arnavmq.consumer.consume(queueName, (message) => Promise.resolve(`${message}-test`));
+        await arnavmq.producer.produce(queueName, sentMessage, { rpc: true });
+
+        sinon.assert.calledWith(beforeProcessMessageHook, {
+          queue: queueName,
+          message: sinon.match({ content: sinon.match.instanceOf(Buffer) }),
+          content: sentMessage,
+        });
+        sinon.assert.calledWith(afterProcessMessageHook, {
+          queue: queueName,
+          message: sinon.match({ content: sinon.match.instanceOf(Buffer) }),
+          content: sentMessage,
+        });
+      });
+
+      it('calls the consumer "before and after rpc reply" hooks', async () => {
+        const queueName = 'test-only-string-queue';
+        const sentMessage = uuid.v4();
+
+        await arnavmq.consumer.consume(queueName, (message) => Promise.resolve(`${message}-test`));
+        const result = await arnavmq.producer.produce(queueName, sentMessage, { rpc: true });
+
+        sinon.assert.calledWith(beforeRpcReplyHook, {
+          queue: queueName,
+          reply: result,
+          serializedReply: sinon.match.instanceOf(Buffer),
+          replyProperties: {
+            correlationId: sinon.match.string,
+            persistent: true,
+            durable: true,
+          },
+          receiveProperties: sinon.match.object,
+          error: undefined,
+        });
+        sinon.assert.calledWith(afterRpcReplyHook, {
+          queue: queueName,
+          reply: result,
+          serializedReply: sinon.match.instanceOf(Buffer),
+          replyProperties: {
+            correlationId: sinon.match.string,
+            persistent: true,
+            durable: true,
+          },
+          receiveProperties: sinon.match.object,
+          written: true,
+        });
+      });
+    });
   });
 
   describe('msg requeueing', () => {
