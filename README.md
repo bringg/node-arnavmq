@@ -112,26 +112,28 @@ You can register callbacks to be invoked on certain events:
 
 ```javascript
 const arnavmq = require('arnavmq')({
-   host: 'amqp://localhost',
-   // Can pass hooks directly on connection configuration.
-   hooks: {
+  host: 'amqp://localhost',
+  // Can pass hooks directly on connection configuration.
+  hooks: {
     connection: {
-      beforeConnect: () => {/*...*/}
-    }
-   }
+      beforeConnect: () => {
+        /*...*/
+      },
+    },
+  },
 });
 
-arnavmq.hooks.connection.afterConnect(({connection, config}) => {
-  console.log('Connected to ' + config.host)
-})
+arnavmq.hooks.connection.afterConnect(({ connection, config }) => {
+  console.log('Connected to ' + config.host);
+});
 
-arnavmq.hooks.producer.beforePublish(({properties, /*... other parameters ...*/}) => {
+arnavmq.hooks.producer.beforePublish(({ properties /*... other parameters ...*/ }) => {
   // Message properties and other options objects can be changed, for example to set a message id:
-  properties.messageId = randomUUID()
-})
+  properties.messageId = randomUUID();
+});
 
 // Can register a single callback at a time or multiple callbacks at once.
-arnavmq.hooks.consumer.afterProcessMessage([afterProcessCallback1, afterProcessCallback2])
+arnavmq.hooks.consumer.afterProcessMessage([afterProcessCallback1, afterProcessCallback2]);
 ```
 
 For full details of the available hooks and callback signatures, check the documentation on the files:
@@ -183,7 +185,7 @@ const arnavmq = require('arnavmq')({
   /**
    * Configure hooks to register on the connection, consumer and producer.
    */
-  hooks: undefined
+  hooks: undefined,
 });
 ```
 
