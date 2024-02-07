@@ -10,15 +10,16 @@ const emptyLogger = {
   log: empty,
 };
 
-function setCorrelationId(options) {
+/**
+ * Generates a new correlation id to be used for message publication, or returns the correlation id from the options if one already exists.
+ * @param {object} options The options object for publishing a message.
+ * @returns {string} The correlation id.
+ */
+function getCorrelationId(options) {
   if (options.correlationId) {
     return options.correlationId;
   }
-  const corrId = uuid.v4();
-  const updatedOptions = options;
-  updatedOptions.correlationId = corrId;
-
-  return corrId;
+  return uuid.v4();
 }
 
 module.exports = {
@@ -38,8 +39,5 @@ module.exports = {
       setTimeout(resolve, timer);
     }),
 
-  /**
-   * Generates a uuid and sets it as the 'correlationId' of the given message properties, if there isn't any already.
-   */
-  setCorrelationId,
+  getCorrelationId,
 };

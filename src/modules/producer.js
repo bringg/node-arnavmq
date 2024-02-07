@@ -175,20 +175,20 @@ class Producer {
     if (options.rpc) {
       await this.createRpcQueue(queue);
       // generates a correlationId (random uuid) so we know which callback to execute on received response
-      const corrId = utils.setCorrelationId(options);
+      options.correlationId = utils.getCorrelationId(options);
       // reply to us if you receive this message!
       options.replyTo = await this.amqpRPCQueues[queue].resQueuePromise;
 
       // deferred promise that will resolve when response is received
       const responsePromise = pDefer();
-      this.amqpRPCQueues[queue][corrId] = { responsePromise, timeoutId: null };
+      this.amqpRPCQueues[queue][options.correlationId] = { responsePromise, timeoutId: null };
 
       await this.publishOrSendToQueue(queue, msg, options);
 
       // Using given timeout or default one
       const timeout = options.timeout || this._connection.config.rpcTimeout || 0;
       if (timeout > 0) {
-        this.prepareTimeoutRpc(queue, corrId, timeout);
+        this.prepareTimeoutRpc(queue, options.correlationId, timeout);
       }
 
       return await responsePromise.promise;
@@ -246,7 +246,7 @@ class Producer {
     const parsedMessage = parsers.out(message, settings);
     if (settings.rpc) {
       // Set correlation id before the trigger, so we have it on the payload going for it.
-      utils.setCorrelationId(settings);
+      settings.correlationId = utils.getCorrelationId(settings);
     }
     try {
       const shouldContinue = await this.hooks.trigger(this, ProducerHooks.beforePublish, {
