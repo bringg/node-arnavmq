@@ -1,8 +1,8 @@
 const BaseHooks = require('./base_hooks');
 
 class ProducerHooks extends BaseHooks {
-  constructor(hooks) {
-    super();
+  constructor(hooks, logger) {
+    super(logger);
 
     if (!hooks) {
       return;
@@ -23,6 +23,7 @@ class ProducerHooks extends BaseHooks {
    * - parsedMessage - The serialized message buffer
    * - properties - The publish properties and options. If a "routingKey" is specified, it serves as the queue while the "queue" option represents the exchange instead. Otherwise the default exchange is used.
    * - currentRetry - The current retry attempt number
+   * The hook callback can return `false` in order to cancel publication and jump right to the "after publish" hook.
    * @param {Function | Function[]} callback A callback or callbacks array to register.
    */
   beforePublish(callback) {
@@ -45,6 +46,7 @@ class ProducerHooks extends BaseHooks {
    * - result - The value return from publication. If rpc, will be the deserialized object.
    * - error - The error object in case the publication failed, or received an erroneous RPC response.
    * - shouldRetry - If received an error, 'true' if the publication will be retried (if retry configured).
+   * In case the hook callback was called with an error, it can return false in order to abort any further publish retries (if retry is configured).
    * @param {Function | Function[]} callback A callback or callbacks array to register.
    */
   afterPublish(callback) {

@@ -24,7 +24,7 @@ class Producer {
   constructor(connection) {
     this._connection = connection;
     const { hooks } = this._connection.config;
-    this.hooks = new ProducerHooks(hooks && hooks.producer);
+    this.hooks = new ProducerHooks(hooks && hooks.producer, this._connection.config.logger);
 
     /**
      * Map of rpc queues
@@ -249,13 +249,16 @@ class Producer {
       utils.setCorrelationId(settings);
     }
     try {
-      await this.hooks.trigger(this, ProducerHooks.beforePublish, {
+      const shouldContinue = await this.hooks.trigger(this, ProducerHooks.beforePublish, {
         queue,
         message,
         parsedMessage,
         properties: settings,
         currentRetry: currentRetryNumber,
       });
+      if (!shouldContinue) {
+        return null;
+      }
 
       const result = await this.checkRpc(queue, parsedMessage, settings);
 
@@ -271,7 +274,7 @@ class Producer {
       return result;
     } catch (error) {
       const shouldRetry = this._shouldRetry(error, currentRetryNumber);
-      await this.hooks.trigger(this, ProducerHooks.afterPublish, {
+      const shouldContinue = await this.hooks.trigger(this, ProducerHooks.afterPublish, {
         queue,
         message,
         parsedMessage,
@@ -280,7 +283,7 @@ class Producer {
         shouldRetry,
         error,
       });
-      if (!shouldRetry) {
+      if (!shouldRetry || !shouldContinue) {
         throw error;
       }
 

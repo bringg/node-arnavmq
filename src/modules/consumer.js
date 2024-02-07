@@ -9,7 +9,10 @@ class Consumer {
   constructor(connection) {
     this._connection = connection;
     this._configuration = this._connection.config;
-    this.hooks = new ConsumerHooks(this._configuration.hooks && this._configuration.hooks.consumer);
+    this.hooks = new ConsumerHooks(
+      this._configuration.hooks && this._configuration.hooks.consumer,
+      this._connection.config.logger,
+    );
   }
 
   set connection(value) {
@@ -197,7 +200,15 @@ class Consumer {
       // receive message, parse it, execute callback, check if should answer, ack/reject message
       const body = parsers.in(msg);
       try {
-        await this.hooks.trigger(this, ConsumerHooks.beforeProcessMessageEvent, { queue, message: msg, content: body });
+        const shouldContinue = await this.hooks.trigger(this, ConsumerHooks.beforeProcessMessageEvent, {
+          queue,
+          message: msg,
+          content: body,
+        });
+        if (!shouldContinue) {
+          await this._rejectMessageAfterProcess(channel, queue, msg, body);
+          return;
+        }
         const res = await callback(body, msg.properties);
         await this.checkRpc(msg.properties, queue, res);
       } catch (error) {
@@ -208,30 +219,7 @@ class Consumer {
           params: { queue, message: messageString },
         });
 
-        try {
-          channel.reject(msg, this._connection.config.requeue);
-        } catch (rejectError) {
-          await this.hooks.trigger(this, ConsumerHooks.afterProcessMessageEvent, {
-            queue,
-            message: msg,
-            content: body,
-            error,
-            rejectError,
-          });
-          this._connection.config.logger.error({
-            message: `${loggerAlias} Failed to reject message after processing failure on queue ${queue}: ${rejectError.message}`,
-            error: rejectError,
-            params: { queue },
-          });
-          return;
-        }
-
-        await this.hooks.trigger(this, ConsumerHooks.afterProcessMessageEvent, {
-          queue,
-          message: msg,
-          content: body,
-          error,
-        });
+        await this._rejectMessageAfterProcess(channel, queue, msg, body, error);
         return;
       }
 
@@ -263,6 +251,34 @@ class Consumer {
         params: { queue },
       });
     }
+  }
+
+  /** @private */
+  async _rejectMessageAfterProcess(channel, queue, msg, parsedBody, error) {
+    try {
+      channel.reject(msg, this._connection.config.requeue);
+    } catch (rejectError) {
+      await this.hooks.trigger(this, ConsumerHooks.afterProcessMessageEvent, {
+        queue,
+        message: msg,
+        content: parsedBody,
+        error,
+        rejectError,
+      });
+      this._connection.config.logger.error({
+        message: `${loggerAlias} Failed to reject message after processing failure on queue ${queue}: ${rejectError.message}`,
+        error: rejectError,
+        params: { queue },
+      });
+      return;
+    }
+
+    await this.hooks.trigger(this, ConsumerHooks.afterProcessMessageEvent, {
+      queue,
+      message: msg,
+      content: parsedBody,
+      error,
+    });
   }
 }
 

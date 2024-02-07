@@ -1,8 +1,8 @@
 const BaseHooks = require('./base_hooks');
 
 class ConsumerHooks extends BaseHooks {
-  constructor(hooks) {
-    super();
+  constructor(hooks, logger) {
+    super(logger);
 
     if (!hooks) {
       return;
@@ -27,6 +27,7 @@ class ConsumerHooks extends BaseHooks {
    * - queue - The queue or exchange to publish to.
    * - message - The raw amqplib message.
    * - content - The deserialized message content.
+   * The hook callback can return `false` in order to skip the message processing, rejecting it and jumping right to the "after process" hook.
    * @param {Function | Function[]} callback A callback or callbacks array to register.
    */
   beforeProcessMessage(callback) {

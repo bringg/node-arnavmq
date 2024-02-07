@@ -1,8 +1,8 @@
 const BaseHooks = require('./base_hooks');
 
 class ConnectionHooks extends BaseHooks {
-  constructor(hooks) {
-    super();
+  constructor(hooks, logger) {
+    super(logger);
 
     if (!hooks) {
       return;
