@@ -46,7 +46,7 @@ class ProducerHooks extends BaseHooks {
    * - result - The value return from publication. If rpc, will be the deserialized object.
    * - error - The error object in case the publication failed, or received an erroneous RPC response.
    * - shouldRetry - If received an error, 'true' if the publication will be retried (if retry configured).
-   * In case the hook callback was called with an error, it can return false in order to abort any further publish retries (if retry is configured).
+   * In case the hook callback was called with an error, it can return `false` in order to abort any further publish retries (if retry is configured).
    * @param {Function | Function[]} callback A callback or callbacks array to register.
    */
   afterPublish(callback) {

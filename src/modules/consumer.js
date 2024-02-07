@@ -206,7 +206,7 @@ class Consumer {
           content: body,
         });
         if (!shouldContinue) {
-          await this._rejectMessageAfterProcess(channel, queue, msg, body);
+          await this._rejectMessageAfterProcess(channel, queue, msg, body, false);
           return;
         }
         const res = await callback(body, msg.properties);
@@ -219,7 +219,7 @@ class Consumer {
           params: { queue, message: messageString },
         });
 
-        await this._rejectMessageAfterProcess(channel, queue, msg, body, error);
+        await this._rejectMessageAfterProcess(channel, queue, msg, body, this._connection.config.requeue, error);
         return;
       }
 
@@ -254,9 +254,14 @@ class Consumer {
   }
 
   /** @private */
-  async _rejectMessageAfterProcess(channel, queue, msg, parsedBody, error) {
+  async _rejectMessageAfterProcess(channel, queue, msg, parsedBody, requeue, error) {
     try {
-      channel.reject(msg, this._connection.config.requeue);
+      channel.reject(msg, requeue);
+
+      if (!requeue) {
+        // If not requeued and message will be removed from the queue, return rpc error response if needed.
+        await this.checkRpc(msg.properties, queue, error instanceof Error ? { error } : undefined);
+      }
     } catch (rejectError) {
       await this.hooks.trigger(this, ConsumerHooks.afterProcessMessageEvent, {
         queue,

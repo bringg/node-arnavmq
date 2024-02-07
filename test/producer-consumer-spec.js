@@ -37,9 +37,9 @@ describe('producer/consumer', function () {
   let afterRpcReplyHook;
 
   function setupHooks() {
-    beforePublishHook = sandbox.spy();
+    beforePublishHook = sandbox.stub();
     afterPublishHook = sandbox.spy();
-    beforeProcessMessageHook = sandbox.spy();
+    beforeProcessMessageHook = sandbox.stub();
     afterProcessMessageHook = sandbox.spy();
     beforeRpcReplyHook = sandbox.spy();
     afterRpcReplyHook = sandbox.spy();
@@ -283,7 +283,7 @@ describe('producer/consumer', function () {
       beforeEach(() => setupHooks());
 
       it('calls the producer "before and after publish" hooks', async () => {
-        const queueName = 'test-only-string-queue';
+        const queueName = 'test-before-after-publish-hooks-queue';
         const sentMessage = uuid.v4();
 
         await arnavmq.consumer.consume(queueName, (message) => Promise.resolve(`${message}-test`));
@@ -308,7 +308,7 @@ describe('producer/consumer', function () {
       });
 
       it('calls the consumer "before and after process message" hooks', async () => {
-        const queueName = 'test-only-string-queue';
+        const queueName = 'test-before-after-process-message-hooks-queue';
         const sentMessage = uuid.v4();
 
         await arnavmq.consumer.consume(queueName, (message) => Promise.resolve(`${message}-test`));
@@ -327,7 +327,7 @@ describe('producer/consumer', function () {
       });
 
       it('calls the consumer "before and after rpc reply" hooks', async () => {
-        const queueName = 'test-only-string-queue';
+        const queueName = 'test-before-after-rpc-hooks-queue';
         const sentMessage = uuid.v4();
 
         await arnavmq.consumer.consume(queueName, (message) => Promise.resolve(`${message}-test`));
@@ -356,6 +356,72 @@ describe('producer/consumer', function () {
           },
           receiveProperties: sinon.match.object,
           written: true,
+        });
+      });
+
+      it('cancels publication in case the "before publish" hook returns false', async () => {
+        const queueName = 'test-before-publish-hook-cancelation-queue';
+        const sentMessage = uuid.v4();
+        beforePublishHook.callsFake((event) => {
+          if (event.queue !== queueName) {
+            return undefined;
+          }
+          return false;
+        });
+        const sendToQueueSpy = sandbox.spy(await arnavmq.connection.getDefaultChannel(), 'sendToQueue');
+
+        const result = await arnavmq.producer.produce(queueName, sentMessage, { rpc: true });
+
+        sinon.assert.notCalled(sendToQueueSpy);
+        assert.equal(result, null);
+
+        sinon.assert.calledWith(beforePublishHook, {
+          queue: queueName,
+          message: sentMessage,
+          parsedMessage: sinon.match.instanceOf(Buffer),
+          properties: sinon.match({ rpc: true }),
+          currentRetry: 0,
+        });
+        sinon.assert.calledWith(afterPublishHook, {
+          queue: queueName,
+          message: sentMessage,
+          parsedMessage: sinon.match.instanceOf(Buffer),
+          properties: sinon.match({ rpc: true }),
+          currentRetry: 0,
+          result,
+          error: undefined,
+        });
+      });
+
+      it('cancels message processing in case the "before message processing" hook returns false', async () => {
+        const queueName = 'test-before-process-message-hook-cancels-processing-queue';
+        const sentMessage = uuid.v4();
+        beforeProcessMessageHook.callsFake((event) => {
+          if (event.queue !== queueName) {
+            return undefined;
+          }
+          return false;
+        });
+        let processed = false;
+        await arnavmq.consumer.consume(queueName, (message) => {
+          processed = true;
+          return Promise.resolve(`${message}-test`);
+        });
+
+        const result = await arnavmq.producer.produce(queueName, sentMessage, { rpc: true });
+
+        assert.equal(processed, false);
+        assert.equal(result, undefined);
+        sinon.assert.calledWith(beforeProcessMessageHook, {
+          queue: queueName,
+          message: sinon.match({ content: sinon.match.instanceOf(Buffer) }),
+          content: sentMessage,
+        });
+        sinon.assert.calledWith(afterProcessMessageHook, {
+          queue: queueName,
+          message: sinon.match({ content: sinon.match.instanceOf(Buffer) }),
+          content: sentMessage,
+          error: undefined,
         });
       });
     });

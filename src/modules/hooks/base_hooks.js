@@ -55,7 +55,7 @@ module.exports = class BaseHooks {
       return;
     }
 
-    const callbacks = this._getCallbacks();
+    const callbacks = this._getCallbacks(event);
     if (callbacks) {
       return;
     }
@@ -69,7 +69,7 @@ module.exports = class BaseHooks {
    * @private
    */
   _manyOff(event, callbacks) {
-    const registered = this._getCallbacks();
+    const registered = this._getCallbacks(event);
     if (registered) {
       return;
     }

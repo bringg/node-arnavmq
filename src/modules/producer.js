@@ -256,11 +256,11 @@ class Producer {
         properties: settings,
         currentRetry: currentRetryNumber,
       });
-      if (!shouldContinue) {
-        return null;
-      }
 
-      const result = await this.checkRpc(queue, parsedMessage, settings);
+      let result;
+      if (shouldContinue) {
+        result = await this.checkRpc(queue, parsedMessage, settings);
+      }
 
       await this.hooks.trigger(this, ProducerHooks.afterPublish, {
         queue,

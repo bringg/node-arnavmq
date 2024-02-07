@@ -68,20 +68,66 @@ describe('disconnections', function () {
     describe('hooks', () => {
       let beforeConnectHook;
       let afterConnectHook;
+      let afterPublishHook;
 
       beforeEach(() => {
         beforeConnectHook = sandbox.spy();
         afterConnectHook = sandbox.spy();
+        afterPublishHook = sandbox.stub();
       });
 
       afterEach(() => {
         arnavmq.hooks.connection.removeBeforeConnect(beforeConnectHook);
         arnavmq.hooks.connection.removeAfterConnect(afterConnectHook);
+        arnavmq.hooks.producer.removeAfterPublish(afterPublishHook);
+      });
+
+      it('should stop retrying if "after processing" hook returned false', async () => {
+        const retryCount = 3;
+        arnavmq.connection._config.producerMaxRetries = retryCount;
+        arnavmq.connection._config.timeout = 100;
+        const expectedError = 'Fake connection error.';
+        const hookTestsQueue = 'disco:test:hooks:1';
+        const expectedHookArgs = {
+          queue: hookTestsQueue,
+          message: {},
+          parsedMessage: sinon.match.instanceOf(Buffer),
+          properties: sinon.match.object,
+          shouldRetry: true,
+          error: sinon.match({ message: expectedError }),
+        };
+        sandbox.stub(arnavmq.connection, 'getDefaultChannel').rejects(new Error(expectedError));
+        let hookCallCount = 0;
+        afterPublishHook.callsFake((event) => {
+          if (event.queue !== hookTestsQueue) {
+            return undefined;
+          }
+          hookCallCount += 1;
+
+          if (hookCallCount >= 2) {
+            return false;
+          }
+          return undefined;
+        });
+        arnavmq.hooks.producer.afterPublish(afterPublishHook);
+
+        await assert.rejects(
+          () => arnavmq.producer.produce(hookTestsQueue),
+          (err) => {
+            sinon.assert.callCount(arnavmq.connection.getDefaultChannel, 2);
+            assert.strictEqual(err.message, expectedError);
+            return true;
+          },
+        );
+        assert.equal(hookCallCount, 2);
+        sinon.assert.calledWith(afterPublishHook, { ...expectedHookArgs, currentRetry: 0 });
+        sinon.assert.calledWith(afterPublishHook, { ...expectedHookArgs, currentRetry: 1 });
       });
 
       it('calls event hooks on connecting', async () => {
+        const hookTestsQueue = 'disco:test:hooks:2';
         const consumedAllPromise = pDefer();
-        await arnavmq.consumer.consume(queue, () => {
+        await arnavmq.consumer.consume(hookTestsQueue, () => {
           consumedAllPromise.resolve();
         });
 
@@ -91,8 +137,7 @@ describe('disconnections', function () {
         arnavmq.hooks.connection.afterConnect(afterConnectHook);
 
         await docker.connectNetwork();
-        await arnavmq.producer.produce(queue);
-
+        await arnavmq.producer.produce(hookTestsQueue);
         await consumedAllPromise.promise;
 
         sinon.assert.called(beforeConnectHook);
