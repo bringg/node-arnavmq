@@ -49,7 +49,10 @@ module.exports = (config) => {
 
   configuration.prefetch = parseInt(configuration.prefetch, 10) || 0;
 
-  setLogger(config.logger);
+  setLogger(configuration.logger);
+  delete configuration.logger;
+
+  Object.freeze(configuration);
 
   return require('./modules/arnavmq')(connection(configuration));
 };

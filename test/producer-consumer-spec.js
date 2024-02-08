@@ -1,7 +1,7 @@
 const assert = require('assert');
 const uuid = require('uuid');
 const sinon = require('sinon');
-const arnavmq = require('../src/index')();
+const arnavmqConfigurator = require('../src/index');
 const utils = require('../src/modules/utils');
 const { Channels, ChannelAlreadyExistsError } = require('../src/modules/channels');
 
@@ -9,6 +9,8 @@ const fixtures = {
   queues: ['test-queue-0', 'test-queue-1', 'test-queue-2', 'test-queue-3', 'test-queue-4'],
   routingKey: 'queue-routing-key',
 };
+
+const arnavmq = arnavmqConfigurator();
 
 let letters = 0;
 
@@ -489,7 +491,7 @@ describe('producer/consumer', function () {
     });
 
     it('should reject on default timeout, if no answer received', async () => {
-      arnavmq.connection._config.rpcTimeout = 1000;
+      arnavmqConfigurator({ rpcTimeout: 1000 });
       try {
         await arnavmq.producer.produce('non-existing-queue', { msg: 'ok' }, { rpc: true });
         assert.fail('Did not get the expected error.');
@@ -526,7 +528,7 @@ describe('producer/consumer', function () {
 
   describe('undefined queue name', () => {
     before(() => {
-      arnavmq.connection._config.consumerSuffix = undefined;
+      arnavmqConfigurator({ consumerSuffix: undefined });
     });
 
     it('should receive message', (done) => {

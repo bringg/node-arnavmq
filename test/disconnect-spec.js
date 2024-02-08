@@ -2,7 +2,7 @@ const assert = require('assert');
 const sinon = require('sinon');
 const pDefer = require('p-defer');
 const docker = require('./docker');
-const arnavmqFactory = require('../src/index');
+const arnavmqConfigurator = require('../src/index');
 const utils = require('../src/modules/utils');
 
 /* eslint func-names: "off" */
@@ -11,7 +11,7 @@ describe('disconnections', function () {
   let arnavmq;
 
   beforeEach(() => {
-    arnavmq = arnavmqFactory();
+    arnavmq = arnavmqConfigurator();
   });
 
   const sandbox = sinon.createSandbox();
@@ -50,8 +50,7 @@ describe('disconnections', function () {
 
     it('should retry producing only as configured', async () => {
       const retryCount = 3;
-      arnavmq.connection._config.producerMaxRetries = retryCount;
-      arnavmq.connection._config.timeout = 100;
+      arnavmqConfigurator({ timeout: 100, producerMaxRetries: retryCount });
       const expectedError = 'Fake connection error.';
       sandbox.stub(arnavmq.connection, 'getDefaultChannel').rejects(new Error(expectedError));
 
@@ -84,8 +83,7 @@ describe('disconnections', function () {
 
       it('should stop retrying if "after processing" hook returned false', async () => {
         const retryCount = 3;
-        arnavmq.connection._config.producerMaxRetries = retryCount;
-        arnavmq.connection._config.timeout = 100;
+        arnavmqConfigurator({ timeout: 100, producerMaxRetries: retryCount });
         const expectedError = 'Fake connection error.';
         const hookTestsQueue = 'disco:test:hooks:1';
         const expectedHookArgs = {
@@ -151,7 +149,7 @@ describe('disconnections', function () {
 
     it('should be able to re-register to consume messages between connection failures', async () => {
       let counter = 0;
-      arnavmq.connection._config.rpcTimeout = 0;
+      arnavmqConfigurator({ rpcTimeout: 0 });
 
       await arnavmq.consumer.consume(queue, () => {
         counter += 1;
