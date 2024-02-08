@@ -2,6 +2,7 @@ const { ChannelAlreadyExistsError } = require('./channels');
 const { ConsumerHooks } = require('./hooks');
 const parsers = require('./message-parsers');
 const utils = require('./utils');
+const { logger } = require('./logger');
 
 const loggerAlias = 'arnav_mq:consumer';
 
@@ -9,10 +10,7 @@ class Consumer {
   constructor(connection) {
     this._connection = connection;
     this._configuration = this._connection.config;
-    this.hooks = new ConsumerHooks(
-      this._configuration.hooks && this._configuration.hooks.consumer,
-      this._connection.config.logger,
-    );
+    this.hooks = new ConsumerHooks(this._configuration.hooks && this._configuration.hooks.consumer);
   }
 
   set connection(value) {
@@ -50,7 +48,7 @@ class Consumer {
       serializedReply,
       error: reply && reply.error ? reply.error : undefined,
     });
-    this._connection.config.logger.debug({
+    logger.debug({
       message: `${loggerAlias} [${queue}][${messageProperties.replyTo}] > ${reply}`,
       params: { content: reply },
     });
@@ -132,14 +130,14 @@ class Consumer {
     try {
       await channel.assertQueue(suffixedQueue, options);
     } catch (error) {
-      this._connection.config.logger.error({
+      logger.error({
         message: `${loggerAlias} Failed to assert queue ${queue}: ${error.message}`,
         error,
         params: { queue },
       });
     }
 
-    this._connection.config.logger.debug({
+    logger.debug({
       message: `${loggerAlias} init ${queue}`,
       params: { queue },
     });
@@ -167,7 +165,7 @@ class Consumer {
           // Just in the odd chance the channel was open but the listener failed.
           await channel.close();
         } catch (closeError) {
-          this._connection.config.logger.error({
+          logger.error({
             message: `${loggerAlias} Failed to close channel after initialization error ${queue}: ${closeError.message}`,
             error: closeError,
             params: { queue },
@@ -183,7 +181,7 @@ class Consumer {
       if (!msg) {
         // When forcefully cancelled by rabbitmq, consumer would receive a null message.
         // https://amqp-node.github.io/amqplib/channel_api.html#channel_consume
-        this._connection.config.logger.warn({
+        logger.warn({
           message: `${loggerAlias} Consumer was cancelled by server for queue '${queue}'`,
           error: null,
           params: { queue },
@@ -192,7 +190,7 @@ class Consumer {
       }
 
       const messageString = msg.content.toString();
-      this._connection.config.logger.debug({
+      logger.debug({
         message: `${loggerAlias} [${queue}] < ${messageString}`,
         params: { queue, message: messageString },
       });
@@ -214,7 +212,7 @@ class Consumer {
         await this.checkRpc(msg.properties, queue, res);
       } catch (error) {
         // if something bad happened in the callback, reject the message so we can requeue it (or not)
-        this._connection.config.logger.error({
+        logger.error({
           message: `${loggerAlias} Failed processing message from queue ${queue}: ${error.message}`,
           error,
           params: { queue, message: messageString },
@@ -233,7 +231,7 @@ class Consumer {
           content: body,
           ackError,
         });
-        this._connection.config.logger.error({
+        logger.error({
           message: `${loggerAlias} Failed to ack message after processing finished on queue ${queue}: ${ackError.message}`,
           error: ackError,
           params: { queue },
@@ -246,7 +244,7 @@ class Consumer {
     try {
       await channel.consume(queue, consumeFunc, { noAck: false });
     } catch (error) {
-      this._connection.config.logger.error({
+      logger.error({
         message: `${loggerAlias} Failed to start consuming from queue ${queue}: ${error.message}`,
         error,
         params: { queue },
@@ -271,7 +269,7 @@ class Consumer {
         error,
         rejectError,
       });
-      this._connection.config.logger.error({
+      logger.error({
         message: `${loggerAlias} Failed to reject message after processing failure on queue ${queue}: ${rejectError.message}`,
         error: rejectError,
         params: { queue },

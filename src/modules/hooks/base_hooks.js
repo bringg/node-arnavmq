@@ -1,16 +1,39 @@
+const { logger } = require('../logger');
+
+async function runHook(source, eventName, payload, callback) {
+  const logParams = { hook: eventName, payload, callbackName: callback.name };
+  try {
+    const callbackResult = await callback.call(source, payload);
+    if (callbackResult === false) {
+      logger.info({
+        message: `arnav_mq:hooks A '${eventName}' hook returned false. Canceling further execution.`,
+        params: logParams,
+      });
+      return false;
+    }
+    logger.debug({
+      message: `arnav_mq:hooks A '${eventName}' finished execution.`,
+      params: logParams,
+    });
+  } catch (error) {
+    logger.error({
+      message: `arnav_mq:hooks Execution of '${eventName}' hook caused an error: ${error.message}`,
+      error,
+      params: logParams,
+    });
+  }
+
+  return true;
+}
+
 module.exports = class BaseHooks {
-  constructor(logger) {
+  constructor() {
     /**
      * @type {Map.<string, Set.<Function>>} A map between an event name to a set of callbacks registered for it.
      * Function shape varies between different events.
      * @private
      */
     this._events = new Map();
-    /**
-     * A logger for logging hook progress.
-     * @private
-     */
-    this._logger = logger;
   }
 
   /**
@@ -98,7 +121,7 @@ module.exports = class BaseHooks {
       hookPromises.push(
         // This is safe as I want shouldContinue to have the last value.
         // eslint-disable-next-line no-loop-func
-        this._runHook(source, eventName, payload, callback).then((callbackResult) => {
+        runHook(source, eventName, payload, callback).then((callbackResult) => {
           if (callbackResult === false) {
             shouldContinue = false;
           }
@@ -108,33 +131,6 @@ module.exports = class BaseHooks {
     await Promise.all(hookPromises);
 
     return shouldContinue;
-  }
-
-  /** @private */
-  async _runHook(source, eventName, payload, callback) {
-    const logParams = { hook: eventName, payload, callbackName: callback.name };
-    try {
-      const callbackResult = await callback.call(source, payload);
-      if (callbackResult === false) {
-        this._logger.info({
-          message: `arnav_mq:hooks A '${eventName}' hook returned false. Canceling further execution.`,
-          params: logParams,
-        });
-        return false;
-      }
-      this._logger.debug({
-        message: `arnav_mq:hooks A '${eventName}' finished execution.`,
-        params: logParams,
-      });
-    } catch (error) {
-      this._logger.error({
-        message: `arnav_mq:hooks Execution of '${eventName}' hook caused an error: ${error.message}`,
-        error,
-        params: logParams,
-      });
-    }
-
-    return true;
   }
 
   /** @private */

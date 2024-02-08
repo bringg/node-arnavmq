@@ -3,6 +3,18 @@ const amqp = require('amqplib');
 const { Channels } = require('./channels');
 const { ConnectionHooks } = require('./hooks');
 const packageVersion = require('../../package.json').version;
+const { logger } = require('./logger');
+
+/**
+ * Log errors from connection/channel error events.
+ * @param {Error} error
+ */
+function onConnectionError(error) {
+  logger.error({
+    message: error.message,
+    error,
+  });
+}
 
 class Connection {
   constructor(config) {
@@ -10,7 +22,7 @@ class Connection {
 
     this._connectionPromise = null; // Promise of amqp connection
     this._channels = null;
-    this.hooks = new ConnectionHooks(config.hooks && config.hooks.connection, config.logger);
+    this.hooks = new ConnectionHooks(config.hooks && config.hooks.connection);
     this.startedAt = new Date().toISOString();
   }
 
@@ -45,7 +57,7 @@ class Connection {
         this._connectionPromise = null;
         this._channels = null;
       });
-      connection.on('error', this._onError.bind(this));
+      connection.on('error', onConnectionError);
 
       await this.hooks.trigger(this, ConnectionHooks.afterConnectEvent, { config: this._config, connection });
 
@@ -56,17 +68,6 @@ class Connection {
       this._channels = null;
       throw error;
     }
-  }
-
-  /**
-   * Log errors from connection/channel error events.
-   * @param {Error} error
-   */
-  _onError(error) {
-    this._config.logger.error({
-      message: error.message,
-      error,
-    });
   }
 
   async getChannel(queue, config) {

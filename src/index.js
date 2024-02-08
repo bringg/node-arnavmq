@@ -1,6 +1,7 @@
 const uuid = require('uuid');
 const utils = require('./modules/utils');
 const connection = require('./modules/connection');
+const { setLogger } = require('./modules/logger');
 
 /* eslint global-require: "off" */
 module.exports = (config) => {
@@ -47,5 +48,8 @@ module.exports = (config) => {
   }
 
   configuration.prefetch = parseInt(configuration.prefetch, 10) || 0;
+
+  setLogger(config.logger);
+
   return require('./modules/arnavmq')(connection(configuration));
 };

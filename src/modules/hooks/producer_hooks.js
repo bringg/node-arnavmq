@@ -1,8 +1,8 @@
 const BaseHooks = require('./base_hooks');
 
 class ProducerHooks extends BaseHooks {
-  constructor(hooks, logger) {
-    super(logger);
+  constructor(hooks) {
+    super();
 
     if (!hooks) {
       return;
