@@ -1,4 +1,6 @@
-let instance;
+const { emptyLogger } = require('./utils');
+
+let instance = emptyLogger;
 
 module.exports = {
   /**
@@ -7,7 +9,9 @@ module.exports = {
    * @param {object} logger The logger object.
    */
   setLogger(logger) {
-    instance = logger;
+    if (logger) {
+      instance = logger;
+    }
   },
 
   logger: Object.freeze({
