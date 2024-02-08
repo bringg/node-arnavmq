@@ -1,20 +1,6 @@
 const BaseHooks = require('./base_hooks');
 
 class ProducerHooks extends BaseHooks {
-  constructor(hooks) {
-    super();
-
-    if (!hooks) {
-      return;
-    }
-    if (hooks.beforePublish) {
-      this.beforePublish(hooks.beforePublish);
-    }
-    if (hooks.afterPublish) {
-      this.afterPublish(hooks.afterPublish);
-    }
-  }
-
   /**
    * Registers callback/callbacks to be invoked before producer publishes a message.
    * The callback is invoked with 'this' set to the producer instance, and a single "payload" argument of the following shape:

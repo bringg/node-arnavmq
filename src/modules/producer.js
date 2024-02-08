@@ -24,8 +24,7 @@ class ProducerError extends Error {
 class Producer {
   constructor(connection) {
     this._connection = connection;
-    const { hooks } = this._connection.config;
-    this.hooks = new ProducerHooks(hooks && hooks.producer);
+    this.hooks = new ProducerHooks();
 
     /**
      * Map of rpc queues

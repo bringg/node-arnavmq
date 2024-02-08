@@ -10,7 +10,7 @@ class Consumer {
   constructor(connection) {
     this._connection = connection;
     this._configuration = this._connection.config;
-    this.hooks = new ConsumerHooks(this._configuration.hooks && this._configuration.hooks.consumer);
+    this.hooks = new ConsumerHooks();
   }
 
   set connection(value) {

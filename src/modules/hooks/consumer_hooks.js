@@ -1,26 +1,6 @@
 const BaseHooks = require('./base_hooks');
 
 class ConsumerHooks extends BaseHooks {
-  constructor(hooks) {
-    super();
-
-    if (!hooks) {
-      return;
-    }
-    if (hooks.beforeProcessMessage) {
-      this.beforeProcessMessage(hooks.beforeProcessMessage);
-    }
-    if (hooks.afterProcessMessage) {
-      this.afterProcessMessage(hooks.afterProcessMessage);
-    }
-    if (hooks.beforeRpcReply) {
-      this.beforeRpcReply(hooks.beforeRpcReply);
-    }
-    if (hooks.afterRpcReply) {
-      this.afterRpcReply(hooks.afterRpcReply);
-    }
-  }
-
   /**
    * Registers callback/callbacks to be invoked before consumer starts processing a received message.
    * The callback is invoked with 'this' set to the consumer instance, and a single "payload" argument of the following shape:

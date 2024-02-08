@@ -181,11 +181,6 @@ const arnavmq = require('arnavmq')({
    * * params - An optional object containing extra parameters that can provide extra context for the event.
    */
   logger: utils.emptyLogger,
-
-  /**
-   * Configure hooks to register on the connection, consumer and producer.
-   */
-  hooks: undefined,
 });
 ```
 

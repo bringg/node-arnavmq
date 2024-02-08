@@ -1,20 +1,6 @@
 const BaseHooks = require('./base_hooks');
 
 class ConnectionHooks extends BaseHooks {
-  constructor(hooks) {
-    super();
-
-    if (!hooks) {
-      return;
-    }
-    if (hooks.afterConnect) {
-      this.afterConnect(hooks.afterConnect);
-    }
-    if (hooks.beforeConnect) {
-      this.beforeConnect(hooks.beforeConnect);
-    }
-  }
-
   /**
    * Registers callback/callbacks to be invoked before creating a connection to rabbitmq.
    * The callback is invoked with 'this' set to the connection wrapper instance creating the connection, and a single "payload" argument of the following shape:
