@@ -57,7 +57,7 @@ class Consumer {
 
     try {
       const defaultChannel = await this._connection.getDefaultChannel();
-      const written = await defaultChannel.sendToQueue(messageProperties.replyTo, serializedReply, options);
+      const written = defaultChannel.sendToQueue(messageProperties.replyTo, serializedReply, options);
       await this.hooks.trigger(this, ConsumerHooks.afterRpcReplyEvent, {
         receiveProperties: messageProperties,
         queue,
@@ -76,6 +76,7 @@ class Consumer {
         serializedReply,
         replyProperties: options,
         error,
+        written: false,
       });
       throw error;
     }
