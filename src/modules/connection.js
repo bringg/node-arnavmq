@@ -22,7 +22,7 @@ class Connection {
 
     this._connectionPromise = null; // Promise of amqp connection
     this._channels = null;
-    this.hooks = new ConnectionHooks(config.hooks && config.hooks.connection);
+    this.hooks = new ConnectionHooks();
     this.startedAt = new Date().toISOString();
   }
 

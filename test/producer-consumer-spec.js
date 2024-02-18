@@ -313,13 +313,13 @@ describe('producer/consumer', function () {
         const queueName = 'test-before-after-process-message-hooks-queue';
         const sentMessage = uuid.v4();
 
-        await arnavmq.consumer.consume(queueName, (message) => Promise.resolve(`${message}-test`));
+        const callback = (message) => Promise.resolve(`${message}-test`);
+        await arnavmq.consumer.consume(queueName, callback);
         await arnavmq.producer.produce(queueName, sentMessage, { rpc: true });
 
         sinon.assert.calledWith(beforeProcessMessageHook, {
           queue: queueName,
-          message: sinon.match({ content: sinon.match.instanceOf(Buffer) }),
-          content: sentMessage,
+          action: { message: sinon.match({ content: sinon.match.instanceOf(Buffer) }), content: sentMessage, callback },
         });
         sinon.assert.calledWith(afterProcessMessageHook, {
           queue: queueName,
@@ -405,10 +405,11 @@ describe('producer/consumer', function () {
           return false;
         });
         let processed = false;
-        await arnavmq.consumer.consume(queueName, (message) => {
+        const callback = (message) => {
           processed = true;
           return Promise.resolve(`${message}-test`);
-        });
+        };
+        await arnavmq.consumer.consume(queueName, callback);
 
         const result = await arnavmq.producer.produce(queueName, sentMessage, { rpc: true });
 
@@ -416,8 +417,7 @@ describe('producer/consumer', function () {
         assert.equal(result, undefined);
         sinon.assert.calledWith(beforeProcessMessageHook, {
           queue: queueName,
-          message: sinon.match({ content: sinon.match.instanceOf(Buffer) }),
-          content: sentMessage,
+          action: { message: sinon.match({ content: sinon.match.instanceOf(Buffer) }), content: sentMessage, callback },
         });
         sinon.assert.calledWith(afterProcessMessageHook, {
           queue: queueName,

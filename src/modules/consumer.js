@@ -199,16 +199,17 @@ class Consumer {
       // receive message, parse it, execute callback, check if should answer, ack/reject message
       const body = parsers.in(msg);
       try {
+        const action = { message: msg, content: body, callback };
         const shouldContinue = await this.hooks.trigger(this, ConsumerHooks.beforeProcessMessageEvent, {
           queue,
-          message: msg,
-          content: body,
+          action,
         });
         if (!shouldContinue) {
           await this._rejectMessageAfterProcess(channel, queue, msg, body, false);
           return;
         }
-        const res = await callback(body, msg.properties);
+        // Use callback from action in case it was changed/wrapped in the hook (for instance, for instrumentation)
+        const res = await action.callback(body, msg.properties);
         await this.checkRpc(msg.properties, queue, res);
       } catch (error) {
         // if something bad happened in the callback, reject the message so we can requeue it (or not)
