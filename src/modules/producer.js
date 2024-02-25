@@ -249,6 +249,8 @@ class Producer {
       settings.correlationId = utils.getCorrelationId(settings);
     }
     try {
+      // Make sure we have an initialized connection before triggering the hook.
+      await this._connection.getConnection();
       await this.hooks.trigger(this, ProducerHooks.beforePublish, {
         queue,
         message,
