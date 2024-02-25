@@ -249,7 +249,7 @@ class Producer {
       settings.correlationId = utils.getCorrelationId(settings);
     }
     try {
-      const shouldContinue = await this.hooks.trigger(this, ProducerHooks.beforePublish, {
+      await this.hooks.trigger(this, ProducerHooks.beforePublish, {
         queue,
         message,
         parsedMessage,
@@ -257,10 +257,7 @@ class Producer {
         currentRetry: currentRetryNumber,
       });
 
-      let result;
-      if (shouldContinue) {
-        result = await this.checkRpc(queue, parsedMessage, settings);
-      }
+      const result = await this.checkRpc(queue, parsedMessage, settings);
 
       await this.hooks.trigger(this, ProducerHooks.afterPublish, {
         queue,
@@ -274,7 +271,7 @@ class Producer {
       return result;
     } catch (error) {
       const shouldRetry = this._shouldRetry(error, currentRetryNumber);
-      const shouldContinue = await this.hooks.trigger(this, ProducerHooks.afterPublish, {
+      await this.hooks.trigger(this, ProducerHooks.afterPublish, {
         queue,
         message,
         parsedMessage,
@@ -283,7 +280,7 @@ class Producer {
         shouldRetry,
         error,
       });
-      if (!shouldRetry || !shouldContinue) {
+      if (!shouldRetry) {
         throw error;
       }
 

@@ -200,14 +200,10 @@ class Consumer {
       const body = parsers.in(msg);
       try {
         const action = { message: msg, content: body, callback };
-        const shouldContinue = await this.hooks.trigger(this, ConsumerHooks.beforeProcessMessageEvent, {
+        await this.hooks.trigger(this, ConsumerHooks.beforeProcessMessageEvent, {
           queue,
           action,
         });
-        if (!shouldContinue) {
-          await this._rejectMessageAfterProcess(channel, queue, msg, body, false);
-          return;
-        }
         // Use callback from action in case it was changed/wrapped in the hook (for instance, for instrumentation)
         const res = await action.callback(body, msg.properties);
         await this.checkRpc(msg.properties, queue, res);
