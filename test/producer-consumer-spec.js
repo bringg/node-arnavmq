@@ -31,22 +31,22 @@ describe('producer/consumer', function () {
   const sandbox = sinon.createSandbox();
   afterEach(() => sandbox.restore());
 
-  let beforePublishHook;
-  let afterPublishHook;
+  let beforeProduceHook;
+  let afterProduceHook;
   let beforeProcessMessageHook;
   let afterProcessMessageHook;
   let beforeRpcReplyHook;
   let afterRpcReplyHook;
 
   function setupHooks() {
-    beforePublishHook = sandbox.stub();
-    afterPublishHook = sandbox.spy();
+    beforeProduceHook = sandbox.stub();
+    afterProduceHook = sandbox.spy();
     beforeProcessMessageHook = sandbox.stub();
     afterProcessMessageHook = sandbox.spy();
     beforeRpcReplyHook = sandbox.spy();
     afterRpcReplyHook = sandbox.spy();
-    arnavmq.hooks.producer.beforePublish(beforePublishHook);
-    arnavmq.hooks.producer.afterPublish(afterPublishHook);
+    arnavmq.hooks.producer.beforeProduce(beforeProduceHook);
+    arnavmq.hooks.producer.afterProduce(afterProduceHook);
     arnavmq.hooks.consumer.beforeProcessMessage(beforeProcessMessageHook);
     arnavmq.hooks.consumer.afterProcessMessage(afterProcessMessageHook);
     arnavmq.hooks.consumer.beforeRpcReply(beforeRpcReplyHook);
@@ -54,17 +54,17 @@ describe('producer/consumer', function () {
   }
 
   function cleanupHooks() {
-    if (!beforePublishHook) {
+    if (!beforeProduceHook) {
       return;
     }
 
-    arnavmq.hooks.producer.removeBeforePublish(beforePublishHook);
-    arnavmq.hooks.producer.removeAfterPublish(afterPublishHook);
+    arnavmq.hooks.producer.removeBeforePublish(beforeProduceHook);
+    arnavmq.hooks.producer.removeAfterPublish(afterProduceHook);
     arnavmq.hooks.consumer.removeBeforeProcessMessage(beforeProcessMessageHook);
     arnavmq.hooks.consumer.removeAfterProcessMessage(afterProcessMessageHook);
     arnavmq.hooks.consumer.removeBeforeRpcReply(beforeRpcReplyHook);
     arnavmq.hooks.consumer.removeAfterRpcReply(afterRpcReplyHook);
-    beforePublishHook = undefined;
+    beforeProduceHook = undefined;
   }
 
   describe('consuming messages', () => {
@@ -291,14 +291,14 @@ describe('producer/consumer', function () {
         await arnavmq.consumer.consume(queueName, (message) => Promise.resolve(`${message}-test`));
         const result = await arnavmq.producer.produce(queueName, sentMessage, { rpc: true });
 
-        sinon.assert.calledWith(beforePublishHook, {
+        sinon.assert.calledWith(beforeProduceHook, {
           queue: queueName,
           message: sentMessage,
           parsedMessage: sinon.match.instanceOf(Buffer),
           properties: sinon.match({ rpc: true }),
           currentRetry: 0,
         });
-        sinon.assert.calledWith(afterPublishHook, {
+        sinon.assert.calledWith(afterProduceHook, {
           queue: queueName,
           message: sentMessage,
           parsedMessage: sinon.match.instanceOf(Buffer),
@@ -419,7 +419,7 @@ describe('producer/consumer', function () {
         if (error instanceof assert.AssertionError) {
           throw error;
         }
-        sinon.assert.calledWith(afterPublishHook, sinon.match({ error: sinon.match({ message: 'Timeout reached' }) }));
+        sinon.assert.calledWith(afterProduceHook, sinon.match({ error: sinon.match({ message: 'Timeout reached' }) }));
         assert.equal(error.message, 'Timeout reached');
       }
     });
@@ -453,7 +453,7 @@ describe('producer/consumer', function () {
 
           // Should include error in the hook if given.
           sinon.assert.calledWith(beforeRpcReplyHook, sinon.match({ error: sinon.match({ message: 'Error test' }) }));
-          sinon.assert.calledWith(afterPublishHook, sinon.match({ error: sinon.match({ message: 'Error test' }) }));
+          sinon.assert.calledWith(afterProduceHook, sinon.match({ error: sinon.match({ message: 'Error test' }) }));
           done();
         })
         .catch(done);

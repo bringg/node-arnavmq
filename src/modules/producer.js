@@ -251,7 +251,7 @@ class Producer {
     try {
       // Make sure we have an initialized connection before triggering the hook.
       await this._connection.getConnection();
-      await this.hooks.trigger(this, ProducerHooks.beforePublish, {
+      await this.hooks.trigger(this, ProducerHooks.beforeProduce, {
         queue,
         message,
         parsedMessage,
@@ -261,7 +261,7 @@ class Producer {
 
       const result = await this.checkRpc(queue, parsedMessage, settings);
 
-      await this.hooks.trigger(this, ProducerHooks.afterPublish, {
+      await this.hooks.trigger(this, ProducerHooks.afterProduce, {
         queue,
         message,
         parsedMessage,
@@ -273,7 +273,7 @@ class Producer {
       return result;
     } catch (error) {
       const shouldRetry = this._shouldRetry(error, currentRetryNumber);
-      await this.hooks.trigger(this, ProducerHooks.afterPublish, {
+      await this.hooks.trigger(this, ProducerHooks.afterProduce, {
         queue,
         message,
         parsedMessage,

@@ -12,13 +12,13 @@ class ProducerHooks extends BaseHooks {
    * The hook callback can return `false` in order to cancel publication and jump right to the "after publish" hook.
    * @param {Function | Function[]} callback A callback or callbacks array to register.
    */
-  beforePublish(callback) {
-    this._on(ProducerHooks.beforePublish, callback);
+  beforeProduce(callback) {
+    this._on(ProducerHooks.beforeProduce, callback);
   }
 
   /** Removes a callback or callback array from the hook. */
   removeBeforePublish(callback) {
-    this._off(ProducerHooks.beforePublish, callback);
+    this._off(ProducerHooks.beforeProduce, callback);
   }
 
   /**
@@ -35,17 +35,17 @@ class ProducerHooks extends BaseHooks {
    * In case the hook callback was called with an error, it can return `false` in order to abort any further publish retries (if retry is configured).
    * @param {Function | Function[]} callback A callback or callbacks array to register.
    */
-  afterPublish(callback) {
-    this._on(ProducerHooks.afterPublish, callback);
+  afterProduce(callback) {
+    this._on(ProducerHooks.afterProduce, callback);
   }
 
   /** Removes a callback or callback array from the hook. */
   removeAfterPublish(callback) {
-    this._off(ProducerHooks.afterPublish, callback);
+    this._off(ProducerHooks.afterProduce, callback);
   }
 }
 
-ProducerHooks.beforePublish = 'producer.beforePublish';
-ProducerHooks.afterPublish = 'producer.afterPublish';
+ProducerHooks.beforeProduce = 'producer.beforeProduce';
+ProducerHooks.afterProduce = 'producer.afterProduce';
 
 module.exports = ProducerHooks;

@@ -67,18 +67,18 @@ describe('disconnections', function () {
     describe('hooks', () => {
       let beforeConnectHook;
       let afterConnectHook;
-      let afterPublishHook;
+      let afterProduceHook;
 
       beforeEach(() => {
         beforeConnectHook = sandbox.spy();
         afterConnectHook = sandbox.spy();
-        afterPublishHook = sandbox.stub();
+        afterProduceHook = sandbox.stub();
       });
 
       afterEach(() => {
         arnavmq.hooks.connection.removeBeforeConnect(beforeConnectHook);
         arnavmq.hooks.connection.removeAfterConnect(afterConnectHook);
-        arnavmq.hooks.producer.removeAfterPublish(afterPublishHook);
+        arnavmq.hooks.producer.removeAfterPublish(afterProduceHook);
       });
 
       it('calls event hooks on connecting', async () => {

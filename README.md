@@ -127,7 +127,7 @@ arnavmq.hooks.connection.afterConnect(({ connection, config }) => {
   console.log('Connected to ' + config.host);
 });
 
-arnavmq.hooks.producer.beforePublish(({ properties /*... other parameters ...*/ }) => {
+arnavmq.hooks.producer.beforeProduce(({ properties /*... other parameters ...*/ }) => {
   // Message properties and other options objects can be changed, for example to set a message id:
   properties.messageId = randomUUID();
 });
