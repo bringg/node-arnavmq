@@ -58,8 +58,8 @@ describe('producer/consumer', function () {
       return;
     }
 
-    arnavmq.hooks.producer.removeBeforePublish(beforeProduceHook);
-    arnavmq.hooks.producer.removeAfterPublish(afterProduceHook);
+    arnavmq.hooks.producer.removeBeforeProduce(beforeProduceHook);
+    arnavmq.hooks.producer.removeAfterProduce(afterProduceHook);
     arnavmq.hooks.consumer.removeBeforeProcessMessage(beforeProcessMessageHook);
     arnavmq.hooks.consumer.removeAfterProcessMessage(afterProcessMessageHook);
     arnavmq.hooks.consumer.removeBeforeRpcReply(beforeRpcReplyHook);
@@ -359,6 +359,30 @@ describe('producer/consumer', function () {
           receiveProperties: sinon.match.object,
           written: true,
         });
+      });
+
+      it('does not call unregistered hooks', async () => {
+        const queueName = 'test-unregister-hooks-queue';
+        const sentMessage = uuid.v4();
+
+        const newHooks = [sinon.spy(), sinon.spy()];
+        const unregisteredHooks = [
+          ...newHooks,
+          beforeRpcReplyHook,
+          afterProcessMessageHook,
+          beforeProcessMessageHook,
+          afterProcessMessageHook,
+          beforeRpcReplyHook,
+          afterRpcReplyHook,
+        ];
+        cleanupHooks();
+        arnavmq.hooks.producer.beforeProduce(newHooks);
+        arnavmq.hooks.producer.removeBeforeProduce(newHooks);
+
+        await arnavmq.consumer.consume(queueName, (message) => Promise.resolve(`${message}-test`));
+        await arnavmq.producer.produce(queueName, sentMessage, { rpc: true });
+
+        unregisteredHooks.forEach((hook) => sinon.assert.notCalled(hook));
       });
     });
   });

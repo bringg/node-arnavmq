@@ -17,7 +17,7 @@ class ProducerHooks extends BaseHooks {
   }
 
   /** Removes a callback or callback array from the hook. */
-  removeBeforePublish(callback) {
+  removeBeforeProduce(callback) {
     this._off(ProducerHooks.beforeProduce, callback);
   }
 
@@ -40,7 +40,7 @@ class ProducerHooks extends BaseHooks {
   }
 
   /** Removes a callback or callback array from the hook. */
-  removeAfterPublish(callback) {
+  removeAfterProduce(callback) {
     this._off(ProducerHooks.afterProduce, callback);
   }
 }

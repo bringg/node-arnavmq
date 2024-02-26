@@ -78,7 +78,7 @@ describe('disconnections', function () {
       afterEach(() => {
         arnavmq.hooks.connection.removeBeforeConnect(beforeConnectHook);
         arnavmq.hooks.connection.removeAfterConnect(afterConnectHook);
-        arnavmq.hooks.producer.removeAfterPublish(afterProduceHook);
+        arnavmq.hooks.producer.removeAfterProduce(afterProduceHook);
       });
 
       it('calls event hooks on connecting', async () => {

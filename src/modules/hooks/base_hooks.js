@@ -71,11 +71,7 @@ module.exports = class BaseHooks {
       return;
     }
 
-    const callbacks = this._getCallbacks(event);
-    if (callbacks) {
-      return;
-    }
-    callbacks.delete(callback);
+    this._getCallbacks(event).delete(callback);
   }
 
   /**
@@ -86,7 +82,7 @@ module.exports = class BaseHooks {
    */
   _manyOff(event, callbacks) {
     const registered = this._getCallbacks(event);
-    if (registered) {
+    if (!registered.size) {
       return;
     }
     callbacks.forEach((callback) => registered.delete(callback));
@@ -101,7 +97,7 @@ module.exports = class BaseHooks {
    */
   async trigger(source, eventName, payload) {
     const callbacks = this._getCallbacks(eventName);
-    if (!callbacks) {
+    if (!callbacks.size) {
       return;
     }
 
