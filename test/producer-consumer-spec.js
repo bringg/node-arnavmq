@@ -325,6 +325,7 @@ describe('producer/consumer', function () {
           queue: queueName,
           message: sinon.match({ content: sinon.match.instanceOf(Buffer) }),
           content: sentMessage,
+          ackError: undefined,
         });
       });
 
@@ -358,6 +359,7 @@ describe('producer/consumer', function () {
           },
           receiveProperties: sinon.match.object,
           written: true,
+          error: undefined,
         });
       });
 

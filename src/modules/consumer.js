@@ -53,20 +53,16 @@ class Consumer {
       params: { content: reply },
     });
 
+    let written = false;
+    let error;
     try {
       const defaultChannel = await this._connection.getDefaultChannel();
-      const written = defaultChannel.sendToQueue(messageProperties.replyTo, serializedReply, options);
-      await this.hooks.trigger(this, ConsumerHooks.afterRpcReplyEvent, {
-        receiveProperties: messageProperties,
-        queue,
-        reply,
-        serializedReply,
-        replyProperties: options,
-        written,
-      });
-
+      written = defaultChannel.sendToQueue(messageProperties.replyTo, serializedReply, options);
       return written;
-    } catch (error) {
+    } catch (err) {
+      error = err;
+      throw err;
+    } finally {
       await this.hooks.trigger(this, ConsumerHooks.afterRpcReplyEvent, {
         receiveProperties: messageProperties,
         queue,
@@ -74,9 +70,8 @@ class Consumer {
         serializedReply,
         replyProperties: options,
         error,
-        written: false,
+        written,
       });
-      throw error;
     }
   }
 
@@ -219,23 +214,24 @@ class Consumer {
         return;
       }
 
+      let ackError;
       try {
         channel.ack(msg);
-      } catch (ackError) {
-        await this.hooks.trigger(this, ConsumerHooks.afterProcessMessageEvent, {
-          queue,
-          message: msg,
-          content: body,
-          ackError,
-        });
+      } catch (err) {
+        ackError = err;
+
         logger.error({
           message: `${loggerAlias} Failed to ack message after processing finished on queue ${queue}: ${ackError.message}`,
           error: ackError,
           params: { queue },
         });
-        return;
       }
-      await this.hooks.trigger(this, ConsumerHooks.afterProcessMessageEvent, { queue, message: msg, content: body });
+      await this.hooks.trigger(this, ConsumerHooks.afterProcessMessageEvent, {
+        queue,
+        message: msg,
+        content: body,
+        ackError,
+      });
     };
 
     try {
@@ -251,6 +247,7 @@ class Consumer {
 
   /** @private */
   async _rejectMessageAfterProcess(channel, queue, msg, parsedBody, requeue, error) {
+    let rejectError;
     try {
       channel.reject(msg, requeue);
 
@@ -258,20 +255,13 @@ class Consumer {
         // If not requeued and message will be removed from the queue, return rpc error response if needed.
         await this.checkRpc(msg.properties, queue, error instanceof Error ? { error } : undefined);
       }
-    } catch (rejectError) {
-      await this.hooks.trigger(this, ConsumerHooks.afterProcessMessageEvent, {
-        queue,
-        message: msg,
-        content: parsedBody,
-        error,
-        rejectError,
-      });
+    } catch (err) {
+      rejectError = err;
       logger.error({
         message: `${loggerAlias} Failed to reject message after processing failure on queue ${queue}: ${rejectError.message}`,
         error: rejectError,
         params: { queue },
       });
-      return;
     }
 
     await this.hooks.trigger(this, ConsumerHooks.afterProcessMessageEvent, {
@@ -279,6 +269,7 @@ class Consumer {
       message: msg,
       content: parsedBody,
       error,
+      rejectError,
     });
   }
 }
