@@ -1,6 +1,8 @@
 const { ChannelAlreadyExistsError } = require('./channels');
+const { ConsumerHooks } = require('./hooks');
 const parsers = require('./message-parsers');
 const utils = require('./utils');
+const { logger } = require('./logger');
 
 const loggerAlias = 'arnav_mq:consumer';
 
@@ -8,6 +10,7 @@ class Consumer {
   constructor(connection) {
     this._connection = connection;
     this._configuration = this._connection.config;
+    this.hooks = new ConsumerHooks();
   }
 
   set connection(value) {
@@ -27,22 +30,49 @@ class Consumer {
    * @return {any}       object, string, number... the current received message
    */
   async checkRpc(messageProperties, queue, reply) {
-    if (messageProperties.replyTo) {
-      const options = {
-        correlationId: messageProperties.correlationId,
-        persistent: true,
-        durable: true,
-      };
-      this._connection.config.logger.debug({
-        message: `${loggerAlias} [${queue}][${messageProperties.replyTo}] > ${reply}`,
-        params: { content: reply },
-      });
-
-      const defaultChannel = await this._connection.getDefaultChannel();
-      return await defaultChannel.sendToQueue(messageProperties.replyTo, parsers.out(reply, options), options);
+    if (!messageProperties.replyTo) {
+      return messageProperties;
     }
 
-    return messageProperties;
+    const options = {
+      correlationId: messageProperties.correlationId,
+      persistent: true,
+      durable: true,
+    };
+    const serializedReply = parsers.out(reply, options);
+    await this.hooks.trigger(this, ConsumerHooks.beforeRpcReplyEvent, {
+      receiveProperties: messageProperties,
+      replyProperties: options,
+      queue,
+      reply,
+      serializedReply,
+      error: reply && reply.error ? reply.error : undefined,
+    });
+    logger.debug({
+      message: `${loggerAlias} [${queue}][${messageProperties.replyTo}] > ${reply}`,
+      params: { content: reply },
+    });
+
+    let written = false;
+    let error;
+    try {
+      const defaultChannel = await this._connection.getDefaultChannel();
+      written = defaultChannel.sendToQueue(messageProperties.replyTo, serializedReply, options);
+      return written;
+    } catch (err) {
+      error = err;
+      throw err;
+    } finally {
+      await this.hooks.trigger(this, ConsumerHooks.afterRpcReplyEvent, {
+        receiveProperties: messageProperties,
+        queue,
+        reply,
+        serializedReply,
+        replyProperties: options,
+        error,
+        written,
+      });
+    }
   }
 
   /**
@@ -95,14 +125,14 @@ class Consumer {
     try {
       await channel.assertQueue(suffixedQueue, options);
     } catch (error) {
-      this._connection.config.logger.error({
+      logger.error({
         message: `${loggerAlias} Failed to assert queue ${queue}: ${error.message}`,
         error,
         params: { queue },
       });
     }
 
-    this._connection.config.logger.debug({
+    logger.debug({
       message: `${loggerAlias} init ${queue}`,
       params: { queue },
     });
@@ -130,7 +160,7 @@ class Consumer {
           // Just in the odd chance the channel was open but the listener failed.
           await channel.close();
         } catch (closeError) {
-          this._connection.config.logger.error({
+          logger.error({
             message: `${loggerAlias} Failed to close channel after initialization error ${queue}: ${closeError.message}`,
             error: closeError,
             params: { queue },
@@ -146,7 +176,7 @@ class Consumer {
       if (!msg) {
         // When forcefully cancelled by rabbitmq, consumer would receive a null message.
         // https://amqp-node.github.io/amqplib/channel_api.html#channel_consume
-        this._connection.config.logger.warn({
+        logger.warn({
           message: `${loggerAlias} Consumer was cancelled by server for queue '${queue}'`,
           error: null,
           params: { queue },
@@ -155,7 +185,7 @@ class Consumer {
       }
 
       const messageString = msg.content.toString();
-      this._connection.config.logger.debug({
+      logger.debug({
         message: `${loggerAlias} [${queue}] < ${messageString}`,
         params: { queue, message: messageString },
       });
@@ -164,49 +194,83 @@ class Consumer {
       // receive message, parse it, execute callback, check if should answer, ack/reject message
       const body = parsers.in(msg);
       try {
-        const res = await callback(body, msg.properties);
+        const action = { message: msg, content: body, callback };
+        await this.hooks.trigger(this, ConsumerHooks.beforeProcessMessageEvent, {
+          queue,
+          action,
+        });
+        // Use callback from action in case it was changed/wrapped in the hook (for instance, for instrumentation)
+        const res = await action.callback(body, msg.properties);
         await this.checkRpc(msg.properties, queue, res);
       } catch (error) {
         // if something bad happened in the callback, reject the message so we can requeue it (or not)
-        this._connection.config.logger.error({
+        logger.error({
           message: `${loggerAlias} Failed processing message from queue ${queue}: ${error.message}`,
           error,
           params: { queue, message: messageString },
         });
 
-        try {
-          channel.reject(msg, this._connection.config.requeue);
-        } catch (rejectError) {
-          this._connection.config.logger.error({
-            message: `${loggerAlias} Failed to reject message after processing failure on queue ${queue}: ${rejectError.message}`,
-            error: rejectError,
-            params: { queue },
-          });
-        }
-
+        await this._rejectMessageAfterProcess(channel, queue, msg, body, this._connection.config.requeue, error);
         return;
       }
 
+      let ackError;
       try {
         channel.ack(msg);
-      } catch (ackError) {
-        this._connection.config.logger.error({
+      } catch (err) {
+        ackError = err;
+
+        logger.error({
           message: `${loggerAlias} Failed to ack message after processing finished on queue ${queue}: ${ackError.message}`,
           error: ackError,
           params: { queue },
         });
       }
+      await this.hooks.trigger(this, ConsumerHooks.afterProcessMessageEvent, {
+        queue,
+        message: msg,
+        content: body,
+        ackError,
+      });
     };
 
     try {
       await channel.consume(queue, consumeFunc, { noAck: false });
     } catch (error) {
-      this._connection.config.logger.error({
+      logger.error({
         message: `${loggerAlias} Failed to start consuming from queue ${queue}: ${error.message}`,
         error,
         params: { queue },
       });
     }
+  }
+
+  /** @private */
+  async _rejectMessageAfterProcess(channel, queue, msg, parsedBody, requeue, error) {
+    let rejectError;
+    try {
+      channel.reject(msg, requeue);
+
+      if (!requeue) {
+        // If not requeued and message will be removed from the queue, return rpc error response if needed.
+        await this.checkRpc(msg.properties, queue, error instanceof Error ? { error } : undefined);
+      }
+    } catch (err) {
+      rejectError = err;
+      logger.error({
+        message: `${loggerAlias} Failed to reject message after processing failure on queue ${queue}: ${rejectError.message}`,
+        error: rejectError,
+        params: { queue },
+      });
+    }
+
+    await this.hooks.trigger(this, ConsumerHooks.afterProcessMessageEvent, {
+      queue,
+      message: msg,
+      content: parsedBody,
+      error,
+      rejectError,
+    });
   }
 }
 

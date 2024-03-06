@@ -59,6 +59,12 @@ module.exports = (connection) => {
     publish: instance.publish.bind(instance),
   };
 
+  const hooks = {
+    connection: instance.connection.hooks,
+    consumer: instance.consumer.hooks,
+    producer: instance.producer.hooks,
+  };
+
   return {
     connection: instance.connection,
     consume: consumer.consume,
@@ -67,5 +73,6 @@ module.exports = (connection) => {
     publish: producer.publish,
     consumer,
     producer,
+    hooks,
   };
 };

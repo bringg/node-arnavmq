@@ -1,3 +1,5 @@
+const uuid = require('uuid');
+
 function empty() {}
 
 const emptyLogger = {
@@ -7,6 +9,18 @@ const emptyLogger = {
   error: empty,
   log: empty,
 };
+
+/**
+ * Generates a new correlation id to be used for message publication, or returns the correlation id from the options if one already exists.
+ * @param {object} options The options object for publishing a message.
+ * @returns {string} The correlation id.
+ */
+function getCorrelationId(options) {
+  if (options.correlationId) {
+    return options.correlationId;
+  }
+  return uuid.v4();
+}
 
 module.exports = {
   /**
@@ -24,4 +38,6 @@ module.exports = {
     new Promise((resolve) => {
       setTimeout(resolve, timer);
     }),
+
+  getCorrelationId,
 };

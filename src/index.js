@@ -1,6 +1,6 @@
 const uuid = require('uuid');
-const utils = require('./modules/utils');
 const connection = require('./modules/connection');
+const { setLogger } = require('./modules/logger');
 
 /* eslint global-require: "off" */
 module.exports = (config) => {
@@ -30,15 +30,6 @@ module.exports = (config) => {
     // generate a hostname so we can track this connection on the broker (rabbitmq management plugin)
     hostname: process.env.HOSTNAME || process.env.USER || uuid.v4(),
 
-    /**
-     * A logger object with a log function for each of the log levels ("debug", "info", "warn", or "error").
-     * Each log function receives one parameter containing a log event with the following fields:
-     * * message - A string message describing the event. Always present.
-     * * error - An 'Error' object in case one is present.
-     * * params - An optional object containing extra parameters that can provide extra context for the event.
-     */
-    logger: utils.emptyLogger,
-
     ...config,
   };
 
@@ -47,5 +38,11 @@ module.exports = (config) => {
   }
 
   configuration.prefetch = parseInt(configuration.prefetch, 10) || 0;
+
+  setLogger(configuration.logger);
+  delete configuration.logger;
+
+  Object.freeze(configuration);
+
   return require('./modules/arnavmq')(connection(configuration));
 };

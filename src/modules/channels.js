@@ -1,3 +1,5 @@
+const { logger } = require('./logger');
+
 const DEFAULT_CHANNEL = 'DEFAULT_CHANNEL';
 
 class ChannelAlreadyExistsError extends Error {
@@ -75,7 +77,7 @@ class Channels {
         this._channels.delete(key);
       });
       channel.on('error', (error) => {
-        this._config.logger.error({
+        logger.error({
           message: `Got channel error [${error.message}] for [${key}]`,
           error,
         });
@@ -84,7 +86,7 @@ class Channels {
       return channel;
     } catch (error) {
       this._channels.delete(key);
-      this._config.logger.error({
+      logger.error({
         message: `Failed to create channel for [${key}] - [${error.message}]`,
         error,
       });
@@ -94,7 +96,7 @@ class Channels {
         try {
           await channel.close();
         } catch (closeError) {
-          this._config.logger.error({
+          logger.error({
             message: `Failed to cleanup channel after failed initialization for [${key}] - [${closeError.message}]`,
             error: closeError,
           });

@@ -1,7 +1,8 @@
-const uuid = require('uuid');
 const pDefer = require('p-defer');
 const utils = require('./utils');
 const parsers = require('./message-parsers');
+const { ProducerHooks } = require('./hooks');
+const { logger } = require('./logger');
 
 const ERRORS = {
   TIMEOUT: 'Timeout reached',
@@ -23,6 +24,7 @@ class ProducerError extends Error {
 class Producer {
   constructor(connection) {
     this._connection = connection;
+    this.hooks = new ProducerHooks();
 
     /**
      * Map of rpc queues
@@ -56,7 +58,7 @@ class Producer {
       // On timeout the waiter is deleted, so we need to handle the race when the response arrives too late.
       if (waiter === undefined) {
         const error = new Error(`Receiving RPC message from previous session: callback no more in memory. ${queue}`);
-        this._connection.config.logger.warn({
+        logger.warn({
           message: `${loggerAlias} ${error.message}`,
           error,
           params: { queue, correlationId },
@@ -66,7 +68,7 @@ class Producer {
       }
 
       // if we found one, we execute the callback and delete it because it will never be received again anyway
-      this._connection.config.logger.debug({
+      logger.debug({
         message: `${loggerAlias} [${queue}] < answer`,
         params: { queue },
       });
@@ -173,21 +175,20 @@ class Producer {
     if (options.rpc) {
       await this.createRpcQueue(queue);
       // generates a correlationId (random uuid) so we know which callback to execute on received response
-      const corrId = uuid.v4();
-      options.correlationId = corrId;
+      options.correlationId = utils.getCorrelationId(options);
       // reply to us if you receive this message!
       options.replyTo = await this.amqpRPCQueues[queue].resQueuePromise;
 
       // deferred promise that will resolve when response is received
       const responsePromise = pDefer();
-      this.amqpRPCQueues[queue][corrId] = { responsePromise, timeoutId: null };
+      this.amqpRPCQueues[queue][options.correlationId] = { responsePromise, timeoutId: null };
 
       await this.publishOrSendToQueue(queue, msg, options);
 
       // Using given timeout or default one
       const timeout = options.timeout || this._connection.config.rpcTimeout || 0;
       if (timeout > 0) {
-        this.prepareTimeoutRpc(queue, corrId, timeout);
+        this.prepareTimeoutRpc(queue, options.correlationId, timeout);
       }
 
       return await responsePromise.promise;
@@ -238,20 +239,55 @@ class Producer {
       message = null;
     }
 
-    this._connection.config.logger.debug({
+    logger.debug({
       message: `${loggerAlias} [${queue}] > ${message}`,
       params: { queue, message },
     });
-
+    const parsedMessage = parsers.out(message, settings);
+    if (settings.rpc) {
+      // Set correlation id before the trigger, so we have it on the payload going for it.
+      settings.correlationId = utils.getCorrelationId(settings);
+    }
     try {
-      return await this.checkRpc(queue, parsers.out(message, settings), settings);
+      // Make sure we have an initialized connection before triggering the hook.
+      await this._connection.getConnection();
+      await this.hooks.trigger(this, ProducerHooks.beforeProduce, {
+        queue,
+        message,
+        parsedMessage,
+        properties: settings,
+        currentRetry: currentRetryNumber,
+      });
+
+      const result = await this.checkRpc(queue, parsedMessage, settings);
+
+      await this.hooks.trigger(this, ProducerHooks.afterProduce, {
+        queue,
+        message,
+        parsedMessage,
+        properties: settings,
+        currentRetry: currentRetryNumber,
+        result,
+        error: result && result.error ? result.error : undefined,
+      });
+      return result;
     } catch (error) {
-      if (!this._shouldRetry(error, currentRetryNumber)) {
+      const shouldRetry = this._shouldRetry(error, currentRetryNumber);
+      await this.hooks.trigger(this, ProducerHooks.afterProduce, {
+        queue,
+        message,
+        parsedMessage,
+        properties: settings,
+        currentRetry: currentRetryNumber,
+        shouldRetry,
+        error,
+      });
+      if (!shouldRetry) {
         throw error;
       }
 
       // add timeout between retries because we don't want to overflow the CPU
-      this._connection.config.logger.error({
+      logger.error({
         message: `${loggerAlias} Failed sending message to queue ${queue}: ${error.message}`,
         error,
         params: { queue, message },

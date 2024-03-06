@@ -1,7 +1,20 @@
 const assert = require('assert');
 const amqp = require('amqplib');
 const { Channels } = require('./channels');
+const { ConnectionHooks } = require('./hooks');
 const packageVersion = require('../../package.json').version;
+const { logger } = require('./logger');
+
+/**
+ * Log errors from connection/channel error events.
+ * @param {Error} error
+ */
+function onConnectionError(error) {
+  logger.error({
+    message: error.message,
+    error,
+  });
+}
 
 class Connection {
   constructor(config) {
@@ -9,6 +22,7 @@ class Connection {
 
     this._connectionPromise = null; // Promise of amqp connection
     this._channels = null;
+    this.hooks = new ConnectionHooks();
     this.startedAt = new Date().toISOString();
   }
 
@@ -27,6 +41,7 @@ class Connection {
 
   async _connect() {
     try {
+      await this.hooks.trigger(this, ConnectionHooks.beforeConnectEvent, { config: this._config });
       const connection = await amqp.connect(this._config.host, {
         clientProperties: {
           hostname: this._config.hostname,
@@ -42,25 +57,17 @@ class Connection {
         this._connectionPromise = null;
         this._channels = null;
       });
-      connection.on('error', this._onError.bind(this));
+      connection.on('error', onConnectionError);
+
+      await this.hooks.trigger(this, ConnectionHooks.afterConnectEvent, { config: this._config, connection });
 
       return connection;
     } catch (error) {
+      await this.hooks.trigger(this, ConnectionHooks.afterConnectEvent, { config: this._config, error });
       this._connectionPromise = null;
       this._channels = null;
       throw error;
     }
-  }
-
-  /**
-   * Log errors from connection/channel error events.
-   * @param {Error} error
-   */
-  _onError(error) {
-    this._config.logger.error({
-      message: error.message,
-      error,
-    });
   }
 
   async getChannel(queue, config) {
