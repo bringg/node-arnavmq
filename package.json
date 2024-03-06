@@ -12,6 +12,7 @@
     "subscribe"
   ],
   "main": "src/index.js",
+  "types": "types/index.d.ts",
   "scripts": {
     "lint": "eslint . && prettier -c .",
     "format": "eslint --fix . && prettier --write .",
@@ -39,6 +40,7 @@
     "uuid": "^9.0.0"
   },
   "devDependencies": {
+    "@types/amqplib": "^0.10.5",
     "child-process-promise": "^2.2.1",
     "dot-only-hunter": "^1.0.3",
     "eslint": "^8.25.0",
@@ -48,7 +50,8 @@
     "mocha": "^10.0.0",
     "nyc": "^15.1.0",
     "prettier": "^3.0.0",
-    "sinon": "^17.0.1"
+    "sinon": "^17.0.1",
+    "typescript": "^5.3.3"
   },
   "engines": {
     "node": ">=14"
