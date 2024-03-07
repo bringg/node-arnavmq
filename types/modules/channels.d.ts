@@ -6,23 +6,23 @@ interface ChannelConfig {
 
 declare class Channels {
   constructor(connection: amqp.Connection, config: ChannelConfig);
-  _connection: any;
-  _config: any;
-  _channels: Map<any, any>;
-  get(queue: any, config: any): Promise<any>;
-  defaultChannel(): Promise<any>;
+  private _connection: amqp.Connection;
+  private _config: ChannelConfig;
+  private _channels: Map<string, { chann: Promise<amqp.Channel>; config: ChannelConfig }>;
+  get(queue: string, config: ChannelConfig): Promise<amqp.Channel>;
+  defaultChannel(): Promise<amqp.Channel>;
   /**
    * Creates or returns an existing channel by it's key and config.
    * @return {Promise} A promise that resolve with an amqp.node channel object
    */
-  _get(key: any, config?: {}): Promise<any>;
-  _initNewChannel(key: any, config: any): Promise<any>;
+  private _get(key: string, config?: ChannelConfig): Promise<amqp.Channel>;
+  private _initNewChannel(key: string, config: ChannelConfig): Promise<amqp.Channel>;
 }
 
 declare class ChannelAlreadyExistsError extends Error {
-  constructor(name: any, config: any);
-  name: any;
-  config: any;
+  constructor(name: string, config: ChannelConfig);
+  name: string;
+  config: ChannelConfig;
 }
 
 declare namespace channels {

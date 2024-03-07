@@ -36,7 +36,7 @@ declare class ConnectionHooks extends BaseHooks {
    */
   afterConnect(callback: AfterConnectHook | AfterConnectHook[]): void;
   /** Removes a callback or callback array from the hook. */
-  removeAfterConnect(callback: any): void;
+  removeAfterConnect(callback: AfterConnectHook | AfterConnectHook[]): void;
 }
 
 declare namespace ConnectionHooks {
@@ -63,7 +63,7 @@ declare namespace ConnectionHooks {
      */
     afterConnect(callback: AfterConnectHook | AfterConnectHook[]): void;
     /** Removes a callback or callback array from the hook. */
-    removeAfterConnect(callback: any): void;
+    removeAfterConnect(callback: AfterConnectHook | AfterConnectHook[]): void;
   }
 
   export { AfterConnectHook, AfterConnectInfo, BeforeConnectHook };

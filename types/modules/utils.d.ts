@@ -12,5 +12,5 @@ export namespace emptyLogger {
  */
 export function getCorrelationId(options: { correlationId?: string }): string;
 declare function empty(): void;
-export declare function timeoutPromise(timer: number): Promise<any>;
+export declare function timeoutPromise(timer: number): Promise<void>;
 export {};

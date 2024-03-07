@@ -11,51 +11,14 @@ import { ConnectionConfig, Connection } from './modules/connection';
 import Consumer = require('./modules/consumer');
 import Producer = require('./modules/producer');
 import { ConnectionHooks, ConsumerHooks, ProducerHooks } from './modules/hooks';
+import arnavmq = require('./modules/arnavmq');
 
-declare function arnavmq(config: ConnectionConfig): {
-  connection: Connection;
-  consume: typeof Consumer.prototype.consume;
-  subscribe: typeof Consumer.prototype.consume;
-  produce: typeof Producer.prototype.produce;
-  publish: typeof Producer.prototype.produce;
-  consumer: {
-    consume: typeof Consumer.prototype.consume;
-    subscribe: typeof Consumer.prototype.consume;
-  };
-  producer: {
-    produce: typeof Producer.prototype.produce;
-    publish: typeof Producer.prototype.produce;
-  };
-  hooks: {
-    connection: ConnectionHooks;
-    consumer: ConsumerHooks;
-    producer: ProducerHooks;
-  };
-};
+declare function arnavmqFactory(config: ConnectionConfig): arnavmq.Arnavmq;
 
-declare namespace arnavmq {
-  export type ArnavmqFactory = (config: ConnectionConfig) => {
-    connection: Connection;
-    consume: typeof Consumer.prototype.consume;
-    subscribe: typeof Consumer.prototype.consume;
-    produce: typeof Producer.prototype.produce;
-    publish: typeof Producer.prototype.produce;
-    consumer: {
-      consume: typeof Consumer.prototype.consume;
-      subscribe: typeof Consumer.prototype.consume;
-    };
-    producer: {
-      produce: typeof Producer.prototype.produce;
-      publish: typeof Producer.prototype.produce;
-    };
-    hooks: {
-      connection: ConnectionHooks;
-      consumer: ConsumerHooks;
-      producer: ProducerHooks;
-    };
-  };
+declare namespace arnavmqFactory {
+  export type ArnavmqFactory = (config: ConnectionConfig) => arnavmq.Arnavmq;
 
   export { ConnectionConfig, Connection, Consumer, Producer, ConnectionHooks, ConsumerHooks, ProducerHooks };
 }
 
-export = arnavmq;
+export = arnavmqFactory;
