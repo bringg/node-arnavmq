@@ -14,7 +14,7 @@
   "main": "src/index.js",
   "types": "types/index.d.ts",
   "scripts": {
-    "lint": "eslint . && prettier -c .",
+    "lint": "eslint . && prettier -c . && tsc --project types/tsconfig.types.json",
     "format": "eslint --fix . && prettier --write .",
     "cover": "test -d .nyc_output && nyc report --reporter lcov",
     "test": "dot-only-hunter test && nyc mocha --recursive --exit"

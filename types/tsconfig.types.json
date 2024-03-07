@@ -1,0 +1,11 @@
+// Just for parsing the types in the types folder. Not actually for compilation.
+
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowJs": false
+  },
+  "files": [],
+  "include": ["**/*.d.ts"]
+}

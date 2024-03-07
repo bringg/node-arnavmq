@@ -2,7 +2,7 @@
 
 {
   "compilerOptions": {
-    "allowJs": false,
+    "allowJs": true,
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,
     "declaration": true,
@@ -20,7 +20,7 @@
     "strict": true,
     "strictNullChecks": true,
     "target": "es2017",
-    "incremental": true,
+    "incremental": false,
     "newLine": "LF",
     "outDir": "types"
   },
