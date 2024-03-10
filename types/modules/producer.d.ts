@@ -20,7 +20,7 @@ declare class Producer {
    *
    * [queue: string] -> [correlationId: string] -> {responsePromise, timeoutId}
    */
-  amqpRPCQueues: Record<
+  private readonly amqpRPCQueues: Record<
     string,
     Record<string, { responsePromise: pDefer.DeferredPromise<unknown>; timeoutId: NodeJS.Timeout }>
   >;

@@ -3,7 +3,7 @@ import Consumer = require('./consumer');
 import { Connection } from './connection';
 import { ConnectionHooks, ConsumerHooks, ProducerHooks } from './hooks';
 
-declare function arnavmq(connection: any): arnavmq.Arnavmq;
+declare function arnavmq(connection: Connection): arnavmq.Arnavmq;
 
 declare namespace arnavmq {
   export type Arnavmq = {

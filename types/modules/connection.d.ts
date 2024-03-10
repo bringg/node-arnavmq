@@ -1,6 +1,7 @@
 import amqp = require('amqplib');
 import channels = require('./channels');
 import { Logger } from './logger';
+import { ConnectionHooks } from './hooks/connection_hooks';
 
 interface ConnectionConfig {
   /**
@@ -56,6 +57,13 @@ interface ConnectionConfig {
 declare class Connection {
   constructor(config: ConnectionConfig);
 
+  private _connectionPromise: Promise<amqp.Connection>;
+  private _config: ConnectionConfig;
+  public hooks: ConnectionHooks;
+
+  get config(): ConnectionConfig;
+  set config(value: ConnectionConfig);
+
   getConnection(): Promise<amqp.Connection>;
   getChannel(queue: string, config: channels.ChannelConfig): Promise<amqp.Channel>;
   getDefaultChannel(): Promise<amqp.Channel>;
@@ -65,6 +73,8 @@ declare class Connection {
    * @param func the callback function to execute when the event is called
    */
   addListener(on: string, func: Function): Promise<void>;
+
+  private _connect(): Promise<amqp.Connection>;
 }
 
 declare function connection(config: ConnectionConfig): Connection;
@@ -80,6 +90,9 @@ declare namespace connection {
      * @param func the callback function to execute when the event is called
      */
     addListener(on: string, func: Function): Promise<void>;
+
+    get config(): ConnectionConfig;
+    set config(value: ConnectionConfig);
   }
 
   export { ConnectionConfig };
