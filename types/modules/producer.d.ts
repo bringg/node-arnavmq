@@ -25,7 +25,7 @@ declare class Producer {
     Record<string, { responsePromise: pDefer.DeferredPromise<unknown>; timeoutId: NodeJS.Timeout }>
   >;
   private _connection: Connection;
-  set connection(value: Connection);
+  private set connection(value: Connection);
   get connection(): Connection;
   /**
    * Get a function to execute on channel consumer incoming message is received

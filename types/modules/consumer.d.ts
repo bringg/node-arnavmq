@@ -11,7 +11,7 @@ type ConsumeCallback = (body: unknown, properties: amqp.MessageProperties) => Pr
 declare class Consumer {
   constructor(connection: Connection);
   hooks: ConsumerHooks;
-  set connection(value: Connection);
+  private set connection(value: Connection);
   get connection(): Connection;
   /**
    * Sends the RPC reply to the response queue according to the message properties when required.
