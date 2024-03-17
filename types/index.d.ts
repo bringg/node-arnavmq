@@ -16,7 +16,8 @@ import arnavmq = require('./modules/arnavmq');
 declare function arnavmqFactory(config: ConnectionConfig): arnavmq.Arnavmq;
 
 declare namespace arnavmqFactory {
-  export type ArnavmqFactory = (config: ConnectionConfig) => arnavmq.Arnavmq;
+  export type Arnavmq = arnavmq.Arnavmq;
+  export type ArnavmqFactory = (config: ConnectionConfig) => Arnavmq;
 
   export { ConnectionConfig, Connection, Consumer, Producer, ConnectionHooks, ConsumerHooks, ProducerHooks };
 }

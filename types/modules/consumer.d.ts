@@ -60,4 +60,8 @@ declare class Consumer {
   ): Promise<void>;
 }
 
+declare namespace Consumer {
+  export { ConsumeOptions, ConsumeCallback };
+}
+
 export = Consumer;
