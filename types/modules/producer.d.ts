@@ -7,7 +7,7 @@ declare class ProducerError extends Error {
   constructor(error: { name: string; message: string });
 }
 
-interface PublishOptions extends amqp.Options.Publish {
+interface ProduceOptions extends amqp.Options.Publish {
   routingKey?: string;
   rpc?: boolean;
 }
@@ -45,7 +45,7 @@ declare class Producer {
    * @param msg The message to publish
    * @param options The publish options
    */
-  publishOrSendToQueue(queue: string, msg: Buffer, options: PublishOptions): Promise<boolean>;
+  private publishOrSendToQueue(queue: string, msg: Buffer, options: ProduceOptions): Promise<boolean>;
   /**
    * Start a timer to reject the pending RPC call if no answer is received within the given timeout
    * @param queue  The queue where the RPC request was sent
@@ -61,7 +61,7 @@ declare class Producer {
    * @param options contain rpc property (if true, enable rpc for this message)
    * @return Resolves when message is correctly sent, or when response is received when rpc is enabled
    */
-  private checkRpc(queue: string, msg: Buffer, options: PublishOptions): Promise<boolean>;
+  private checkRpc(queue: string, msg: Buffer, options: ProduceOptions): Promise<boolean>;
   /**
    * @deprecated Use publish instead
    * Ensure channel exists and send message using `checkRpc`
@@ -70,18 +70,22 @@ declare class Producer {
    * @param options message options (persistent, durable, rpc, etc.)
    * @return checkRpc response
    */
-  produce(queue: string, msg: unknown, options: PublishOptions): Promise<unknown>;
+  produce(queue: string, msg: unknown, options: ProduceOptions): Promise<unknown>;
   /** @see Producer.produce */
-  publish(queue: string, msg: unknown, options: PublishOptions): Promise<unknown>;
+  publish(queue: string, msg: unknown, options: ProduceOptions): Promise<unknown>;
 
   private _sendToQueue(
     queue: string,
     message: unknown,
-    settings: PublishOptions,
+    settings: ProduceOptions,
     currentRetryNumber: number,
   ): Promise<unknown>;
 
   private _shouldRetry(error: Error | ProducerError, currentRetryNumber: number): boolean;
+}
+
+declare namespace Producer {
+  export { ProduceOptions, ProducerError };
 }
 
 export = Producer;
