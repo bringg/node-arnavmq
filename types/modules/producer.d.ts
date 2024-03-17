@@ -45,7 +45,7 @@ declare class Producer {
    * @param msg The message to publish
    * @param options The publish options
    */
-  publishOrSendToQueue(queue: string, msg: Buffer, options: ProduceOptions): Promise<boolean>;
+  private publishOrSendToQueue(queue: string, msg: Buffer, options: ProduceOptions): Promise<boolean>;
   /**
    * Start a timer to reject the pending RPC call if no answer is received within the given timeout
    * @param queue  The queue where the RPC request was sent
