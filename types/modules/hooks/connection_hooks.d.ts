@@ -1,6 +1,6 @@
 import BaseHooks = require('./base_hooks');
 import { Connection, ConnectionConfig } from '../connection';
-import type amqp = require('amqplib');
+import { AmqpConnection } from '../amqp';
 
 type BeforeConnectHook = (this: Connection, event: { config: ConnectionConfig }) => Promise<void>;
 type AfterConnectHook = (this: Connection, event: AfterConnectInfo) => Promise<void>;
@@ -8,7 +8,7 @@ type AfterConnectInfo = {
   config: ConnectionConfig;
 } & (
   | {
-      connection: amqp.Connection;
+      connection: AmqpConnection;
       error: undefined;
     }
   | {

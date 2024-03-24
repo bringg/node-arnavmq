@@ -1,22 +1,22 @@
-import type amqp = require('amqplib');
+import { AmqpChannel, AmqpConnection } from './amqp';
 
 interface ChannelConfig {
   prefetch: number;
 }
 
 declare class Channels {
-  constructor(connection: amqp.Connection, config: ChannelConfig);
-  private readonly _connection: amqp.Connection;
+  constructor(connection: AmqpConnection, config: ChannelConfig);
+  private readonly _connection: AmqpConnection;
   private readonly _config: ChannelConfig;
-  private readonly _channels: Map<string, { chann: Promise<amqp.Channel>; config: ChannelConfig }>;
-  get(queue: string, config: ChannelConfig): Promise<amqp.Channel>;
-  defaultChannel(): Promise<amqp.Channel>;
+  private readonly _channels: Map<string, { chann: Promise<AmqpChannel>; config: ChannelConfig }>;
+  get(queue: string, config: ChannelConfig): Promise<AmqpChannel>;
+  defaultChannel(): Promise<AmqpChannel>;
   /**
    * Creates or returns an existing channel by it's key and config.
    * @return {Promise} A promise that resolve with an amqp.node channel object
    */
-  private _get(key: string, config?: ChannelConfig): Promise<amqp.Channel>;
-  private _initNewChannel(key: string, config: ChannelConfig): Promise<amqp.Channel>;
+  private _get(key: string, config?: ChannelConfig): Promise<AmqpChannel>;
+  private _initNewChannel(key: string, config: ChannelConfig): Promise<AmqpChannel>;
 }
 
 declare class ChannelAlreadyExistsError extends Error {

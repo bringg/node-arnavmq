@@ -1,13 +1,13 @@
+import { AmqpMessage, AmqpOptions } from './amqp';
 import { Connection } from './connection';
 import { ProducerHooks } from './hooks';
-import type amqp = require('amqplib');
 import pDefer = require('p-defer');
 
 declare class ProducerError extends Error {
   constructor(error: { name: string; message: string });
 }
 
-interface ProduceOptions extends amqp.Options.Publish {
+interface ProduceOptions extends AmqpOptions.Publish {
   routingKey?: string;
   rpc?: boolean;
 }
@@ -32,7 +32,7 @@ declare class Producer {
    * @param queue name of the queue where messages are SENT
    * @return function executed by an amqp.node channel consume callback method
    */
-  private maybeAnswer(queue: string): (msg: amqp.Message) => void;
+  private maybeAnswer(queue: string): (msg: AmqpMessage) => void;
   /**
    * Create a RPC-ready queue
    * @param  queue the queue name in which we send a RPC request

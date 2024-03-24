@@ -1,6 +1,6 @@
+import { AmqpMessage, AmqpMessageProperties } from '../amqp';
 import Consumer = require('../consumer');
 import BaseHooks = require('./base_hooks');
-import type amqp = require('amqplib');
 
 type BeforeProcessHook = (this: Consumer, e: ConsumeInfo) => Promise<void>;
 
@@ -15,7 +15,7 @@ interface ConsumeInfo {
   queue: string;
   action: {
     /** The raw amqplib message */
-    message: amqp.Message;
+    message: AmqpMessage;
     /** The deserialized message content */
     content: unknown;
     /** The callback to be executed with the message */
@@ -25,9 +25,9 @@ interface ConsumeInfo {
 
 interface RpcInfo {
   /** The properties of the original message we reply to */
-  receiveProperties: amqp.MessageProperties;
+  receiveProperties: AmqpMessageProperties;
   /** The properties added to the reply message */
-  replyProperties: amqp.MessageProperties;
+  replyProperties: AmqpMessageProperties;
   /** The queue that the original message was consumed from */
   queue: string;
   /** The value to send back, before serialization. Returned from the "consume" callback. */
@@ -51,7 +51,7 @@ type RpcResultInfo = RpcInfo &
 
 type AfterConsumeInfo = {
   /** The raw amqplib message */
-  message: amqp.Message;
+  message: AmqpMessage;
   /** The deserialized message content */
   content: unknown;
 

@@ -1,12 +1,12 @@
+import { AmqpOptions, AmqpMessageProperties, AmqpChannel, AmqpMessage } from './amqp';
 import { ChannelConfig } from './channels';
 import { Connection } from './connection';
 import { ConsumerHooks } from './hooks';
-import type amqp = require('amqplib');
 
-type ConsumeOptions = amqp.Options.AssertQueue & {
+type ConsumeOptions = AmqpOptions.AssertQueue & {
   channel: ChannelConfig;
 };
-type ConsumeCallback = (body: unknown, properties: amqp.MessageProperties) => Promise<unknown> | unknown;
+type ConsumeCallback = (body: unknown, properties: AmqpMessageProperties) => Promise<unknown> | unknown;
 
 declare class Consumer {
   constructor(connection: Connection);
@@ -21,10 +21,10 @@ declare class Consumer {
    * @return The message properties if it is not an rpc request, or a boolean indicating the produce result when an rpc response was produced.
    */
   private checkRpc(
-    messageProperties: amqp.MessageProperties,
+    messageProperties: AmqpMessageProperties,
     queue: string,
     reply: unknown,
-  ): Promise<boolean | amqp.MessageProperties>;
+  ): Promise<boolean | AmqpMessageProperties>;
   /**
    * Create a durable queue on RabbitMQ and consumes messages from it - executing a callback function.
    * Automatically answers with the callback response (can be a Promise)
@@ -48,12 +48,12 @@ declare class Consumer {
   /** @see Consumer.consume */
   subscribe(queue: string, callback: ConsumeCallback): Promise<true>;
 
-  private _initializeChannel(queue: string, options: ConsumeOptions, callback): Promise<amqp.Channel>;
-  private _consumeQueue(channel: amqp.Channel, queue: string, callback: ConsumeCallback): Promise<void>;
+  private _initializeChannel(queue: string, options: ConsumeOptions, callback): Promise<AmqpChannel>;
+  private _consumeQueue(channel: AmqpChannel, queue: string, callback: ConsumeCallback): Promise<void>;
   private _rejectMessageAfterProcess(
-    channel: amqp.Channel,
+    channel: AmqpChannel,
     queue: string,
-    msg: amqp.Message,
+    msg: AmqpMessage,
     parsedBody: unknown,
     requeue: boolean,
     error: Error,

@@ -1,6 +1,6 @@
+import { AmqpMessageProperties } from '../amqp';
 import Producer = require('../producer');
 import BaseHooks = require('./base_hooks');
-import type amqp = require('amqplib');
 
 interface ProduceInfo {
   /** The queue or exchange to produce to */
@@ -32,7 +32,7 @@ type ProduceResultInfo = ProduceInfo &
 type AfterProduceHook = (this: Producer, e: ProduceResultInfo) => Promise<void>;
 type BeforeProduceHook = (this: Producer, e: ProduceInfo) => Promise<void>;
 
-type ProduceSettings = amqp.MessageProperties & {
+type ProduceSettings = AmqpMessageProperties & {
   routingKey?: string;
   rpc?: boolean;
 };

@@ -1,5 +1,5 @@
-declare function _in(msg: amqp.Message): unknown;
-export { _in as in };
-export function out(content: unknown, options: amqp.Options.Publish): Buffer;
+import { AmqpMessage, AmqpOptions } from './amqp';
 
-import type amqp = require('amqplib');
+declare function _in(msg: AmqpMessage): unknown;
+export { _in as in };
+export function out(content: unknown, options: AmqpOptions.Publish): Buffer;

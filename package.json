@@ -40,7 +40,7 @@
     "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "@types/amqplib": "^0.10.5",
+    "@types/node": "^20.11.30",
     "child-process-promise": "^2.2.1",
     "dot-only-hunter": "^1.0.3",
     "eslint": "^8.25.0",
