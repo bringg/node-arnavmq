@@ -10,6 +10,8 @@ declare class ProducerError extends Error {
 interface ProduceOptions extends amqp.Options.Publish {
   routingKey?: string;
   rpc?: boolean;
+  /** Timeout in milliseconds for producing RPC request and waiting for the response. Does not affect non-rpc requests. */
+  timeout?: number;
 }
 
 declare class Producer {
