@@ -8,7 +8,12 @@ declare class ProducerError extends Error {
 }
 
 interface ProduceOptions extends amqp.Options.Publish {
+  /**
+   * When provided, will publish instead of sending to queue, with the given `queue` parameter serving as the exchange and this as the routing key.
+   * When sending to the default exchange, it is the same as not passing the option: `producer.produce('', "message", {routingKey:"my-queue"})` is the same as `producer.produce('my-queue', "message")`
+   */
   routingKey?: string;
+  /** When true, will produce the request with RPC settings, waiting for a response on a dedicated response queue after sending the message, and finally returning it. */
   rpc?: boolean;
   /** Timeout in milliseconds for producing RPC request and waiting for the response. Does not affect non-rpc requests. */
   timeout?: number;
