@@ -1,4 +1,4 @@
-const uuid = require('uuid');
+const crypto = require('crypto');
 const connection = require('./modules/connection');
 const { setLogger } = require('./modules/logger');
 
@@ -28,7 +28,7 @@ module.exports = (config) => {
     consumerSuffix: '',
 
     // generate a hostname so we can track this connection on the broker (rabbitmq management plugin)
-    hostname: process.env.HOSTNAME || process.env.USER || uuid.v4(),
+    hostname: process.env.HOSTNAME || process.env.USER || crypto.randomUUID(),
 
     ...config,
   };

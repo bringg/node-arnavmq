@@ -1,4 +1,4 @@
-const uuid = require('uuid');
+const crypto = require('crypto');
 
 function empty() {}
 
@@ -19,7 +19,7 @@ function getCorrelationId(options) {
   if (options.correlationId) {
     return options.correlationId;
   }
-  return uuid.v4();
+  return crypto.randomUUID();
 }
 
 module.exports = {
