@@ -1,5 +1,5 @@
 const assert = require('assert');
-const uuid = require('uuid');
+const crypto = require('crypto');
 
 /* eslint global-require: "off" */
 describe('config', () => {
@@ -29,7 +29,7 @@ describe('config', () => {
       process.env.USER = '';
 
       const conf = { host: 'amqp://localhost' };
-      assert.equal(main(conf).connection.config.hostname.length, uuid.v4().length);
+      assert.equal(main(conf).connection.config.hostname.length, crypto.randomUUID().length);
     });
 
     it('should ensure prefetch is in an integer format', () => {

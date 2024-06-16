@@ -1,5 +1,5 @@
 const assert = require('assert');
-const uuid = require('uuid');
+const crypto = require('crypto');
 const arnavmq = require('../src/index')();
 const utils = require('../src/modules/utils');
 
@@ -23,14 +23,14 @@ describe('Producer/Consumer RPC messaging:', () => {
   });
 
   it('should be able to produce a RPC message and get a response [rpc-queue-0]', async () => {
-    const response = await arnavmq.producer.produce(fixtures.queues[0], { msg: uuid.v4() }, { rpc: true });
+    const response = await arnavmq.producer.produce(fixtures.queues[0], { msg: crypto.randomUUID() }, { rpc: true });
 
     assert.strictEqual(response, 'Power Ranger Red');
   });
 
   it('should be able to produce a RPC message and get a as JSON [rpc-queue-1]', async () => {
     await arnavmq.consumer.consume(fixtures.queues[1], () => ({ powerRangerColor: 'Pink' }));
-    const response = await arnavmq.producer.produce(fixtures.queues[1], { msg: uuid.v4() }, { rpc: true });
+    const response = await arnavmq.producer.produce(fixtures.queues[1], { msg: crypto.randomUUID() }, { rpc: true });
 
     assert.strictEqual(typeof response, 'object');
     assert.strictEqual(response.powerRangerColor, 'Pink');

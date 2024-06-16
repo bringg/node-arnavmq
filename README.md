@@ -171,7 +171,7 @@ const arnavmq = require('arnavmq')({
   consumerSuffix: '',
 
   // generate a hostname so we can track this connection on the broker (rabbitmq management plugin)
-  hostname: process.env.HOSTNAME || process.env.USER || uuid.v4(),
+  hostname: process.env.HOSTNAME || process.env.USER || crypto.randomUUID(),
 
   /**
    * A logger object with a log function for each of the log levels ("debug", "info", "warn", or "error").

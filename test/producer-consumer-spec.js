@@ -1,5 +1,5 @@
 const assert = require('assert');
-const uuid = require('uuid');
+const crypto = require('crypto');
 const sinon = require('sinon');
 const arnavmqConfigurator = require('../src/index');
 const utils = require('../src/modules/utils');
@@ -229,7 +229,7 @@ describe('producer/consumer', function () {
     it('should be able to consume message sent by producer to queue [test-queue-0]', async () => {
       letters += 1;
 
-      await arnavmq.producer.produce(fixtures.queues[0], { msg: uuid.v4() });
+      await arnavmq.producer.produce(fixtures.queues[0], { msg: crypto.randomUUID() });
       await utils.timeoutPromise(300);
 
       assert.equal(letters, 0);
@@ -286,7 +286,7 @@ describe('producer/consumer', function () {
 
       it('calls the producer "before and after publish" hooks', async () => {
         const queueName = 'test-before-after-publish-hooks-queue';
-        const sentMessage = uuid.v4();
+        const sentMessage = crypto.randomUUID();
 
         await arnavmq.consumer.consume(queueName, (message) => Promise.resolve(`${message}-test`));
         const result = await arnavmq.producer.produce(queueName, sentMessage, { rpc: true });
@@ -311,7 +311,7 @@ describe('producer/consumer', function () {
 
       it('calls the consumer "before and after process message" hooks', async () => {
         const queueName = 'test-before-after-process-message-hooks-queue';
-        const sentMessage = uuid.v4();
+        const sentMessage = crypto.randomUUID();
 
         const callback = (message) => Promise.resolve(`${message}-test`);
         await arnavmq.consumer.consume(queueName, callback);
@@ -331,7 +331,7 @@ describe('producer/consumer', function () {
 
       it('calls the consumer "before and after rpc reply" hooks', async () => {
         const queueName = 'test-before-after-rpc-hooks-queue';
-        const sentMessage = uuid.v4();
+        const sentMessage = crypto.randomUUID();
 
         await arnavmq.consumer.consume(queueName, (message) => Promise.resolve(`${message}-test`));
         const result = await arnavmq.producer.produce(queueName, sentMessage, { rpc: true });
@@ -365,7 +365,7 @@ describe('producer/consumer', function () {
 
       it('does not call unregistered hooks', async () => {
         const queueName = 'test-unregister-hooks-queue';
-        const sentMessage = uuid.v4();
+        const sentMessage = crypto.randomUUID();
 
         const newHooks = [sinon.spy(), sinon.spy()];
         const unregisteredHooks = [
@@ -393,7 +393,7 @@ describe('producer/consumer', function () {
     it('should requeue the message again on error [test-queue-4]', (done) => {
       let attempt = 3;
 
-      const expectedMessage = { msg: uuid.v4() };
+      const expectedMessage = { msg: crypto.randomUUID() };
       arnavmq.consumer
         .consume(fixtures.queues[4], (msg) => {
           assert(typeof msg === 'object');
@@ -468,7 +468,7 @@ describe('producer/consumer', function () {
   describe('error', () => {
     it('should not be consumed', (done) => {
       setupHooks();
-      const expectedMessage = { msg: uuid.v4() };
+      const expectedMessage = { msg: crypto.randomUUID() };
 
       arnavmq.consumer
         .consume('test-queue-5', () => ({ error: new Error('Error test') }))
