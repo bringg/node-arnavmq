@@ -42,7 +42,7 @@
   "devDependencies": {
     "child-process-promise": "^2.2.1",
     "dot-only-hunter": "^1.0.3",
-    "eslint": "^8.25.0",
+    "eslint": "^9.8.0",
     "eslint-config-airbnb-base": "^15.0.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-import": "^2.26.0",
