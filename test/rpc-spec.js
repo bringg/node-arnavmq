@@ -56,7 +56,7 @@ describe('Producer/Consumer RPC messaging:', () => {
           done(error);
         }
         // delete the replyTo so we don't return rpc to client
-        delete properties.replyTo; // eslint-disable-line
+        delete properties.replyTo;
       })
       .then(() =>
         arnavmq.producer
