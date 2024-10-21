@@ -103,7 +103,7 @@ module.exports = class BaseHooks {
 
     const hookPromises = [];
     // This rule intends to restrict it for arrays, but this is a Set which doesn't have a '.map' function to use instead.
-    // eslint-disable-next-line no-restricted-syntax
+
     for (const callback of callbacks) {
       hookPromises.push(runHook(source, eventName, payload, callback));
     }

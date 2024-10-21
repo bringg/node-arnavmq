@@ -40,12 +40,13 @@
     "serialize-error": "^8.0.1"
   },
   "devDependencies": {
+    "@eslint/js": "^9.13.0",
     "child-process-promise": "^2.2.1",
     "dot-only-hunter": "^1.0.3",
-    "eslint": "^9.12.0",
-    "eslint-config-airbnb-base": "^15.0.0",
-    "eslint-config-prettier": "^9.0.0",
-    "eslint-plugin-import": "^2.26.0",
+    "eslint": "^9.13.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.31.0",
+    "globals": "^15.11.0",
     "mocha": "^10.0.0",
     "nyc": "^17.0.0",
     "prettier": "^3.0.0",

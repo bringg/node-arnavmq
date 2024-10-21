@@ -205,7 +205,6 @@ class Producer {
    * @param  {object} options message options (persistent, durable, rpc, etc.)
    * @return {Promise}         checkRpc response
    */
-  /* eslint prefer-rest-params: off */
   produce(queue, msg, options) {
     return this.publish(queue, msg, options);
   }
@@ -217,7 +216,6 @@ class Producer {
    * @param  {object} options message options (persistent, durable, rpc, etc.)
    * @return {Promise}         checkRpc response
    */
-  /* eslint no-param-reassign: "off" */
   async publish(queue, msg, options) {
     // default options are persistent and durable because we do not want to miss any outgoing message
     // unless user specify it
@@ -236,6 +234,7 @@ class Producer {
   async _sendToQueue(queue, message, settings, currentRetryNumber) {
     // undefined can't be serialized/buffered :p
     if (!message) {
+      // eslint-disable-next-line no-param-reassign
       message = null;
     }
 
@@ -311,7 +310,4 @@ class Producer {
   }
 }
 
-/* eslint no-unused-expressions: "off" */
-/* eslint no-sequences: "off" */
-/* eslint arrow-body-style: "off" */
 module.exports = Producer;
