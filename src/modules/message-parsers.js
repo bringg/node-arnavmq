@@ -33,19 +33,19 @@ module.exports.in = (msg) => {
  * @param  {object} options amqp.node message options object
  * @return {Buffer}         node.js Buffer object, sent by amqp.node
  */
-/* eslint no-param-reassign: "off" */
 module.exports.out = (content, options) => {
+  let parsedContent = content;
   const falsie = [undefined, null];
   if (!falsie.includes(content) && typeof content !== 'string') {
-    if (content.error instanceof Error) {
-      content.error = serializeError(content.error);
+    if (parsedContent.error instanceof Error) {
+      parsedContent.error = serializeError(parsedContent.error);
     }
     // if content is not a string, we JSONify it (JSON.parse can handle numbers, etc. so we can skip all the checks)
-    content = JSON.stringify(content);
+    parsedContent = JSON.stringify(parsedContent);
     options.contentType = 'application/json';
-  } else if (falsie.includes(content)) {
+  } else if (falsie.includes(parsedContent)) {
     return Buffer.from([]);
   }
 
-  return Buffer.from(content, 'utf-8');
+  return Buffer.from(parsedContent, 'utf-8');
 };
