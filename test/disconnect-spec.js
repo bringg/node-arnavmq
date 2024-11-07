@@ -5,9 +5,7 @@ const docker = require('./docker');
 const arnavmqConfigurator = require('../src/index');
 const utils = require('../src/modules/utils');
 
-/* eslint func-names: "off" */
-/* eslint prefer-arrow-callback: "off" */
-describe('disconnections', function () {
+describe('disconnections', () => {
   let arnavmq;
 
   beforeEach(() => {

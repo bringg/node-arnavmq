@@ -25,9 +25,7 @@ function createFakeChannel() {
   };
 }
 
-/* eslint func-names: "off" */
-/* eslint prefer-arrow-callback: "off" */
-describe('producer/consumer', function () {
+describe('producer/consumer', () => {
   const sandbox = sinon.createSandbox();
   afterEach(() => sandbox.restore());
 
