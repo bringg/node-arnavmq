@@ -57,14 +57,14 @@ interface ConnectionConfig {
 declare class Connection {
   constructor(config: ConnectionConfig);
 
-  private _connectionPromise: Promise<amqp.Connection>;
+  private _connectionPromise: Promise<amqp.ChannelModel>;
   private _config: ConnectionConfig;
   public hooks: ConnectionHooks;
 
   get config(): ConnectionConfig;
   set config(value: ConnectionConfig);
 
-  getConnection(): Promise<amqp.Connection>;
+  getConnection(): Promise<amqp.ChannelModel>;
   getChannel(queue: string, config: channels.ChannelConfig): Promise<amqp.Channel>;
   getDefaultChannel(): Promise<amqp.Channel>;
   /**
@@ -74,14 +74,14 @@ declare class Connection {
    */
   addListener(on: string, func: Function): Promise<void>;
 
-  private _connect(): Promise<amqp.Connection>;
+  private _connect(): Promise<amqp.ChannelModel>;
 }
 
 declare function connection(config: ConnectionConfig): Connection;
 
 declare namespace connection {
   export interface Connection {
-    getConnection(): Promise<amqp.Connection>;
+    getConnection(): Promise<amqp.ChannelModel>;
     getChannel(queue: string, config: channels.ChannelConfig): Promise<amqp.Channel>;
     getDefaultChannel(): Promise<amqp.Channel>;
     /**

@@ -5,8 +5,8 @@ interface ChannelConfig {
 }
 
 declare class Channels {
-  constructor(connection: amqp.Connection, config: ChannelConfig);
-  private readonly _connection: amqp.Connection;
+  constructor(connection: amqp.ChannelModel, config: ChannelConfig);
+  private readonly _connection: amqp.ChannelModel;
   private readonly _config: ChannelConfig;
   private readonly _channels: Map<string, { chann: Promise<amqp.Channel>; config: ChannelConfig }>;
   get(queue: string, config: ChannelConfig): Promise<amqp.Channel>;

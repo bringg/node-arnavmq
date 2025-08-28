@@ -8,7 +8,7 @@ type AfterConnectInfo = {
   config: ConnectionConfig;
 } & (
   | {
-      connection: amqp.Connection;
+      connection: amqp.ChannelModel;
       error: undefined;
     }
   | {

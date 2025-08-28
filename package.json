@@ -34,8 +34,8 @@
   },
   "homepage": "https://github.com/bringg/node-arnavmq#readme",
   "dependencies": {
-    "@types/amqplib": "^0.10.5",
-    "amqplib": "^0.10.3",
+    "@types/amqplib": "^0.10.7",
+    "amqplib": "^0.10.9",
     "p-defer": "^3.0.0",
     "serialize-error": "^8.0.1"
   },
