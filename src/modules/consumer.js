@@ -203,7 +203,7 @@ class Consumer {
           // to prevent message from being stuck in unacknowledged state
           await options.onParseError(parseError, msg, {
             ack: () => channel.ack(msg),
-            nack: (requeue = true) => channel.nack(msg, false, requeue)
+            nack: (requeue = true) => channel.nack(msg, false, requeue),
           });
         } else {
           // Default behavior: NACK with configured requeue setting (backwards compatible)

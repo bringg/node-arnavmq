@@ -8,11 +8,7 @@ type ParseErrorActions = {
   nack: (requeue?: boolean) => void;
 };
 
-type OnParseErrorCallback = (
-  error: Error,
-  msg: amqp.Message,
-  actions: ParseErrorActions
-) => Promise<void> | void;
+type OnParseErrorCallback = (error: Error, msg: amqp.Message, actions: ParseErrorActions) => Promise<void> | void;
 
 type ConsumeOptions = amqp.Options.AssertQueue & {
   channel: ChannelConfig;
@@ -61,7 +57,12 @@ declare class Consumer {
   subscribe(queue: string, callback: ConsumeCallback): Promise<true>;
 
   private _initializeChannel(queue: string, options: ConsumeOptions, callback): Promise<amqp.Channel>;
-  private _consumeQueue(channel: amqp.Channel, queue: string, callback: ConsumeCallback, options: ConsumeOptions): Promise<void>;
+  private _consumeQueue(
+    channel: amqp.Channel,
+    queue: string,
+    callback: ConsumeCallback,
+    options: ConsumeOptions,
+  ): Promise<void>;
   private _rejectMessageAfterProcess(
     channel: amqp.Channel,
     queue: string,
