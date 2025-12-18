@@ -137,7 +137,7 @@ class Consumer {
       params: { queue },
     });
 
-    await this._consumeQueue(channel, queue, callback);
+    await this._consumeQueue(channel, queue, callback, options);
     return true;
   }
 
@@ -171,7 +171,7 @@ class Consumer {
     }
   }
 
-  async _consumeQueue(channel, queue, callback) {
+  async _consumeQueue(channel, queue, callback, options) {
     const consumeFunc = async (msg) => {
       if (!msg) {
         // When forcefully cancelled by rabbitmq, consumer would receive a null message.
@@ -192,7 +192,30 @@ class Consumer {
 
       // main answer management chaining
       // receive message, parse it, execute callback, check if should answer, ack/reject message
-      const body = parsers.in(msg);
+      let body;
+      try {
+        body = parsers.in(msg);
+      } catch (parseError) {
+        // Handle message parsing errors (invalid JSON, etc.)
+        if (options.onParseError) {
+          // Let client decide how to handle parse errors (ACK/NACK)
+          // Note: Client MUST call either actions.ack() or actions.nack()
+          // to prevent message from being stuck in unacknowledged state
+          await options.onParseError(parseError, msg, {
+            ack: () => channel.ack(msg),
+            nack: (requeue = true) => channel.nack(msg, false, requeue)
+          });
+        } else {
+          // Default behavior: NACK with configured requeue setting (backwards compatible)
+          logger.error({
+            message: `${loggerAlias} Failed to parse message from queue ${queue}: ${parseError.message}`,
+            error: parseError,
+            params: { queue, message: messageString },
+          });
+          throw parseError;
+        }
+      }
+
       try {
         const action = { message: msg, content: body, callback };
         await this.hooks.trigger(this, ConsumerHooks.beforeProcessMessageEvent, {
