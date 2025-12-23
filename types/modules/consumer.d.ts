@@ -3,16 +3,8 @@ import { Connection } from './connection';
 import { ConsumerHooks } from './hooks';
 import type amqp = require('amqplib');
 
-type ParseErrorActions = {
-  ack: () => void;
-  nack: (requeue?: boolean) => void;
-};
-
-type OnParseErrorCallback = (error: Error, msg: amqp.Message, actions: ParseErrorActions) => Promise<void> | void;
-
 type ConsumeOptions = amqp.Options.AssertQueue & {
   channel: ChannelConfig;
-  onParseError?: OnParseErrorCallback;
 };
 type ConsumeCallback = (body: unknown, properties: amqp.MessageProperties) => Promise<unknown> | unknown;
 
@@ -57,12 +49,7 @@ declare class Consumer {
   subscribe(queue: string, callback: ConsumeCallback): Promise<true>;
 
   private _initializeChannel(queue: string, options: ConsumeOptions, callback): Promise<amqp.Channel>;
-  private _consumeQueue(
-    channel: amqp.Channel,
-    queue: string,
-    callback: ConsumeCallback,
-    options: ConsumeOptions,
-  ): Promise<void>;
+  private _consumeQueue(channel: amqp.Channel, queue: string, callback: ConsumeCallback): Promise<void>;
   private _rejectMessageAfterProcess(
     channel: amqp.Channel,
     queue: string,
@@ -74,7 +61,7 @@ declare class Consumer {
 }
 
 declare namespace Consumer {
-  export { ConsumeOptions, ConsumeCallback, OnParseErrorCallback, ParseErrorActions };
+  export { ConsumeOptions, ConsumeCallback };
 }
 
 export = Consumer;
