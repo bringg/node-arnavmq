@@ -189,8 +189,8 @@ class Consumer {
         message: `${loggerAlias} [${queue}] < ${messageString}`,
         params: { queue, message: messageString },
       });
-
-      let body = {};
+      
+      let body = msg;
       try {
         body = parsers.in(msg);
 
