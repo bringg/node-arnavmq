@@ -190,7 +190,7 @@ class Consumer {
         params: { queue, message: messageString },
       });
 
-      let body = msg;
+      let body = {};
       try {
         body = parsers.in(msg);
 
@@ -211,7 +211,7 @@ class Consumer {
 
         if (error instanceof SyntaxError) {
           // For parsing errors, reject the message and don't requeue it.
-          await this._rejectMessageAfterProcess(channel, queue, msg, {}, false, error);
+          await this._rejectMessageAfterProcess(channel, queue, msg, body, false, error);
           // Backward compatibility: For parsing errors, throw to let client handle it
           throw error;
         }
