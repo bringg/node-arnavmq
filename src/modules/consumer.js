@@ -190,10 +190,10 @@ class Consumer {
         params: { queue, message: messageString },
       });
 
-      // main answer management chaining
-      // receive message, parse it, execute callback, check if should answer, ack/reject message
-      const body = parsers.in(msg);
+      let body = {};
       try {
+        body = parsers.in(msg);
+
         const action = { message: msg, content: body, callback };
         await this.hooks.trigger(this, ConsumerHooks.beforeProcessMessageEvent, {
           queue,
@@ -203,13 +203,20 @@ class Consumer {
         const res = await action.callback(body, msg.properties);
         await this.checkRpc(msg.properties, queue, res);
       } catch (error) {
-        // if something bad happened in the callback, reject the message so we can requeue it (or not)
         logger.error({
           message: `${loggerAlias} Failed processing message from queue ${queue}: ${error.message}`,
           error,
           params: { queue, message: messageString },
         });
 
+        if (error instanceof SyntaxError) {
+          // For parsing errors, reject the message and don't requeue it.
+          await this._rejectMessageAfterProcess(channel, queue, msg, body, false, error);
+          // Backward compatibility: For parsing errors, throw to let client handle it
+          throw error;
+        }
+
+        // For callback errors, use default behavior with _rejectMessageAfterProcess
         await this._rejectMessageAfterProcess(channel, queue, msg, body, this._connection.config.requeue, error);
         return;
       }
