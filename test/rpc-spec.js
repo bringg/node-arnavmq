@@ -1,5 +1,6 @@
 const assert = require('assert');
 const crypto = require('crypto');
+const sinon = require('sinon');
 const arnavmq = require('../src/index')();
 const utils = require('../src/modules/utils');
 
@@ -86,5 +87,37 @@ describe('Producer/Consumer RPC messaging:', () => {
           done(assertError);
         }
       });
+  });
+
+  it('should return SyntaxError to RPC producer when consumer receives invalid JSON', async () => {
+    const queueName = 'rpc-queue-parse-error';
+
+    // Temporarily suppress SyntaxError rejections (thrown for backward compatibility)
+    const originalListeners = process.listeners('unhandledRejection').slice();
+    process.removeAllListeners('unhandledRejection');
+    process.on('unhandledRejection', (reason) => {
+      if (!(reason instanceof SyntaxError)) throw reason;
+    });
+
+    const callbackSpy = sinon.spy(() => 'should not be called');
+    await arnavmq.consumer.consume(queueName, callbackSpy);
+
+    const response = await arnavmq.producer.produce(queueName, 'not{valid}json', {
+      contentType: 'application/json',
+      rpc: true,
+      timeout: 2000,
+    });
+
+    // Restore original listeners
+    process.removeAllListeners('unhandledRejection');
+    originalListeners.forEach((listener) => process.on('unhandledRejection', listener));
+
+    // Callback should not be invoked when message fails to parse
+    sinon.assert.notCalled(callbackSpy);
+
+    // The RPC response should contain the error
+    // Note: error is serialized/deserialized, so instanceof won't work - check .name instead
+    assert(response.error, 'Expected response to contain an error');
+    assert.strictEqual(response.error.name, 'SyntaxError');
   });
 });

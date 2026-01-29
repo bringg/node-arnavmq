@@ -506,4 +506,142 @@ describe('producer/consumer', () => {
         );
     });
   });
+
+  describe('parse error handling', () => {
+    let originalListeners;
+    let capturedRejections;
+
+    before(() => {
+      // Save and remove existing unhandledRejection listeners (from env.js)
+      // so we can capture SyntaxErrors without failing the test
+      originalListeners = process.listeners('unhandledRejection').slice();
+      process.removeAllListeners('unhandledRejection');
+
+      // Capture unhandled rejections from SyntaxErrors (thrown for backward compatibility)
+      process.on('unhandledRejection', (reason) => {
+        if (reason instanceof SyntaxError) {
+          capturedRejections.push(reason);
+        } else {
+          // Re-throw non-SyntaxError rejections to fail the test
+          throw reason;
+        }
+      });
+    });
+
+    after(() => {
+      // Restore original listeners
+      process.removeAllListeners('unhandledRejection');
+      originalListeners.forEach((listener) => process.on('unhandledRejection', listener));
+    });
+
+    beforeEach(() => {
+      capturedRejections = [];
+      setupHooks();
+    });
+
+    afterEach(() => {
+      cleanupHooks();
+    });
+
+    it('should call callback with parsed content for valid JSON message', async () => {
+      const queueName = 'test-parse-valid-json';
+      const sentMessage = { foo: 'bar', count: 42 };
+      const callbackSpy = sandbox.spy(() => Promise.resolve('ok'));
+
+      await arnavmq.consumer.consume(queueName, callbackSpy);
+      await arnavmq.producer.produce(queueName, sentMessage);
+      await utils.timeoutPromise(300);
+
+      sinon.assert.calledOnce(callbackSpy);
+      sinon.assert.calledWith(callbackSpy, sentMessage, sinon.match.object);
+      sinon.assert.calledWith(afterProcessMessageHook, sinon.match({
+        queue: queueName,
+        content: sentMessage,
+        error: undefined,
+        ackError: undefined,
+      }));
+    });
+
+    it('should NOT call callback when message has invalid JSON', async () => {
+      const queueName = 'test-parse-invalid-json-no-callback';
+      const callbackSpy = sandbox.spy(() => Promise.resolve('ok'));
+
+      await arnavmq.consumer.consume(queueName, callbackSpy);
+      await arnavmq.producer.produce(queueName, 'not-valid-json', {
+        contentType: 'application/json',
+      });
+      await utils.timeoutPromise(300);
+
+      // Callback should not be invoked with unparseable message
+      sinon.assert.notCalled(callbackSpy);
+      // SyntaxError should be thrown for backward compatibility
+      assert.strictEqual(capturedRejections.length, 1);
+      assert(capturedRejections[0] instanceof SyntaxError);
+    });
+
+    it('should trigger afterProcessMessage hook with SyntaxError for invalid JSON', async () => {
+      const queueName = 'test-parse-invalid-json-hook';
+
+      await arnavmq.consumer.consume(queueName, () => Promise.resolve('ok'));
+      await arnavmq.producer.produce(queueName, 'invalid{json', {
+        contentType: 'application/json',
+      });
+      await utils.timeoutPromise(300);
+
+      // Hook should be called with the parse error
+      sinon.assert.calledWith(afterProcessMessageHook, sinon.match({
+        queue: queueName,
+        error: sinon.match.instanceOf(SyntaxError),
+      }));
+    });
+
+    it('should not requeue message when parse error occurs', async () => {
+      const queueName = 'test-parse-invalid-json-no-requeue';
+
+      await arnavmq.consumer.consume(queueName, () => Promise.resolve('ok'));
+
+      // Send an invalid message
+      await arnavmq.producer.produce(queueName, 'invalid{json', {
+        contentType: 'application/json',
+      });
+      await utils.timeoutPromise(300);
+
+      // Check message count in queue - should be 0 (message was rejected, not requeued)
+      const channel = await arnavmq.connection.getDefaultChannel();
+      const queueInfo = await channel.checkQueue(queueName);
+      assert.strictEqual(queueInfo.messageCount, 0, 'Message should not be requeued');
+    });
+
+    it('should process valid messages even when some messages have parse errors', async () => {
+      const queueName = 'test-parse-mixed-messages';
+      const callbackSpy = sandbox.spy(() => Promise.resolve('ok'));
+
+      await arnavmq.consumer.consume(queueName, callbackSpy);
+
+      await arnavmq.producer.produce(queueName, { valid: 1 });
+      await arnavmq.producer.produce(queueName, 'invalid-json', {
+        contentType: 'application/json',
+      });
+      await arnavmq.producer.produce(queueName, { valid: 2 });
+      await utils.timeoutPromise(500);
+
+      sinon.assert.calledTwice(callbackSpy);
+      assert.strictEqual(capturedRejections.length, 1);
+    });
+
+    it('should handle empty string with JSON content type as parse error', async () => {
+      const queueName = 'test-parse-empty-json';
+      const callbackSpy = sandbox.spy(() => Promise.resolve('ok'));
+
+      await arnavmq.consumer.consume(queueName, callbackSpy);
+      await arnavmq.producer.produce(queueName, '', {
+        contentType: 'application/json',
+      });
+      await utils.timeoutPromise(300);
+
+      sinon.assert.notCalled(callbackSpy);
+      assert.strictEqual(capturedRejections.length, 1);
+      assert(capturedRejections[0] instanceof SyntaxError);
+    });
+  });
 });
