@@ -554,12 +554,15 @@ describe('producer/consumer', () => {
 
       sinon.assert.calledOnce(callbackSpy);
       sinon.assert.calledWith(callbackSpy, sentMessage, sinon.match.object);
-      sinon.assert.calledWith(afterProcessMessageHook, sinon.match({
-        queue: queueName,
-        content: sentMessage,
-        error: undefined,
-        ackError: undefined,
-      }));
+      sinon.assert.calledWith(
+        afterProcessMessageHook,
+        sinon.match({
+          queue: queueName,
+          content: sentMessage,
+          error: undefined,
+          ackError: undefined,
+        }),
+      );
     });
 
     it('should NOT call callback when message has invalid JSON', async () => {
@@ -589,10 +592,13 @@ describe('producer/consumer', () => {
       await utils.timeoutPromise(300);
 
       // Hook should be called with the parse error
-      sinon.assert.calledWith(afterProcessMessageHook, sinon.match({
-        queue: queueName,
-        error: sinon.match.instanceOf(SyntaxError),
-      }));
+      sinon.assert.calledWith(
+        afterProcessMessageHook,
+        sinon.match({
+          queue: queueName,
+          error: sinon.match.instanceOf(SyntaxError),
+        }),
+      );
     });
 
     it('should not requeue message when parse error occurs', async () => {
