@@ -508,34 +508,8 @@ describe('producer/consumer', () => {
   });
 
   describe('parse error handling', () => {
-    let originalListeners;
-    let capturedRejections;
-
-    before(() => {
-      // Save and remove existing unhandledRejection listeners (from env.js)
-      // so we can capture SyntaxErrors without failing the test
-      originalListeners = process.listeners('unhandledRejection').slice();
-      process.removeAllListeners('unhandledRejection');
-
-      // Capture unhandled rejections from SyntaxErrors (thrown for backward compatibility)
-      process.on('unhandledRejection', (reason) => {
-        if (reason instanceof SyntaxError) {
-          capturedRejections.push(reason);
-        } else {
-          // Re-throw non-SyntaxError rejections to fail the test
-          throw reason;
-        }
-      });
-    });
-
-    after(() => {
-      // Restore original listeners
-      process.removeAllListeners('unhandledRejection');
-      originalListeners.forEach((listener) => process.on('unhandledRejection', listener));
-    });
 
     beforeEach(() => {
-      capturedRejections = [];
       setupHooks();
     });
 
@@ -577,9 +551,6 @@ describe('producer/consumer', () => {
 
       // Callback should not be invoked with unparseable message
       sinon.assert.notCalled(callbackSpy);
-      // SyntaxError should be thrown for backward compatibility
-      assert.strictEqual(capturedRejections.length, 1);
-      assert(capturedRejections[0] instanceof SyntaxError);
     });
 
     it('should trigger afterProcessMessage hook with SyntaxError for invalid JSON', async () => {
@@ -606,7 +577,6 @@ describe('producer/consumer', () => {
 
       await arnavmq.consumer.consume(queueName, () => Promise.resolve('ok'));
 
-      // Send an invalid message
       await arnavmq.producer.produce(queueName, 'invalid{json', {
         contentType: 'application/json',
       });
@@ -632,7 +602,6 @@ describe('producer/consumer', () => {
       await utils.timeoutPromise(500);
 
       sinon.assert.calledTwice(callbackSpy);
-      assert.strictEqual(capturedRejections.length, 1);
     });
 
     it('should handle empty string with JSON content type as parse error', async () => {
@@ -646,8 +615,6 @@ describe('producer/consumer', () => {
       await utils.timeoutPromise(300);
 
       sinon.assert.notCalled(callbackSpy);
-      assert.strictEqual(capturedRejections.length, 1);
-      assert(capturedRejections[0] instanceof SyntaxError);
     });
   });
 });

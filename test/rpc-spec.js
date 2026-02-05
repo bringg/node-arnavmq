@@ -92,13 +92,6 @@ describe('Producer/Consumer RPC messaging:', () => {
   it('should return SyntaxError to RPC producer when consumer receives invalid JSON', async () => {
     const queueName = 'rpc-queue-parse-error';
 
-    // Temporarily suppress SyntaxError rejections (thrown for backward compatibility)
-    const originalListeners = process.listeners('unhandledRejection').slice();
-    process.removeAllListeners('unhandledRejection');
-    process.on('unhandledRejection', (reason) => {
-      if (!(reason instanceof SyntaxError)) throw reason;
-    });
-
     const callbackSpy = sinon.spy(() => 'should not be called');
     await arnavmq.consumer.consume(queueName, callbackSpy);
 
@@ -108,11 +101,6 @@ describe('Producer/Consumer RPC messaging:', () => {
       timeout: 2000,
     });
 
-    // Restore original listeners
-    process.removeAllListeners('unhandledRejection');
-    originalListeners.forEach((listener) => process.on('unhandledRejection', listener));
-
-    // Callback should not be invoked when message fails to parse
     sinon.assert.notCalled(callbackSpy);
 
     // The RPC response should contain the error

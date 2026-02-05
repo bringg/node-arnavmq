@@ -212,8 +212,7 @@ class Consumer {
         if (error instanceof SyntaxError) {
           // For parsing errors, reject the message and don't requeue it.
           await this._rejectMessageAfterProcess(channel, queue, msg, body, false, error);
-          // Backward compatibility: For parsing errors, throw to let client handle it
-          throw error;
+          return;
         }
 
         // For callback errors, use default behavior with _rejectMessageAfterProcess
