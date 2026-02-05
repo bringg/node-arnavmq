@@ -508,7 +508,6 @@ describe('producer/consumer', () => {
   });
 
   describe('parse error handling', () => {
-
     beforeEach(() => {
       setupHooks();
     });
