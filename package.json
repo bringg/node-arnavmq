@@ -43,7 +43,7 @@
     "@eslint/js": "^9.13.0",
     "child-process-promise": "^2.2.1",
     "dot-only-hunter": "^1.0.3",
-    "eslint": "^9.13.0",
+    "eslint": "^10.0.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-import": "^2.31.0",
     "globals": "^17.0.0",
