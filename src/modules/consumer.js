@@ -208,16 +208,14 @@ class Consumer {
           error,
           params: { queue, message: messageString },
         });
-
+        // For callback errors, use default behavior with _rejectMessageAfterProcess
+        let shouldRequeue = this._connection.config.requeue;
         if (error instanceof SyntaxError) {
           // For parsing errors, reject the message and don't requeue it.
-          await this._rejectMessageAfterProcess(channel, queue, msg, body, false, error);
-          // Backward compatibility: For parsing errors, throw to let client handle it
-          throw error;
+          shouldRequeue = false;
         }
 
-        // For callback errors, use default behavior with _rejectMessageAfterProcess
-        await this._rejectMessageAfterProcess(channel, queue, msg, body, this._connection.config.requeue, error);
+        await this._rejectMessageAfterProcess(channel, queue, msg, body, shouldRequeue, error);
         return;
       }
 
