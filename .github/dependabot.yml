@@ -12,3 +12,8 @@ updates:
   - yosiat
   - shamil
   - ramhr
+  groups:
+    eslint:
+      patterns:
+        - "@eslint/*"
+        - "eslint"
