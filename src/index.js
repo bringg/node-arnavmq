@@ -1,5 +1,8 @@
 const crypto = require('crypto');
 const connection = require('./modules/connection');
+const { Connection } = require('./modules/connection');
+const Producer = require('./modules/producer');
+const Consumer = require('./modules/consumer');
 const { setLogger } = require('./modules/logger');
 
 /* eslint global-require: "off" */
@@ -45,4 +48,54 @@ module.exports = (config) => {
   Object.freeze(configuration);
 
   return require('./modules/arnavmq')(connection(configuration));
+};
+
+module.exports.createFresh = (config) => {
+  const configuration = {
+    host: 'amqp://localhost',
+    prefetch: 5,
+    requeue: true,
+    timeout: 1000,
+    producerMaxRetries: -1,
+    rpcTimeout: 15000,
+    consumerSuffix: '',
+    hostname: process.env.HOSTNAME || process.env.USER || crypto.randomUUID(),
+    ...config,
+  };
+
+  if (configuration.transport) {
+    throw new Error('Using removed deprecated "transport" option. Use the "logger" option instead.');
+  }
+
+  configuration.prefetch = parseInt(configuration.prefetch, 10) || 0;
+
+  setLogger(configuration.logger);
+  delete configuration.logger;
+
+  Object.freeze(configuration);
+
+  const conn = new Connection(configuration);
+  const producer = new Producer(conn);
+  const consumer = new Consumer(conn);
+
+  return {
+    connection: conn,
+    consume: (queue, options, callback) => consumer.subscribe(queue, options, callback),
+    subscribe: (queue, options, callback) => consumer.subscribe(queue, options, callback),
+    produce: (queue, msg, options) => producer.publish(queue, msg, options),
+    publish: (queue, msg, options) => producer.publish(queue, msg, options),
+    consumer: {
+      consume: (queue, options, callback) => consumer.subscribe(queue, options, callback),
+      subscribe: (queue, options, callback) => consumer.subscribe(queue, options, callback),
+    },
+    producer: {
+      produce: (queue, msg, options) => producer.publish(queue, msg, options),
+      publish: (queue, msg, options) => producer.publish(queue, msg, options),
+    },
+    hooks: {
+      connection: conn.hooks,
+      consumer: consumer.hooks,
+      producer: producer.hooks,
+    },
+  };
 };
