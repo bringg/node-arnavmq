@@ -19,6 +19,8 @@ declare namespace arnavmqFactory {
   export type Arnavmq = arnavmq.Arnavmq;
   export type ArnavmqFactory = (config: ConnectionConfig) => Arnavmq;
 
+  export function createFresh(config: ConnectionConfig): Arnavmq;
+
   export { ConnectionConfig, Connection, Consumer, Producer, ConnectionHooks, ConsumerHooks, ProducerHooks };
 }
 
