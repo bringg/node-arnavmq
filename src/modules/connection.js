@@ -111,3 +111,5 @@ module.exports = (config) => {
   }
   return instance;
 };
+
+module.exports.Connection = Connection;
