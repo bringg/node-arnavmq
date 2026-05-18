@@ -80,6 +80,26 @@ arnavmq.subscribe('queue:name', options, function (msg) {
 });
 ```
 
+## Multiple RabbitMQ servers
+
+The default `require('arnavmq')(config)` factory uses a module-level singleton — calling it twice replaces the connection rather than creating a second one.
+
+Use `createFresh` to create independent instances, each with its own connection. This is useful when consumers and producers should connect to different RabbitMQ servers:
+
+```javascript
+const arnavmq = require('arnavmq');
+
+const consumerBus = arnavmq.createFresh({ host: 'amqp://consumer-server' });
+const producerBus = arnavmq.createFresh({ host: 'amqp://producer-server' });
+
+consumerBus.subscribe('queue:name', (msg) => {
+  /* ... */
+});
+producerBus.publish('queue:name', { message: 'content' });
+```
+
+Each instance returned by `createFresh` has the same interface as the singleton: `subscribe`, `publish`, `hooks`, and `connection`.
+
 ## RPC Support
 
 You can create RPC requests easily by adding the `rpc: true` option to the `produce` call:
