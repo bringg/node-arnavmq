@@ -13,10 +13,10 @@ import Producer = require('./modules/producer');
 import { ConnectionHooks, ConsumerHooks, ProducerHooks } from './modules/hooks';
 import arnavmq = require('./modules/arnavmq');
 
-declare function arnavmqFactory(config: ConnectionConfig): arnavmq.Arnavmq;
+declare function arnavmqFactory(config?: ConnectionConfig): arnavmq.Arnavmq;
 
 declare namespace arnavmqFactory {
-  export function createFresh(config: ConnectionConfig): arnavmq.Arnavmq;
+  export function createFresh(config?: ConnectionConfig): arnavmq.Arnavmq;
 
   export type Arnavmq = arnavmq.Arnavmq;
   export type ArnavmqFactory = (config: ConnectionConfig) => arnavmq.Arnavmq;
