@@ -1,8 +1,7 @@
 const crypto = require('crypto');
 const connection = require('./modules/connection');
 const { Connection } = require('./modules/connection');
-const Producer = require('./modules/producer');
-const Consumer = require('./modules/consumer');
+const arnavmq = require('./modules/arnavmq');
 const { setLogger } = require('./modules/logger');
 
 function buildConfiguration(config) {
@@ -49,35 +48,6 @@ function buildConfiguration(config) {
 }
 
 /* eslint global-require: "off" */
-module.exports = (config) => {
-  return require('./modules/arnavmq')(connection(buildConfiguration(config)));
-};
+module.exports = (config) => arnavmq(connection(buildConfiguration(config)));
 
-module.exports.createFresh = (config) => {
-  const configuration = buildConfiguration(config);
-
-  const conn = new Connection(configuration);
-  const producer = new Producer(conn);
-  const consumer = new Consumer(conn);
-
-  return {
-    connection: conn,
-    consume: (queue, options, callback) => consumer.subscribe(queue, options, callback),
-    subscribe: (queue, options, callback) => consumer.subscribe(queue, options, callback),
-    produce: (queue, msg, options) => producer.publish(queue, msg, options),
-    publish: (queue, msg, options) => producer.publish(queue, msg, options),
-    consumer: {
-      consume: (queue, options, callback) => consumer.subscribe(queue, options, callback),
-      subscribe: (queue, options, callback) => consumer.subscribe(queue, options, callback),
-    },
-    producer: {
-      produce: (queue, msg, options) => producer.publish(queue, msg, options),
-      publish: (queue, msg, options) => producer.publish(queue, msg, options),
-    },
-    hooks: {
-      connection: conn.hooks,
-      consumer: consumer.hooks,
-      producer: producer.hooks,
-    },
-  };
-};
+module.exports.createFresh = (config) => arnavmq.createFresh(new Connection(buildConfiguration(config)));

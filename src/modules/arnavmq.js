@@ -38,8 +38,34 @@ class ArnavMQ {
   }
 }
 
+function buildReturnObject(inst) {
+  const consumer = {
+    consume: inst.consume.bind(inst),
+    subscribe: inst.subscribe.bind(inst),
+  };
+
+  const producer = {
+    produce: inst.produce.bind(inst),
+    publish: inst.publish.bind(inst),
+  };
+
+  return {
+    connection: inst.connection,
+    consume: consumer.consume,
+    subscribe: consumer.subscribe,
+    produce: producer.produce,
+    publish: producer.publish,
+    consumer,
+    producer,
+    hooks: {
+      connection: inst.connection.hooks,
+      consumer: inst.consumer.hooks,
+      producer: inst.producer.hooks,
+    },
+  };
+}
+
 let instance;
-module.exports.ArnavMQ = ArnavMQ;
 module.exports = (connection) => {
   assert(instance || connection, 'ArnavMQ can not be initialized because connection does not exist');
 
@@ -49,30 +75,7 @@ module.exports = (connection) => {
     instance.connection = connection;
   }
 
-  const consumer = {
-    consume: instance.consume.bind(instance),
-    subscribe: instance.subscribe.bind(instance),
-  };
-
-  const producer = {
-    produce: instance.produce.bind(instance),
-    publish: instance.publish.bind(instance),
-  };
-
-  const hooks = {
-    connection: instance.connection.hooks,
-    consumer: instance.consumer.hooks,
-    producer: instance.producer.hooks,
-  };
-
-  return {
-    connection: instance.connection,
-    consume: consumer.consume,
-    subscribe: consumer.subscribe,
-    produce: producer.produce,
-    publish: producer.publish,
-    consumer,
-    producer,
-    hooks,
-  };
+  return buildReturnObject(instance);
 };
+
+module.exports.createFresh = (connection) => buildReturnObject(new ArnavMQ(connection));
