@@ -5,8 +5,7 @@ const Producer = require('./modules/producer');
 const Consumer = require('./modules/consumer');
 const { setLogger } = require('./modules/logger');
 
-/* eslint global-require: "off" */
-module.exports = (config) => {
+function buildConfiguration(config) {
   const configuration = {
     // amqp connection string
     host: 'amqp://localhost',
@@ -46,33 +45,16 @@ module.exports = (config) => {
   delete configuration.logger;
 
   Object.freeze(configuration);
+  return configuration;
+}
 
-  return require('./modules/arnavmq')(connection(configuration));
+/* eslint global-require: "off" */
+module.exports = (config) => {
+  return require('./modules/arnavmq')(connection(buildConfiguration(config)));
 };
 
 module.exports.createFresh = (config) => {
-  const configuration = {
-    host: 'amqp://localhost',
-    prefetch: 5,
-    requeue: true,
-    timeout: 1000,
-    producerMaxRetries: -1,
-    rpcTimeout: 15000,
-    consumerSuffix: '',
-    hostname: process.env.HOSTNAME || process.env.USER || crypto.randomUUID(),
-    ...config,
-  };
-
-  if (configuration.transport) {
-    throw new Error('Using removed deprecated "transport" option. Use the "logger" option instead.');
-  }
-
-  configuration.prefetch = parseInt(configuration.prefetch, 10) || 0;
-
-  setLogger(configuration.logger);
-  delete configuration.logger;
-
-  Object.freeze(configuration);
+  const configuration = buildConfiguration(config);
 
   const conn = new Connection(configuration);
   const producer = new Producer(conn);
