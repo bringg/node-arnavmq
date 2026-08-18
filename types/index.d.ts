@@ -7,7 +7,7 @@
  * Any jsdoc comments with parameter descriptions were updated accordingly.
  */
 
-import { ConnectionConfig, Connection } from './modules/connection';
+import { ConnectionConfig, Connection, ConnectionClosedError } from './modules/connection';
 import Consumer = require('./modules/consumer');
 import Producer = require('./modules/producer');
 import { ConnectionHooks, ConsumerHooks, ProducerHooks } from './modules/hooks';
@@ -19,7 +19,16 @@ declare namespace arnavmqFactory {
   export type Arnavmq = arnavmq.Arnavmq;
   export type ArnavmqFactory = (config: ConnectionConfig) => Arnavmq;
 
-  export { ConnectionConfig, Connection, Consumer, Producer, ConnectionHooks, ConsumerHooks, ProducerHooks };
+  export {
+    ConnectionConfig,
+    Connection,
+    ConnectionClosedError,
+    Consumer,
+    Producer,
+    ConnectionHooks,
+    ConsumerHooks,
+    ProducerHooks,
+  };
 }
 
 export = arnavmqFactory;
