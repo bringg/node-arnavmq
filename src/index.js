@@ -23,6 +23,10 @@ module.exports = (config) => {
     // default timeout for RPC calls. If set to '0' there will be none.
     rpcTimeout: 15000,
 
+    // default drain budget (ms) for close()'s graceful shutdown: how long to wait for in-flight
+    // consumer handlers to finish before rejecting+requeueing them and closing the connection.
+    shutdownTimeout: 30000,
+
     // suffix all queues names
     // ex: service-something with suffix :ci becomes service-suffix:ci etc.
     consumerSuffix: '',
@@ -46,3 +50,9 @@ module.exports = (config) => {
 
   return require('./modules/arnavmq')(connection(configuration));
 };
+
+// `instanceof arnavmq.ConnectionClosedError` is the documented way callers detect the
+// "connection is shutting down" rejection from produce()/publish(), so the class has to exist on the
+// package's main entry point at runtime, not just in types/index.d.ts. Assigned after the
+// module.exports assignment above - assigning it before would be clobbered by it.
+module.exports.ConnectionClosedError = connection.ConnectionClosedError;
