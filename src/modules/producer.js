@@ -3,6 +3,7 @@ const utils = require('./utils');
 const parsers = require('./message-parsers');
 const { ProducerHooks } = require('./hooks');
 const { logger } = require('./logger');
+const { ConnectionClosedError } = require('./connection');
 
 const ERRORS = {
   TIMEOUT: 'Timeout reached',
@@ -32,6 +33,10 @@ class Producer {
      * [queue: string] -> [correlationId: string] -> {responsePromise, timeoutId}
      */
     this.amqpRPCQueues = {};
+
+    // Set by stop(): does not gate any behavior here (unlike consumer.js's _shuttingDown), it is
+    // just the idempotency flag so a second stop() call is a no-op.
+    this._shuttingDown = false;
   }
 
   set connection(value) {
@@ -124,6 +129,17 @@ class Producer {
       return resQueue;
     } catch (error) {
       delete rpcQueue.resQueuePromise;
+
+      if (error instanceof ConnectionClosedError) {
+        // The connection is terminally closed for the process - stop retrying instead of
+        // spinning forever. This can be reached from the fire-and-forget 'close' listener below,
+        // so we swallow rather than rethrow to avoid an unhandled rejection there.
+        logger.warn({
+          message: `${loggerAlias} not reinitializing RPC queue for ${sourceQueue}: connection is closed`,
+        });
+        return undefined;
+      }
+
       await utils.timeoutPromise(this._connection.config.timeout);
       return await this.createRpcQueue(sourceQueue);
     }
@@ -159,6 +175,36 @@ class Producer {
         delete producer.amqpRPCQueues[queue][corrId];
       }
     }, time);
+  }
+
+  /**
+   * Rejects every RPC promise currently pending in `amqpRPCQueues` (one that has sent its request
+   * and is waiting for a response) with `ConnectionClosedError`, and clears its timeout so no
+   * lingering timer keeps the process alive - without this, a caller awaiting an RPC response
+   * would otherwise hang until `rpcTimeout` (15s default) even though the connection is already
+   * gone. Internal - not part of the object producer.js's factory returns publicly. Idempotent:
+   * a second call is a no-op.
+   * @return {void}
+   */
+  stop() {
+    if (this._shuttingDown) {
+      return;
+    }
+    this._shuttingDown = true;
+
+    Object.values(this.amqpRPCQueues).forEach((rpcQueue) => {
+      Object.keys(rpcQueue).forEach((key) => {
+        // `resQueuePromise` is bookkeeping for the queue itself, not a pending correlationId waiter.
+        if (key === 'resQueuePromise') {
+          return;
+        }
+
+        const waiter = rpcQueue[key];
+        clearTimeout(waiter.timeoutId);
+        waiter.responsePromise.reject(new ConnectionClosedError());
+        delete rpcQueue[key];
+      });
+    });
   }
 
   /**
@@ -297,7 +343,11 @@ class Producer {
   }
 
   _shouldRetry(error, currentRetryNumber) {
-    if (error instanceof ProducerError || error.message === ERRORS.TIMEOUT) {
+    if (error instanceof ProducerError || error instanceof ConnectionClosedError || error.message === ERRORS.TIMEOUT) {
+      // ConnectionClosedError means the connection is terminally closed for the process (see
+      // connection.js's close()) - with the default producerMaxRetries: -1 (retry indefinitely),
+      // publish()/produce() would otherwise retry forever against a connection that will never
+      // come back, instead of failing fast the way arnavmq.js's top-level close() documents.
       return false;
     }
     const maxRetries = this._connection.config.producerMaxRetries;
