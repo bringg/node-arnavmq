@@ -1,5 +1,5 @@
-const pDefer = require('p-defer');
 const { logger } = require('./logger');
+const { withTimeout } = require('./utils');
 
 const DEFAULT_CHANNEL = 'DEFAULT_CHANNEL';
 
@@ -7,27 +7,6 @@ const DEFAULT_CHANNEL = 'DEFAULT_CHANNEL';
 // best-effort: the caller tears the connection down either way, so a broker that stops answering
 // must not be able to hang the process's shutdown.
 const CLOSE_CHANNEL_TIMEOUT_MS = 5000;
-
-/**
- * Resolves with `promise`, or rejects once `timeoutMs` elapses - whichever happens first.
- * A rejection handler is attached to `promise` up front so that if it loses the race and rejects
- * later, that rejection is already handled instead of surfacing as an unhandled rejection.
- * @param {Promise} promise
- * @param {number} timeoutMs
- * @param {string} what Described in the timeout error message.
- * @return {Promise}
- */
-function withTimeout(promise, timeoutMs, what) {
-  const deferredTimeout = pDefer();
-  const timeoutId = setTimeout(
-    () => deferredTimeout.reject(new Error(`Timed out after ${timeoutMs}ms waiting for ${what}`)),
-    timeoutMs,
-  );
-
-  promise.catch(() => {});
-
-  return Promise.race([promise, deferredTimeout.promise]).finally(() => clearTimeout(timeoutId));
-}
 
 /**
  * Gracefully close one cached channel, bounded by `CLOSE_CHANNEL_TIMEOUT_MS`. Never rejects - see
@@ -38,12 +17,6 @@ function withTimeout(promise, timeoutMs, what) {
  */
 async function closeChannel(key, entry) {
   try {
-    // The cap covers `entry.chann` too, not just `close()`. A cache entry can still be pending when
-    // shutdown starts - a channel allocated moments earlier whose `Channel.Open-Ok` or `Basic.Qos-Ok`
-    // never arrived from a broker that has stopped answering but whose TCP connection is still up -
-    // and awaiting that unbounded would hang `connection.close()` just as an unbounded `close()`
-    // would, leaving only amqplib's 60s heartbeat monitor to break the deadlock (longer than a
-    // typical 30s terminationGracePeriod, so: SIGKILL, the exact outcome this cap exists to avoid).
     await withTimeout(
       (async () => {
         const channel = await entry.chann;
@@ -53,10 +26,6 @@ async function closeChannel(key, entry) {
       `channel "${key}" to close`,
     );
   } catch (error) {
-    // Expected and harmless when the channel never opened, or the broker/an earlier error already
-    // closed it - there is nothing left to flush on it either way. Only worth noting because a
-    // channel we failed to flush is one whose last acks may still lose the race against the
-    // broker's requeue-on-disconnect cleanup.
     logger.warn({
       message: `Failed to gracefully close channel [${key}] before closing the connection - [${error.message}]`,
       error,
@@ -143,9 +112,6 @@ class Channels {
    * @return {Promise<void>}
    */
   async closeAll() {
-    // Snapshot and empty the cache up front: each channel's own 'close' listener below deletes its
-    // own entry while we await, and nothing should be handed a channel we are midway through
-    // closing.
     const entries = [...this._channels.entries()];
     this._channels.clear();
 
@@ -157,12 +123,6 @@ class Channels {
     try {
       channel = await this._connection.createChannel();
 
-      // Both listeners go on before the first await below, and must stay that way. amqplib routes a
-      // server-sent `Channel.Close` through `safeEmit(channel, 'error', ...)`, which *rethrows* when
-      // nothing is listening for 'error' (or 'handler-error') - and that throw unwinds out of
-      // amqplib's frame-processing callback into an uncaught exception that kills the process. Any
-      // await between `createChannel()` resolving and this point is a window where a broker-side
-      // channel close crashes us.
       channel.on('close', () => {
         this._channels.delete(key);
       });
@@ -173,13 +133,6 @@ class Channels {
         });
       });
 
-      // Awaited, not fire-and-forget: `prefetch()` is a `basic.qos` RPC, and closing a channel with
-      // an RPC still outstanding rejects that RPC ("Channel ended, no reply will be forthcoming").
-      // Unawaited that lands as an unhandled rejection - which `Channels.closeAll()` on shutdown
-      // makes reachable for a channel created moments before close(). Awaiting also means a failed
-      // qos surfaces through the catch below instead of silently leaving the channel misconfigured.
-      // The 'close' listener above may fire during this await and delete this key; the catch below
-      // deletes it too, which is idempotent.
       await channel.prefetch(config.prefetch);
 
       return channel;

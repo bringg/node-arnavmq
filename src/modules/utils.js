@@ -22,6 +22,26 @@ function getCorrelationId(options) {
   return crypto.randomUUID();
 }
 
+/**
+ * Resolves with `promise`, or rejects once `timeoutMs` elapses - whichever happens first.
+ * @param {Promise} promise
+ * @param {number} timeoutMs
+ * @param {string} what Described in the timeout error message.
+ * @return {Promise}
+ */
+async function withTimeout(promise, timeoutMs, what) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`Timed out after ${timeoutMs}ms waiting for ${what}`)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    return clearTimeout(timeoutId);
+  }
+}
+
 module.exports = {
   /**
    * Default logger to prevent any printing in the terminal
@@ -40,4 +60,6 @@ module.exports = {
     }),
 
   getCorrelationId,
+
+  withTimeout,
 };

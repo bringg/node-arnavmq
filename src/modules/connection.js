@@ -85,12 +85,6 @@ class Connection {
   }
 
   async _close() {
-    // `close()` already set `this._closePromise` (which `isClosed` reads) before calling us, so any
-    // connect racing us (or starting after us) is rejected instead of handed a connection we're
-    // about to tear down.
-
-    // Don't race a connect already in progress - wait for it to settle (either way) before we
-    // try to close anything.
     let connection = null;
     try {
       connection = await this._connectionPromise;
@@ -104,27 +98,11 @@ class Connection {
     }
 
     if (connection) {
-      // Flush the channels before tearing the socket down, don't just drop them with it. A drained
-      // handler's `channel.ack()` is fire-and-forget on the wire (AMQP 0-9-1 has no ack-ok frame),
-      // so closing the raw connection immediately after it races that ack against the broker's own
-      // "requeue everything still unacked on this connection" cleanup - and loses often enough to
-      // redeliver a message that was fully processed and acked. `Channels.closeAll()` round-trips
-      // with the broker per channel, which guarantees those acks were processed first.
-      //
-      // Read `this._channels` only after the await above: the connection's own 'close' handler
-      // nulls it, and the connection may have died while we were waiting for the connect to settle.
-      //
-      // Closing a channel emits 'close' on it, which consumer.js listens for to resubscribe.
-      // Consumer._isLive() checks `this._connection.isClosed` (set above, before this await), so
-      // that listener is a no-op regardless of whether `arnavmq.close()` ran `consumer.stop()`
-      // first - calling this method directly is safe even with active subscriptions.
       const channels = this._channels;
       if (channels) {
         try {
           await channels.closeAll();
         } catch (error) {
-          // closeAll() already logs and swallows per channel; this is belt-and-braces so a broken
-          // channel cache can never stop us from closing the socket, or make close() reject.
           logger.error({
             message: `Error closing amqp channels: ${error.message}`,
             error,

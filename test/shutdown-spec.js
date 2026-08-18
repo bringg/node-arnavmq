@@ -39,6 +39,14 @@ function createFakeConnection(channel, overrides = {}) {
   };
 }
 
+/** A fake channel + connection + Consumer wired together, for tests that don't need the broker. */
+function newTestConsumer(overrides = {}) {
+  const channel = createFakeChannel();
+  const connection = createFakeConnection(channel, overrides);
+  const consumer = new Consumer(connection);
+  return { channel, connection, consumer };
+}
+
 function fakeMessage(content, properties = {}) {
   return {
     content: Buffer.from(JSON.stringify(content)),
@@ -51,6 +59,16 @@ function deliver(channel, queue, msg) {
   const fn = channel.consumeFns.get(queue);
   assert(fn, `no consume callback captured for queue "${queue}" - was consume() awaited first?`);
   return fn(msg);
+}
+
+/** A fake amqp.node channel good enough to drive producer.js's RPC path without a broker. */
+function createFakeChannelForRpc() {
+  const channel = new EventEmitter();
+  channel.assertQueue = sinon.stub().resolves({});
+  channel.consume = sinon.stub().resolves({ consumerTag: 'fake-tag' });
+  channel.sendToQueue = sinon.stub().returns(true);
+  channel.publish = sinon.stub().returns(true);
+  return channel;
 }
 
 describe('graceful shutdown', () => {
@@ -144,7 +162,7 @@ describe('graceful shutdown', () => {
         assert.strictEqual(await subscribePromise, false);
       });
 
-      it('stops the retry loop once cancelled, without ever consuming', async () => {
+      it("subscribe()'s retry loop stops once cancelled, without ever consuming", async () => {
         const queue = 'shutdown:retry:stop-on-cancel';
         arnavmqConfigurator({ timeout: 20 });
         const initStub = sandbox.stub(consumer, '_initializeChannel').resolves(null);
@@ -179,9 +197,7 @@ describe('graceful shutdown', () => {
 
     describe('listener hygiene on the shared channel', () => {
       it('does not accumulate close listeners across repeated _initializeChannel calls for one record', async () => {
-        const sharedChannel = createFakeChannel();
-        const connection = createFakeConnection(sharedChannel);
-        const consumer = new Consumer(connection);
+        const { channel: sharedChannel, consumer } = newTestConsumer();
         const record = {
           id: 1,
           queue: 'shared-channel-queue',
@@ -203,9 +219,7 @@ describe('graceful shutdown', () => {
       });
 
       it('the resubscribe-on-close listener is a no-op once shutting down / cancelled', async () => {
-        const sharedChannel = createFakeChannel();
-        const connection = createFakeConnection(sharedChannel);
-        const consumer = new Consumer(connection);
+        const { channel: sharedChannel, consumer } = newTestConsumer();
 
         await consumer.consume('shutdown:onclose:guard', () => {});
         const record = [...consumer._subscriptions.values()][0];
@@ -218,9 +232,7 @@ describe('graceful shutdown', () => {
       });
 
       it('_cancelSubscription removes the record close listener, so repeated subscribe->cancel cycles do not leak listeners', async () => {
-        const sharedChannel = createFakeChannel();
-        const connection = createFakeConnection(sharedChannel);
-        const consumer = new Consumer(connection);
+        const { channel: sharedChannel, consumer } = newTestConsumer();
         const queue = 'shutdown:cancel:listener-hygiene';
 
         for (let i = 0; i < 5; i += 1) {
@@ -243,12 +255,9 @@ describe('graceful shutdown', () => {
     // window must be re-checked once the tag arrives, or the subscription goes live anyway.
     describe('cancel() landing mid-subscribe (before consumerTag exists)', () => {
       it('cancels the subscription on the broker once its tag arrives - two consume()s on one queue, the second cancelled mid-flight', async () => {
-        const channel = createFakeChannel();
-        const connection = createFakeConnection(channel);
-        const consumer = new Consumer(connection);
+        const { channel, consumer } = newTestConsumer();
         const queue = 'shutdown:cancel:mid-flight';
 
-        // First subscription on the queue goes live normally.
         await consumer.consume(queue, () => {});
         const [first] = [...consumer._subscriptions.values()];
         assert(first.consumerTag, 'expected the first subscription to be fully subscribed');
@@ -290,9 +299,7 @@ describe('graceful shutdown', () => {
       });
 
       it('skips the basic.consume round-trip entirely when the cancel lands before it (mid-assertQueue)', async () => {
-        const channel = createFakeChannel();
-        const connection = createFakeConnection(channel);
-        const consumer = new Consumer(connection);
+        const { channel, consumer } = newTestConsumer();
         const queue = 'shutdown:cancel:mid-assert-queue';
 
         const assertGate = pDefer();
@@ -321,10 +328,8 @@ describe('graceful shutdown', () => {
     });
 
     describe('in-flight tracking', () => {
-      it('brackets both the ack path and the reject path', async () => {
-        const channel = createFakeChannel();
-        const connection = createFakeConnection(channel);
-        const consumer = new Consumer(connection);
+      it('inFlight() brackets both the ack path and the reject path', async () => {
+        const { channel, consumer } = newTestConsumer();
 
         const ackQueue = 'shutdown:inflight:ack-path';
         let observedDuringAckHandler = null;
@@ -355,9 +360,7 @@ describe('graceful shutdown', () => {
 
     describe('abandoned-message guards (drain-timeout path)', () => {
       it('skips ack for an abandoned message and leaves the channel undamaged', async () => {
-        const channel = createFakeChannel();
-        const connection = createFakeConnection(channel);
-        const consumer = new Consumer(connection);
+        const { channel, consumer } = newTestConsumer();
         const queue = 'shutdown:guard:ack';
 
         await consumer.consume(queue, () => 'ok');
@@ -372,9 +375,7 @@ describe('graceful shutdown', () => {
       });
 
       it('skips reject for an abandoned message on the handler-error path and leaves the channel undamaged', async () => {
-        const channel = createFakeChannel();
-        const connection = createFakeConnection(channel);
-        const consumer = new Consumer(connection);
+        const { channel, consumer } = newTestConsumer();
         const queue = 'shutdown:guard:reject';
 
         await consumer.consume(queue, () => {
@@ -391,9 +392,7 @@ describe('graceful shutdown', () => {
       });
 
       it('skips the RPC reply for an abandoned message on the success path', async () => {
-        const channel = createFakeChannel();
-        const connection = createFakeConnection(channel);
-        const consumer = new Consumer(connection);
+        const { channel, consumer } = newTestConsumer();
         const queue = 'shutdown:guard:rpc-success';
 
         await consumer.consume(queue, () => 'ok');
@@ -408,9 +407,7 @@ describe('graceful shutdown', () => {
       });
 
       it('skips the RPC reply for an abandoned message on the non-requeue reject path', async () => {
-        const channel = createFakeChannel();
-        const connection = createFakeConnection(channel, { requeue: false });
-        const consumer = new Consumer(connection);
+        const { channel, consumer } = newTestConsumer({ requeue: false });
         const queue = 'shutdown:guard:rpc-reject';
 
         await consumer.consume(queue, () => {
@@ -430,18 +427,14 @@ describe('graceful shutdown', () => {
 
     describe('drain()', () => {
       it('resolves true immediately when nothing is in flight', async () => {
-        const channel = createFakeChannel();
-        const connection = createFakeConnection(channel);
-        const consumer = new Consumer(connection);
+        const { channel, consumer } = newTestConsumer();
         await consumer.consume('shutdown:drain:empty', () => 'ok');
 
         assert.strictEqual(await consumer.drain(1000), true);
       });
 
       it('resolves true once the in-flight handler finishes, and cancels nothing', async () => {
-        const channel = createFakeChannel();
-        const connection = createFakeConnection(channel);
-        const consumer = new Consumer(connection);
+        const { channel, consumer } = newTestConsumer();
         const queue = 'shutdown:drain:waits-then-true';
         const handlerDefer = pDefer();
 
@@ -459,9 +452,7 @@ describe('graceful shutdown', () => {
       });
 
       it('resolves false when the in-flight handler does not finish before the timeout', async () => {
-        const channel = createFakeChannel();
-        const connection = createFakeConnection(channel);
-        const consumer = new Consumer(connection);
+        const { channel, consumer } = newTestConsumer();
         const queue = 'shutdown:drain:times-out';
         const handlerDefer = pDefer();
 
@@ -478,9 +469,7 @@ describe('graceful shutdown', () => {
 
     describe('stop()', () => {
       it('cancels every subscription then reports a clean drain with nothing abandoned', async () => {
-        const channel = createFakeChannel();
-        const connection = createFakeConnection(channel);
-        const consumer = new Consumer(connection);
+        const { channel, consumer } = newTestConsumer();
         const queue = 'shutdown:stop:clean';
 
         await consumer.consume(queue, () => 'ok');
@@ -492,9 +481,7 @@ describe('graceful shutdown', () => {
       });
 
       it('is idempotent - concurrent calls share one in-flight shutdown', async () => {
-        const channel = createFakeChannel();
-        const connection = createFakeConnection(channel);
-        const consumer = new Consumer(connection);
+        const { channel, consumer } = newTestConsumer();
         await consumer.consume('shutdown:stop:idempotent', () => 'ok');
 
         const [first, second] = await Promise.all([consumer.stop(), consumer.stop()]);
@@ -505,9 +492,7 @@ describe('graceful shutdown', () => {
       });
 
       it("on timeout, rejects+requeues abandoned in-flight messages and guards the handler's own ack afterward", async () => {
-        const channel = createFakeChannel();
-        const connection = createFakeConnection(channel);
-        const consumer = new Consumer(connection);
+        const { channel, consumer } = newTestConsumer();
         const queue = 'shutdown:stop:timeout-abandons';
         const handlerDefer = pDefer();
 
@@ -534,9 +519,7 @@ describe('graceful shutdown', () => {
       // The per-queue abandoned count is returned to the caller, who turns it into a metric - it has
       // to be accurate and scoped per queue rather than aggregated.
       it('reports the abandoned-message count per queue - only the queue that timed out appears in the map', async () => {
-        const channel = createFakeChannel();
-        const connection = createFakeConnection(channel);
-        const consumer = new Consumer(connection);
+        const { channel, consumer } = newTestConsumer();
         const cleanQueue = 'shutdown:stop:abandoned-map:clean';
         const stuckQueue = 'shutdown:stop:abandoned-map:stuck';
         const handlerDefer = pDefer();
@@ -565,10 +548,8 @@ describe('graceful shutdown', () => {
     });
 
     describe('inFlight()', () => {
-      it('counts across all queues', async () => {
-        const channel = createFakeChannel();
-        const connection = createFakeConnection(channel);
-        const consumer = new Consumer(connection);
+      it('inFlight() counts across all queues', async () => {
+        const { channel, consumer } = newTestConsumer();
         const queueA = 'shutdown:inflight:scope-a';
         const queueB = 'shutdown:inflight:scope-b';
         const deferA = pDefer();
@@ -850,13 +831,6 @@ describe('graceful shutdown', () => {
     const sandbox = sinon.createSandbox();
     afterEach(() => sandbox.restore());
 
-    function createFakeChannelForRpc() {
-      const channel = new EventEmitter();
-      channel.assertQueue = sinon.stub().resolves({});
-      channel.consume = sinon.stub().resolves({ consumerTag: 'fake-tag' });
-      return channel;
-    }
-
     /** A fake connection whose 'close' listeners are driven by a real EventEmitter, like the amqp one. */
     function createFakeConnectionWithCloseEvent(channel) {
       const emitter = new EventEmitter();
@@ -919,15 +893,6 @@ describe('graceful shutdown', () => {
   describe('producer.js stop()', () => {
     const sandbox = sinon.createSandbox();
     afterEach(() => sandbox.restore());
-
-    function createFakeChannelForRpc() {
-      const channel = new EventEmitter();
-      channel.assertQueue = sinon.stub().resolves({});
-      channel.consume = sinon.stub().resolves({ consumerTag: 'fake-tag' });
-      channel.sendToQueue = sinon.stub().returns(true);
-      channel.publish = sinon.stub().returns(true);
-      return channel;
-    }
 
     function createFakeConnection(channel, overrides = {}) {
       return {
@@ -1105,7 +1070,6 @@ describe('graceful shutdown', () => {
       assert.strictEqual(callCount, 1);
 
       gate.resolve();
-      // close() reports the drain outcome back to the caller (finding #2): a clean drain, nothing abandoned.
       assert.deepStrictEqual(await closePromise, { drained: true, abandoned: {} });
 
       assert.strictEqual(callCount, 1, 'the cancelled subscription must not receive a second delivery');
@@ -1127,8 +1091,7 @@ describe('graceful shutdown', () => {
 
       const result = await arnavmq.close({ timeout: 100 });
 
-      // close() reports the drain outcome back to the caller (finding #2), keyed by queue name, so a
-      // caller can emit an abandoned-message metric off it.
+      // keyed by queue name, so a caller can emit an abandoned-message metric off it.
       assert.deepStrictEqual(result, { drained: false, abandoned: { [queue]: 1 } });
       assert.strictEqual(arnavmq.connection.isClosed, true);
       const [record] = [...arnavmq.consumer._subscriptions.values()];

@@ -198,18 +198,13 @@ class Consumer {
       params: { queue },
     });
 
-    // A cancel()/cancelAll() may have landed while we were awaiting getChannel()/assertQueue() above.
-    // Not required for correctness (the guard after `consumerTag` is set in `_consumeQueue` catches
-    // it either way), it just skips a pointless basic.consume+basic.cancel round-trip pair.
     if (!this._isLive(subscription)) {
       return false;
     }
 
     await this._consumeQueue(channel, subscription);
 
-    // A cancel() that landed *inside* _consumeQueue() has already been carried out on the broker by
-    // now (see there), so this subscription never really went live - report that, the same way the
-    // guards above do, instead of an unconditional `true`.
+    // A cancel() that landed *inside* _consumeQueue() might have already been carried out on the broker in a race
     return this._isLive(subscription);
   }
 
@@ -219,13 +214,10 @@ class Consumer {
     try {
       channel = await this._connection.getChannel(queue, options.channel || {});
 
-      // Same shared DEFAULT_CHANNEL object is reused across many subscriptions/reconnects - drop
-      // this subscription's previous listener before adding a new one, or the channel accumulates one
-      // 'close' listener per resubscribe and eventually hits MaxListenersExceededWarning.
+      //If the channel is reused, it could already have a listener. Remove it to avoid multiple listeners on the same channel.
       subscription.channel?.removeListener('close', subscription.onChannelClose);
 
       const onChannelClose = () => {
-        // when channel is closed, we want to be sure we recreate the queue ASAP so we trigger a reconnect by recreating the consumer
         if (!this._isLive(subscription)) {
           return;
         }
@@ -272,8 +264,6 @@ class Consumer {
         return;
       }
 
-      // amqplib invokes consumeFunc synchronously per delivery, so there is no window where a
-      // message is "received" but untracked.
       subscription.inFlightMessages.add(msg);
       try {
         const messageString = msg.content.toString();
@@ -294,8 +284,6 @@ class Consumer {
           // Use callback from action in case it was changed/wrapped in the hook (for instance, for instrumentation)
           const res = await action.callback(body, msg.properties);
 
-          // Abandoned by stop()'s timeout path: it already rejected+requeued this delivery, so
-          // another pod may already be replying to this RPC. Replying again would double-reply.
           if (!this._isAbandoned(subscription, msg)) {
             await this.checkRpc(msg.properties, queue, res);
           }
@@ -347,10 +335,6 @@ class Consumer {
       const { consumerTag } = await channel.consume(subscription.queue, consumeFunc, { noAck: false });
       subscription.consumerTag = consumerTag;
 
-      // A cancel()/cancelAll() that landed between _initializeChannel() and this point had no
-      // consumerTag to cancel, so it only set `cancelled` and sent nothing to the broker. Now that
-      // a real tag exists, actually cancel it - otherwise the subscription goes live despite having
-      // been cancelled, and keeps consuming indefinitely on the public cancel() path.
       if (!this._isLive(subscription)) {
         await this._cancelSubscription(subscription);
       }
@@ -368,9 +352,6 @@ class Consumer {
     const { queue } = subscription;
     let rejectError;
 
-    // Abandoned by stop()'s timeout path: it already rejected+requeued this delivery. Rejecting
-    // again hits amqplib's PRECONDITION_FAILED (closing the shared channel), and replying again
-    // to the RPC would double-reply alongside whichever pod picked up the requeued message.
     if (!this._isAbandoned(subscription, msg)) {
       try {
         channel.reject(msg, requeue);
@@ -423,19 +404,11 @@ class Consumer {
   /** @private */
   async _cancelSubscription(subscription) {
     subscription.cancelled = true;
-
-    // The resubscribe-on-close listener is dead weight once cancelled (it early-returns on the
-    // `cancelled` flag above), and the channel it sits on is shared and long-lived - leaving it
-    // attached leaks one listener per subscribe->cancel cycle, up to MaxListenersExceededWarning.
-    // The subscription itself deliberately stays in `_subscriptions`: `_abandonInFlightMessages()` and
-    // `inFlight()` still need it.
     if (subscription.onChannelClose) {
+      // Does nothing if the subscription is already cancelled
       subscription.channel?.removeListener('close', subscription.onChannelClose);
     }
 
-    // The subscription may have no consumerTag yet - the broker was down at boot and it is sitting in
-    // the retry loop, or _initializeChannel returned null. Nothing to cancel on the broker; the
-    // `cancelled` flag above is what stops the pending retry from ever consuming.
     if (!subscription.channel || !subscription.consumerTag) {
       return;
     }

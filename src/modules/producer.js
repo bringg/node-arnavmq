@@ -131,9 +131,6 @@ class Producer {
       delete rpcQueue.resQueuePromise;
 
       if (error instanceof ConnectionClosedError) {
-        // The connection is terminally closed for the process - stop retrying instead of
-        // spinning forever. This can be reached from the fire-and-forget 'close' listener below,
-        // so we swallow rather than rethrow to avoid an unhandled rejection there.
         logger.warn({
           message: `${loggerAlias} not reinitializing RPC queue for ${sourceQueue}: connection is closed`,
         });
@@ -344,10 +341,6 @@ class Producer {
 
   _shouldRetry(error, currentRetryNumber) {
     if (error instanceof ProducerError || error instanceof ConnectionClosedError || error.message === ERRORS.TIMEOUT) {
-      // ConnectionClosedError means the connection is terminally closed for the process (see
-      // connection.js's close()) - with the default producerMaxRetries: -1 (retry indefinitely),
-      // publish()/produce() would otherwise retry forever against a connection that will never
-      // come back, instead of failing fast the way arnavmq.js's top-level close() documents.
       return false;
     }
     const maxRetries = this._connection.config.producerMaxRetries;
