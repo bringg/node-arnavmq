@@ -20,17 +20,22 @@ class Docker {
   async waitForReady() {
     let lastErr = null;
 
-    for (let i = 0; i < 20; i += 1) {
+    for (let i = 0; i < 40; i += 1) {
+      if (!(await this.isRunning())) {
+        const { stdout } = await exec(`docker logs --tail 50 ${this.name}`).catch(() => ({ stdout: '' }));
+        throw new Error(`RabbitMQ container exited while waiting for it to be ready. Logs:\n${stdout}`);
+      }
+
       try {
         await exec(`docker exec ${this.name} rabbitmqctl status`);
         return;
       } catch (err) {
         lastErr = err;
-        await utils.timeoutPromise(500);
+        await utils.timeoutPromise(1000);
       }
     }
 
-    throw new Error(`RabbitMQ health check failed after 20 iterations: ${lastErr.message}`);
+    throw new Error(`RabbitMQ health check failed after 40 iterations: ${lastErr.message}`);
   }
 
   async isRunning() {
