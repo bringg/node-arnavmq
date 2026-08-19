@@ -207,8 +207,7 @@ describe('graceful shutdown', () => {
           consumerTag: null,
           onChannelClose: null,
           cancelled: false,
-          inFlightMessages: new Set(),
-          abandonedMessages: new Set(),
+          inFlightCount: 0,
         };
 
         await consumer._initializeChannel(record);
@@ -245,7 +244,7 @@ describe('graceful shutdown', () => {
           0,
           'cancelled subscriptions must not leave their resubscribe listener on the shared channel',
         );
-        // ...but the records themselves stay: _abandonInFlightMessages()/inFlight() still read them.
+        // ...but the records themselves stay: inFlight() still reads them.
         assert.strictEqual(consumer._subscriptions.length, 5, 'cancelled records must remain in the registry');
       });
     });
@@ -356,125 +355,84 @@ describe('graceful shutdown', () => {
         assert.strictEqual(consumer.inFlight(rejectQueue), 0, 'expected inFlight() back to 0 once rejected');
         sinon.assert.calledOnce(channel.reject);
       });
-    });
 
-    describe('abandoned-message guards (drain-timeout path)', () => {
-      it('skips ack for an abandoned message and leaves the channel undamaged', async () => {
+      it('rejects+requeues a buffered message without running the handler once the subscription is no longer live', async () => {
         const { channel, consumer } = newTestConsumer();
-        const queue = 'shutdown:guard:ack';
+        const queue = 'shutdown:inflight:buffered-after-cancel';
+        let handlerCalls = 0;
 
-        await consumer.consume(queue, () => 'ok');
+        await consumer.consume(queue, () => {
+          handlerCalls += 1;
+          return 'ok';
+        });
         const record = [...consumer._subscriptions.values()][0];
-        const msg = fakeMessage({ a: 1 });
-        record.abandonedMessages.add(msg);
+        record.cancelled = true; // simulates a delivery buffered before cancel-ok landed
 
-        await deliver(channel, queue, msg);
+        await deliver(channel, queue, fakeMessage({ a: 1 }));
 
+        assert.strictEqual(handlerCalls, 0, 'the handler must not run for a message delivered after cancel');
+        assert.strictEqual(consumer.inFlight(queue), 0);
+        sinon.assert.calledOnce(channel.reject);
+        sinon.assert.calledWith(channel.reject, sinon.match.any, true);
         sinon.assert.notCalled(channel.ack);
-        sinon.assert.notCalled(channel.close);
-      });
-
-      it('skips reject for an abandoned message on the handler-error path and leaves the channel undamaged', async () => {
-        const { channel, consumer } = newTestConsumer();
-        const queue = 'shutdown:guard:reject';
-
-        await consumer.consume(queue, () => {
-          throw new Error('boom');
-        });
-        const record = [...consumer._subscriptions.values()][0];
-        const msg = fakeMessage({ a: 1 });
-        record.abandonedMessages.add(msg);
-
-        await deliver(channel, queue, msg);
-
-        sinon.assert.notCalled(channel.reject);
-        sinon.assert.notCalled(channel.close);
-      });
-
-      it('skips the RPC reply for an abandoned message on the success path', async () => {
-        const { channel, consumer } = newTestConsumer();
-        const queue = 'shutdown:guard:rpc-success';
-
-        await consumer.consume(queue, () => 'ok');
-        const record = [...consumer._subscriptions.values()][0];
-        const msg = fakeMessage({ a: 1 }, { replyTo: 'reply-queue', correlationId: 'abc' });
-        record.abandonedMessages.add(msg);
-
-        await deliver(channel, queue, msg);
-
-        sinon.assert.notCalled(channel.sendToQueue);
-        sinon.assert.notCalled(channel.close);
-      });
-
-      it('skips the RPC reply for an abandoned message on the non-requeue reject path', async () => {
-        const { channel, consumer } = newTestConsumer({ requeue: false });
-        const queue = 'shutdown:guard:rpc-reject';
-
-        await consumer.consume(queue, () => {
-          throw new Error('boom');
-        });
-        const record = [...consumer._subscriptions.values()][0];
-        const msg = fakeMessage({ a: 1 }, { replyTo: 'reply-queue', correlationId: 'abc' });
-        record.abandonedMessages.add(msg);
-
-        await deliver(channel, queue, msg);
-
-        sinon.assert.notCalled(channel.reject);
-        sinon.assert.notCalled(channel.sendToQueue);
-        sinon.assert.notCalled(channel.close);
       });
     });
 
     describe('drain()', () => {
-      it('resolves true immediately when nothing is in flight', async () => {
-        const { channel, consumer } = newTestConsumer();
+      it('resolves immediately when nothing is in flight', async () => {
+        const { consumer } = newTestConsumer();
         await consumer.consume('shutdown:drain:empty', () => 'ok');
 
-        assert.strictEqual(await consumer.drain(1000), true);
+        await consumer.drain();
       });
 
-      it('resolves true once the in-flight handler finishes, and cancels nothing', async () => {
+      it('resolves once the in-flight handler finishes, and cancels nothing', async () => {
         const { channel, consumer } = newTestConsumer();
-        const queue = 'shutdown:drain:waits-then-true';
+        const queue = 'shutdown:drain:waits-then-resolves';
         const handlerDefer = pDefer();
 
         await consumer.consume(queue, () => handlerDefer.promise);
         const deliverPromise = deliver(channel, queue, fakeMessage({ a: 1 }));
 
         assert.strictEqual(consumer.inFlight(queue), 1);
-        const drainPromise = consumer.drain(1000);
+        const drainPromise = consumer.drain();
 
         handlerDefer.resolve('ok');
         await deliverPromise;
 
-        assert.strictEqual(await drainPromise, true);
+        await drainPromise;
         sinon.assert.notCalled(channel.cancel);
       });
 
-      it('resolves false when the in-flight handler does not finish before the timeout', async () => {
+      it('does not resolve while a handler is still running', async () => {
         const { channel, consumer } = newTestConsumer();
-        const queue = 'shutdown:drain:times-out';
+        const queue = 'shutdown:drain:waits-indefinitely';
         const handlerDefer = pDefer();
 
         await consumer.consume(queue, () => handlerDefer.promise);
         const deliverPromise = deliver(channel, queue, fakeMessage({ a: 1 }));
 
-        assert.strictEqual(await consumer.drain(120), false);
+        let drained = false;
+        consumer.drain().then(() => {
+          drained = true;
+        });
 
-        // let the still-running handler finish so it doesn't leak into the next test
+        await utils.timeoutPromise(150);
+        assert.strictEqual(drained, false, 'expected drain() to still be waiting on the in-flight handler');
+
         handlerDefer.resolve('ok');
         await deliverPromise;
       });
     });
 
     describe('stop()', () => {
-      it('cancels every subscription then reports a clean drain with nothing abandoned', async () => {
+      it('cancels every subscription then resolves once nothing is in flight', async () => {
         const { channel, consumer } = newTestConsumer();
         const queue = 'shutdown:stop:clean';
 
         await consumer.consume(queue, () => 'ok');
 
-        assert.deepStrictEqual(await consumer.stop({ timeout: 1000 }), { drained: true, abandoned: {} });
+        await consumer.stop();
         sinon.assert.called(channel.cancel);
         sinon.assert.notCalled(channel.close);
         assert.strictEqual(consumer._shuttingDown, true);
@@ -484,66 +442,34 @@ describe('graceful shutdown', () => {
         const { channel, consumer } = newTestConsumer();
         await consumer.consume('shutdown:stop:idempotent', () => 'ok');
 
-        const [first, second] = await Promise.all([consumer.stop(), consumer.stop()]);
+        await Promise.all([consumer.stop(), consumer.stop()]);
 
-        assert.deepStrictEqual(first, { drained: true, abandoned: {} });
-        assert.strictEqual(second, first, 'both calls must resolve with the one memoized shutdown result');
         sinon.assert.calledOnce(channel.cancel);
       });
 
-      it("on timeout, rejects+requeues abandoned in-flight messages and guards the handler's own ack afterward", async () => {
+      it('waits out a slow handler rather than abandoning it', async () => {
         const { channel, consumer } = newTestConsumer();
-        const queue = 'shutdown:stop:timeout-abandons';
+        const queue = 'shutdown:stop:waits-for-slow-handler';
         const handlerDefer = pDefer();
 
         await consumer.consume(queue, () => handlerDefer.promise);
         const deliverPromise = deliver(channel, queue, fakeMessage({ a: 1 }));
 
-        const stopped = await consumer.stop({ timeout: 120 });
-        assert.deepStrictEqual(stopped, { drained: false, abandoned: { [queue]: 1 } });
+        let stopped = false;
+        const stopPromise = consumer.stop().then(() => {
+          stopped = true;
+        });
 
-        sinon.assert.calledOnce(channel.reject);
-        sinon.assert.calledWith(channel.reject, sinon.match.any, true);
-        sinon.assert.notCalled(channel.close);
+        await utils.timeoutPromise(150);
+        assert.strictEqual(stopped, false, 'expected stop() to still be waiting on the in-flight handler');
+        sinon.assert.notCalled(channel.reject);
 
-        // the handler is not killed - it keeps running and eventually resolves; its own completion
-        // must not double-ack/double-reject/double-reply on a delivery already abandoned above.
         handlerDefer.resolve('ok');
         await deliverPromise;
+        await stopPromise;
 
-        sinon.assert.notCalled(channel.ack);
-        sinon.assert.calledOnce(channel.reject);
-        sinon.assert.notCalled(channel.close);
-      });
-
-      // The per-queue abandoned count is returned to the caller, who turns it into a metric - it has
-      // to be accurate and scoped per queue rather than aggregated.
-      it('reports the abandoned-message count per queue - only the queue that timed out appears in the map', async () => {
-        const { channel, consumer } = newTestConsumer();
-        const cleanQueue = 'shutdown:stop:abandoned-map:clean';
-        const stuckQueue = 'shutdown:stop:abandoned-map:stuck';
-        const handlerDefer = pDefer();
-
-        await consumer.consume(cleanQueue, () => 'ok');
-        await consumer.consume(stuckQueue, () => handlerDefer.promise);
-
-        // one message drains cleanly on cleanQueue before stop() is even called...
-        await deliver(channel, cleanQueue, fakeMessage({ a: 1 }));
-        // ...while two are stuck in the never-resolving handler on stuckQueue.
-        const stuckDeliveries = [
-          deliver(channel, stuckQueue, fakeMessage({ b: 1 })),
-          deliver(channel, stuckQueue, fakeMessage({ b: 2 })),
-        ];
-        assert.strictEqual(consumer.inFlight(stuckQueue), 2);
-
-        const result = await consumer.stop({ timeout: 120 });
-
-        assert.deepStrictEqual(result, { drained: false, abandoned: { [stuckQueue]: 2 } });
-        assert.strictEqual(channel.reject.callCount, 2, 'expected exactly the two stuck messages to be requeued');
-
-        // let the still-running handler finish so it doesn't leak into the next test
-        handlerDefer.resolve('ok');
-        await Promise.all(stuckDeliveries);
+        sinon.assert.calledOnce(channel.ack);
+        sinon.assert.notCalled(channel.reject);
       });
     });
 
@@ -1004,7 +930,6 @@ describe('graceful shutdown', () => {
         consumerSuffix: '',
         producerMaxRetries: -1,
         rpcTimeout: 0,
-        shutdownTimeout: 5000,
         ...overrides,
       });
       return new ArnavMQ(conn);
@@ -1061,7 +986,7 @@ describe('graceful shutdown', () => {
       await arnavmq.publish(queue, { n: 1 });
       await waitFor(() => arnavmq.consumer.inFlight(queue) === 1);
 
-      const closePromise = arnavmq.close({ timeout: 5000 });
+      const closePromise = arnavmq.close();
       await utils.timeoutPromise(100); // give close() time to cancel and start draining
 
       assert.strictEqual(arnavmq.connection.isClosed, false, 'connection must stay open while draining');
@@ -1070,16 +995,15 @@ describe('graceful shutdown', () => {
       assert.strictEqual(callCount, 1);
 
       gate.resolve();
-      assert.deepStrictEqual(await closePromise, { drained: true, abandoned: {} });
+      assert.strictEqual(await closePromise, undefined);
 
       assert.strictEqual(callCount, 1, 'the cancelled subscription must not receive a second delivery');
-      assert.strictEqual(record.abandonedMessages.size, 0, 'the message drained cleanly, nothing should be abandoned');
       assert.strictEqual(arnavmq.connection.isClosed, true);
     });
 
-    it('rejects+requeues an in-flight message when the handler outlives the drain timeout', async () => {
+    it('does not resolve while an in-flight handler is still running, and waits for it rather than abandoning it', async () => {
       const arnavmq = newArnavmq();
-      const queue = 'shutdown:arnavmq-close:timeout-reject';
+      const queue = 'shutdown:arnavmq-close:waits-for-slow-handler';
       const gate = pDefer();
 
       await arnavmq.subscribe(queue, async () => {
@@ -1089,16 +1013,18 @@ describe('graceful shutdown', () => {
       await arnavmq.publish(queue, { n: 1 });
       await waitFor(() => arnavmq.consumer.inFlight(queue) === 1);
 
-      const result = await arnavmq.close({ timeout: 100 });
+      let closed = false;
+      const closePromise = arnavmq.close().then(() => {
+        closed = true;
+      });
 
-      // keyed by queue name, so a caller can emit an abandoned-message metric off it.
-      assert.deepStrictEqual(result, { drained: false, abandoned: { [queue]: 1 } });
-      assert.strictEqual(arnavmq.connection.isClosed, true);
-      const [record] = [...arnavmq.consumer._subscriptions.values()];
-      assert.strictEqual(record.abandonedMessages.size, 1, 'expected the leftover message to be abandoned+requeued');
+      await utils.timeoutPromise(150);
+      assert.strictEqual(closed, false, 'expected close() to still be waiting on the in-flight handler');
+      assert.strictEqual(arnavmq.connection.isClosed, false);
 
-      // let the still-running handler finish so it doesn't leak into later tests
       gate.resolve();
+      await closePromise;
+      assert.strictEqual(arnavmq.connection.isClosed, true);
     });
 
     it('calls producer.stop() before connection.close() - produce() during the drain window still succeeds; only fails with ConnectionClosedError once close() fully resolves', async () => {
@@ -1121,7 +1047,7 @@ describe('graceful shutdown', () => {
       await arnavmq.publish(queue, { n: 1 });
       await waitFor(() => arnavmq.consumer.inFlight(queue) === 1);
 
-      const closePromise = arnavmq.close({ timeout: 5000 });
+      const closePromise = arnavmq.close();
       await utils.timeoutPromise(50); // close() is now cancelling/draining; the handler is still gated
 
       assert.strictEqual(arnavmq.connection.isClosed, false, 'connection must still be open mid-drain');
@@ -1186,18 +1112,12 @@ describe('graceful shutdown', () => {
       await arnavmq.publish(queue, { n: 1 });
       await waitFor(() => arnavmq.consumer.inFlight(queue) === 1);
 
-      const closePromise = arnavmq.close({ timeout: 5000 });
+      const closePromise = arnavmq.close();
       await utils.timeoutPromise(50); // close() has cancelled and is draining; the handler is gated
-      gate.resolve(); // handler finishes and acks well inside the 5s drain budget
+      gate.resolve(); // handler finishes and acks
       await closePromise;
 
-      const [record] = [...arnavmq.consumer._subscriptions.values()];
       assert.strictEqual(callCount, 1);
-      assert.strictEqual(
-        record.abandonedMessages.size,
-        0,
-        'expected a clean drain (nothing abandoned/rejected) - this test is about the acked path',
-      );
       assert.strictEqual(arnavmq.connection.isClosed, true);
 
       // The actual proof, from outside the closed instance: an independent ArnavMQ+Connection pair on
@@ -1217,42 +1137,6 @@ describe('graceful shutdown', () => {
         `expected the acked message to be gone for good, but it was redelivered: ${JSON.stringify(redelivered)}`,
       );
 
-      await fresh.close();
-    });
-
-    it('close({ timeout }) on a handler that outlives it resolves quickly, and a fresh instance receives the rejected+requeued message', async () => {
-      const arnavmq = newArnavmq();
-      const queue = 'shutdown:arnavmq-close:timeout-reject-redelivered';
-      const gate = pDefer(); // deliberately never resolved here - simulates the 5s+ handler that outlives the drain timeout
-
-      await arnavmq.subscribe(queue, async () => {
-        await gate.promise;
-      });
-
-      await arnavmq.publish(queue, { n: 1 });
-      await waitFor(() => arnavmq.consumer.inFlight(queue) === 1);
-
-      const start = Date.now();
-      await arnavmq.close({ timeout: 100 });
-      const elapsed = Date.now() - start;
-
-      assert(elapsed < 2000, `expected close({ timeout: 100 }) to resolve in ~100ms, took ${elapsed}ms`);
-      assert.strictEqual(arnavmq.connection.isClosed, true);
-
-      const fresh = newArnavmq();
-      const receivedDefer = pDefer();
-      let received;
-      await fresh.subscribe(queue, (body) => {
-        received = body;
-        receivedDefer.resolve();
-      });
-
-      // resolves once the requeued message is actually redelivered to this independent consumer;
-      // if it were lost instead of requeued, this hangs until mocha's suite timeout fails the test.
-      await receivedDefer.promise;
-      assert.strictEqual(received.n, 1);
-
-      gate.resolve(); // let the first instance's still-running handler finish so it doesn't leak
       await fresh.close();
     });
 

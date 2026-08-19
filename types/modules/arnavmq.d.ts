@@ -13,16 +13,12 @@ declare namespace arnavmq {
     produce: typeof Producer.prototype.produce;
     publish: typeof Producer.prototype.produce;
     /**
-     * Graceful shutdown: cancel consumers -> drain in-flight handlers (rejecting+requeueing any
-     * still running past the timeout) -> reject pending RPC waiters -> close the connection.
-     * Idempotent - repeated calls are cheap no-ops rather than re-running the sequence.
-     * @param options
-     * @param options.timeout Drain budget in ms, passed through to consumer.stop(). Defaults to
-     *   the `shutdownTimeout` config value (30000ms).
-     * @return Resolves once shutdown has completed (never rejects) with the drain outcome: whether
-     *   everything drained cleanly, and how many in-flight messages were abandoned per queue.
+     * Graceful shutdown: cancel consumers -> drain in-flight handlers (no timeout) -> reject
+     * pending RPC waiters -> close the connection. Idempotent - repeated calls are cheap no-ops
+     * rather than re-running the sequence.
+     * @return Resolves once shutdown has completed (never rejects).
      */
-    close: (options?: { timeout?: number }) => Promise<Consumer.StopResult>;
+    close: () => Promise<void>;
     consumer: {
       consume: typeof Consumer.prototype.consume;
       subscribe: typeof Consumer.prototype.consume;

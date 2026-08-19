@@ -38,31 +38,25 @@ class ArnavMQ {
   }
 
   /**
-   * Graceful shutdown: cancel consumers -> drain in-flight handlers (rejecting+requeueing any
-   * still running past the timeout) -> reject pending RPC waiters -> close the connection.
-   * Idempotent - every step it delegates to (consumer.stop(), producer.stop(), connection.close())
-   * is itself idempotent, so repeated calls are cheap no-ops rather than re-running the sequence.
+   * Graceful shutdown: cancel consumers -> drain in-flight handlers (no timeout - waits until
+   * every one finishes) -> reject pending RPC waiters -> close the connection. Idempotent - every
+   * step it delegates to (consumer.stop(), producer.stop(), connection.close()) is itself
+   * idempotent, so repeated calls are cheap no-ops rather than re-running the sequence.
    *
    * The connection is deliberately kept open through the cancel/drain step: `checkRpc` needs it to
    * reply, and handlers may still `produce()`/`publish()` as part of their work while draining.
    * `connection.close()` (the last step) is the first point at which produce()/publish() starts
    * failing with `ConnectionClosedError`.
-   * @param {object} [options]
-   * @param {number} [options.timeout] Drain budget in ms, passed through to consumer.stop().
-   *   Defaults to the `shutdownTimeout` config value (30000ms).
-   * @return {Promise<{drained: boolean, abandoned: Record<string, number>}>} The drain outcome:
-   *   `drained` is false when the timeout elapsed and messages had to be abandoned, and `abandoned`
-   *   maps queue name to how many messages were abandoned on it (`{}` on a clean drain). Surfaced so
-   *   callers can log/emit a shutdown metric; ignoring the return value is perfectly fine.
+   *
+   * There is no drain timeout: a handler that never finishes means close() never resolves. That is
+   * left to the process orchestrator's own kill grace period rather than this library abandoning
+   * in-flight work on a clock.
+   * @return {Promise<void>}
    */
-  async close(options = {}) {
-    const timeout = options.timeout ?? this.connection.config?.shutdownTimeout;
-
-    const { drained, abandoned } = await this.consumer.stop({ timeout });
+  async close() {
+    await this.consumer.stop();
     this.producer.stop();
     await this.connection.close();
-
-    return { drained, abandoned };
   }
 }
 

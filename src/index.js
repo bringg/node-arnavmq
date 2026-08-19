@@ -23,10 +23,6 @@ module.exports = (config) => {
     // default timeout for RPC calls. If set to '0' there will be none.
     rpcTimeout: 15000,
 
-    // default drain budget (ms) for close()'s graceful shutdown: how long to wait for in-flight
-    // consumer handlers to finish before rejecting+requeueing them and closing the connection.
-    shutdownTimeout: 30000,
-
     // suffix all queues names
     // ex: service-something with suffix :ci becomes service-suffix:ci etc.
     consumerSuffix: '',

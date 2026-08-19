@@ -8,9 +8,6 @@ const loggerAlias = 'arnav_mq:consumer';
 
 // How often `drain()` polls `inFlight()` while waiting for in-flight handlers to finish.
 const DRAIN_POLL_INTERVAL_MS = 50;
-// Fallback budget `drain()`/`stop()` give in-flight handlers to finish, only used if the
-// `shutdownTimeout` config value (see src/index.js) is somehow unset.
-const DEFAULT_DRAIN_TIMEOUT_MS = 30000;
 
 class Consumer {
   constructor(connection) {
@@ -47,14 +44,6 @@ class Consumer {
    */
   _isLive(subscription) {
     return !this._shuttingDown && !subscription.cancelled && !this._connection.isClosed;
-  }
-
-  /**
-   * Whether stop()'s timeout path already rejected+requeued this delivery - so acking/rejecting/
-   * RPC-replying to it again would double-handle a message another pod may already be processing.
-   */
-  _isAbandoned(subscription, msg) {
-    return subscription.abandonedMessages.has(msg);
   }
 
   /**
@@ -154,8 +143,7 @@ class Consumer {
       consumerTag: null,
       onChannelClose: null,
       cancelled: false,
-      inFlightMessages: new Set(), // Set<amqp.Message> - tracked so the drain/timeout path has the actual messages to reject, not just a count.
-      abandonedMessages: new Set(), // Set<amqp.Message> - messages requeued by stop()'s timeout path; per-delivery guard against double ack/reject/RPC-reply.
+      inFlightCount: 0, // handlers currently running, not yet acked/rejected.
     };
     this._subscriptions.push(subscription);
 
@@ -264,7 +252,23 @@ class Consumer {
         return;
       }
 
-      subscription.inFlightMessages.add(msg);
+      if (!this._isLive(subscription)) {
+        // Buffered by the broker before cancel-ok landed (prefetch > 1) - hand it straight back
+        // instead of running the handler, so it can't block drain()/stop()/close() on work that
+        // was never going to be allowed to finish here.
+        try {
+          channel.reject(msg, true);
+        } catch (error) {
+          logger.error({
+            message: `${loggerAlias} Failed to reject message received after shutdown on queue ${queue}: ${error.message}`,
+            error,
+            params: { queue },
+          });
+        }
+        return;
+      }
+
+      subscription.inFlightCount += 1;
       try {
         const messageString = msg.content.toString();
         logger.debug({
@@ -284,9 +288,7 @@ class Consumer {
           // Use callback from action in case it was changed/wrapped in the hook (for instance, for instrumentation)
           const res = await action.callback(body, msg.properties);
 
-          if (!this._isAbandoned(subscription, msg)) {
-            await this.checkRpc(msg.properties, queue, res);
-          }
+          await this.checkRpc(msg.properties, queue, res);
         } catch (error) {
           logger.error({
             message: `${loggerAlias} Failed processing message from queue ${queue}: ${error.message}`,
@@ -304,21 +306,17 @@ class Consumer {
           return;
         }
 
-        // Abandoned by stop()'s timeout path: it already rejected this delivery on this channel.
-        // Acking it too would hit amqplib's PRECONDITION_FAILED and close the (shared) channel.
         let ackError;
-        if (!this._isAbandoned(subscription, msg)) {
-          try {
-            channel.ack(msg);
-          } catch (err) {
-            ackError = err;
+        try {
+          channel.ack(msg);
+        } catch (err) {
+          ackError = err;
 
-            logger.error({
-              message: `${loggerAlias} Failed to ack message after processing finished on queue ${queue}: ${ackError.message}`,
-              error: ackError,
-              params: { queue },
-            });
-          }
+          logger.error({
+            message: `${loggerAlias} Failed to ack message after processing finished on queue ${queue}: ${ackError.message}`,
+            error: ackError,
+            params: { queue },
+          });
         }
         await this.hooks.trigger(this, ConsumerHooks.afterProcessMessageEvent, {
           queue,
@@ -327,7 +325,7 @@ class Consumer {
           ackError,
         });
       } finally {
-        subscription.inFlightMessages.delete(msg);
+        subscription.inFlightCount -= 1;
       }
     };
 
@@ -352,22 +350,20 @@ class Consumer {
     const { queue } = subscription;
     let rejectError;
 
-    if (!this._isAbandoned(subscription, msg)) {
-      try {
-        channel.reject(msg, requeue);
+    try {
+      channel.reject(msg, requeue);
 
-        if (!requeue) {
-          // If not requeued and message will be removed from the queue, return rpc error response if needed.
-          await this.checkRpc(msg.properties, queue, error instanceof Error ? { error } : undefined);
-        }
-      } catch (err) {
-        rejectError = err;
-        logger.error({
-          message: `${loggerAlias} Failed to reject message after processing failure on queue ${queue}: ${rejectError.message}`,
-          error: rejectError,
-          params: { queue },
-        });
+      if (!requeue) {
+        // If not requeued and message will be removed from the queue, return rpc error response if needed.
+        await this.checkRpc(msg.properties, queue, error instanceof Error ? { error } : undefined);
       }
+    } catch (err) {
+      rejectError = err;
+      logger.error({
+        message: `${loggerAlias} Failed to reject message after processing failure on queue ${queue}: ${rejectError.message}`,
+        error: rejectError,
+        params: { queue },
+      });
     }
 
     await this.hooks.trigger(this, ConsumerHooks.afterProcessMessageEvent, {
@@ -425,108 +421,39 @@ class Consumer {
   }
 
   /**
-   * Resolves true once every in-flight message handler has finished (inFlight() reaches 0), or
-   * false if `timeoutMs` elapses first. Cancels nothing - pair with `cancel()`/`cancelAll()`.
+   * Resolves once every in-flight message handler has finished (inFlight() reaches 0). Cancels
+   * nothing - pair with `cancel()`/`cancelAll()`. No timeout: a handler that never finishes means
+   * this never resolves, and shutdown is left to the process orchestrator's own kill grace period.
    *
    * Polls `inFlight()` every 50ms rather than resolving off a deferred set in the consume finally
    * block: with a shared channel and prefetch > 1, deliveries already buffered in the socket keep
    * arriving for a few ticks after cancel-ok, and a deferred would resolve on the first momentary
    * zero in between two such deliveries.
-   * @param {number} [timeoutMs] How long to wait for in-flight handlers to finish. Defaults to the
-   *   `shutdownTimeout` config value (30s).
-   * @return {Promise<boolean>} true if drained before the timeout, false otherwise.
+   * @return {Promise<void>}
    */
-  async drain(timeoutMs = this._configuration.shutdownTimeout ?? DEFAULT_DRAIN_TIMEOUT_MS) {
-    const deadline = Date.now() + timeoutMs;
-
+  async drain() {
     while (this.inFlight() > 0) {
-      if (Date.now() >= deadline) {
-        return false;
-      }
       await utils.timeoutPromise(DRAIN_POLL_INTERVAL_MS);
     }
-
-    return true;
   }
 
   /**
-   * cancelAll(), then drain(timeout). Idempotent - repeated calls share the one in-flight
-   * shutdown promise instead of running cancelAll()/drain() more than once.
-   *
-   * If drain() times out, every message still in-flight for every subscription is rejected with
-   * requeue=true (so another pod picks it up) and recorded in that subscription's
-   * `abandonedMessages`, which guards the ack/reject/RPC-reply call sites the still-running
-   * handler will eventually hit. The handler itself is not killed - it keeps running until the
-   * process exits, its work simply duplicated elsewhere, which this system's at-least-once
-   * delivery already assumes.
-   * @param {object} [options]
-   * @param {number} [options.timeout] Passed through to drain(). Defaults to 30s.
-   * @return {Promise<{drained: boolean, abandoned: Record<string, number>}>} `drained` is true if
-   *   every handler finished inside the budget, false if in-flight messages were abandoned.
-   *   `abandoned` maps queue name to how many messages were abandoned on it (empty on a clean drain);
-   *   callers use it to emit an abandoned-message metric.
+   * cancelAll(), then drain(). Idempotent - repeated calls share the one in-flight shutdown
+   * promise instead of running cancelAll()/drain() more than once.
+   * @return {Promise<void>} Resolves once every in-flight handler has finished.
    */
-  async stop(options = {}) {
+  async stop() {
     if (!this._stopPromise) {
-      this._stopPromise = this._stop(options.timeout);
+      this._stopPromise = this._stop();
     }
 
     return await this._stopPromise;
   }
 
   /** @private */
-  async _stop(timeoutMs) {
+  async _stop() {
     await this.cancelAll();
-
-    const drained = await this.drain(timeoutMs);
-    const abandoned = drained ? {} : this._abandonInFlightMessages();
-
-    return { drained, abandoned };
-  }
-
-  /**
-   * @private
-   * @return {Record<string, number>} How many messages were abandoned per queue by this call. Queues
-   *   with nothing in flight are absent, so a clean pass returns `{}`. Two subscriptions on the same
-   *   queue contribute to the same entry.
-   */
-  _abandonInFlightMessages() {
-    const abandoned = {};
-
-    for (const subscription of this._subscriptions) {
-      const { inFlightMessages, channel, queue } = subscription;
-      if (inFlightMessages.size === 0) {
-        continue;
-      }
-
-      const abandonedCount = inFlightMessages.size;
-      abandoned[queue] = (abandoned[queue] || 0) + abandonedCount;
-
-      for (const msg of inFlightMessages) {
-        subscription.abandonedMessages.add(msg);
-
-        if (!channel) {
-          continue;
-        }
-
-        try {
-          channel.reject(msg, true); // requeue -> another pod picks it up
-        } catch (error) {
-          logger.error({
-            message: `${loggerAlias} Failed to reject abandoned in-flight message on queue ${queue}: ${error.message}`,
-            error,
-            params: { queue },
-          });
-        }
-      }
-
-      logger.warn({
-        message: `${loggerAlias} Timed out waiting for in-flight handlers on queue ${queue}; abandoned and requeued ${abandonedCount} message(s)`,
-        params: { queue, count: abandonedCount },
-      });
-    }
-
-    return abandoned;
+    await this.drain();
   }
 
   /**
@@ -534,7 +461,7 @@ class Consumer {
    * @return {number}
    */
   inFlight() {
-    return this._subscriptions.reduce((total, sub) => total + sub.inFlightMessages.size, 0);
+    return this._subscriptions.reduce((total, sub) => total + sub.inFlightCount, 0);
   }
 }
 

@@ -17,20 +17,8 @@ type Subscription = {
   onChannelClose: (() => void) | null;
   /** Set by `_cancelSubscription()`; once true this subscription never (re)subscribes again. */
   cancelled: boolean;
-  /** Messages whose handler is currently running. */
-  inFlightMessages: Set<amqp.Message>;
-  /** Messages requeued by `stop()`'s timeout path; a per-delivery guard against double ack/reject/RPC-reply. */
-  abandonedMessages: Set<amqp.Message>;
-};
-/** The outcome of a `stop()` (and, through it, of `arnavmq.close()`). */
-type StopResult = {
-  /** true if every in-flight handler finished inside the drain budget, false if messages were abandoned. */
-  drained: boolean;
-  /**
-   * Queue name -> how many in-flight messages were abandoned (rejected+requeued) on it. Empty on a
-   * clean drain. Intended for an abandoned-message shutdown metric.
-   */
-  abandoned: Record<string, number>;
+  /** Count of handlers currently running, not yet acked/rejected. */
+  inFlightCount: number;
 };
 
 declare class Consumer {
@@ -88,22 +76,17 @@ declare class Consumer {
    */
   cancelAll(): Promise<void>;
   /**
-   * Resolves true once every in-flight message handler has finished (inFlight() reaches 0), or
-   * false if `timeoutMs` elapses first. Cancels nothing - pair with `cancel()`/`cancelAll()`.
-   * @param timeoutMs How long to wait for in-flight handlers to finish. Defaults to 30s.
-   * @return true if drained before the timeout, false otherwise.
+   * Resolves once every in-flight message handler has finished (inFlight() reaches 0). Cancels
+   * nothing - pair with `cancel()`/`cancelAll()`. No timeout: a handler that never finishes means
+   * this never resolves.
    */
-  drain(timeoutMs?: number): Promise<boolean>;
+  drain(): Promise<void>;
   /**
-   * cancelAll(), then drain(options.timeout). Idempotent - repeated/concurrent calls share the one
-   * in-flight shutdown promise. If drain() times out, every message still in-flight is rejected
-   * with requeue=true and marked as abandoned, so the still-running handler's eventual
-   * ack/reject/RPC-reply for it becomes a no-op.
-   * @param options
-   * @param options.timeout Passed through to drain(). Defaults to 30s.
-   * @return The drain outcome: whether it drained cleanly, and how many messages were abandoned per queue.
+   * cancelAll(), then drain(). Idempotent - repeated/concurrent calls share the one in-flight
+   * shutdown promise.
+   * @return Resolves once every in-flight handler has finished.
    */
-  stop(options?: { timeout?: number }): Promise<StopResult>;
+  stop(): Promise<void>;
   /**
    * Count of currently in-flight messages (handler running, not yet acked/rejected).
    * @param queue When given, count only subscriptions on this queue; otherwise every subscription.
@@ -123,7 +106,7 @@ declare class Consumer {
 }
 
 declare namespace Consumer {
-  export { ConsumeOptions, ConsumeCallback, StopResult, Subscription };
+  export { ConsumeOptions, ConsumeCallback, Subscription };
 }
 
 export = Consumer;
