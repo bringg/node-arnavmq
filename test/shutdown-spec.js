@@ -751,6 +751,45 @@ describe('graceful shutdown', () => {
         await assert.rejects(() => conn.getChannel('any-queue', {}), ConnectionClosedError);
       });
     });
+
+    describe('close() landing between getConnection() and the channel-cache check', () => {
+      // getChannel()/getDefaultChannel() each do `await getConnection()` then touch `_channels`.
+      // close() can run entirely inside that gap: it flips `isClosed` synchronously, snapshots and
+      // clears the channel cache in closeAll(), and closes the socket. Without a re-check of
+      // isClosed right after getConnection() resolves, the resumed call would insert a brand new
+      // channel into the (now-cleared) cache that closeAll() already walked past - a channel never
+      // protected by the Channel.Close-Ok barrier, escaping into a connection that's tearing down.
+      function driveCloseIntoTheGap(conn) {
+        const originalGetConnection = conn.getConnection.bind(conn);
+        sandbox.stub(conn, 'getConnection').callsFake(async () => {
+          const result = await originalGetConnection();
+          await conn.close();
+          return result;
+        });
+      }
+
+      it('getChannel() rejects with ConnectionClosedError instead of creating an orphan channel', async () => {
+        const conn = newConnection();
+        const amqpConnection = await conn.getConnection();
+        const createChannelSpy = sandbox.spy(amqpConnection, 'createChannel');
+
+        driveCloseIntoTheGap(conn);
+
+        await assert.rejects(() => conn.getChannel('some-queue', {}), ConnectionClosedError);
+        sinon.assert.notCalled(createChannelSpy);
+      });
+
+      it('getDefaultChannel() rejects with ConnectionClosedError instead of creating an orphan channel', async () => {
+        const conn = newConnection();
+        const amqpConnection = await conn.getConnection();
+        const createChannelSpy = sandbox.spy(amqpConnection, 'createChannel');
+
+        driveCloseIntoTheGap(conn);
+
+        await assert.rejects(() => conn.getDefaultChannel(), ConnectionClosedError);
+        sinon.assert.notCalled(createChannelSpy);
+      });
+    });
   });
 
   describe('producer.js reconnect-on-close guard', () => {

@@ -157,11 +157,22 @@ class Connection {
 
   async getChannel(queue, config) {
     await this.getConnection();
+    // `close()` flips `isClosed` synchronously (before any of its own awaits), so re-checking here,
+    // synchronously after `getConnection()` resolves and before touching `_channels`, closes the gap
+    // where `close()` ran entirely between the two awaits above and already snapshotted/cleared
+    // `_channels` in `closeAll()` - without this, we'd insert a new channel into that cleared map
+    // that `closeAll()` will never see or close before the connection socket is torn down.
+    if (this.isClosed) {
+      throw new ConnectionClosedError();
+    }
     return await this._channels.get(queue, config);
   }
 
   async getDefaultChannel() {
     await this.getConnection();
+    if (this.isClosed) {
+      throw new ConnectionClosedError();
+    }
     return await this._channels.defaultChannel();
   }
 
