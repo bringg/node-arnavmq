@@ -22,9 +22,6 @@ declare namespace arnavmq {
     consumer: {
       consume: typeof Consumer.prototype.consume;
       subscribe: typeof Consumer.prototype.consume;
-      cancel: typeof Consumer.prototype.cancel;
-      stop: typeof Consumer.prototype.stop;
-      drain: typeof Consumer.prototype.drain;
       inFlight: typeof Consumer.prototype.inFlight;
     };
     producer: {

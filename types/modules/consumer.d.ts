@@ -62,37 +62,25 @@ declare class Consumer {
   subscribe(queue: string, callback: ConsumeCallback): Promise<boolean>;
 
   /**
-   * basic.cancel by consumerTag for every subscription on `queue`. Does NOT close the channel (it
-   * is shared with other consumers and with RPC replies) and does NOT wait for in-flight handlers
-   * - use `drain()`/`stop()` for that. Cancelled subscriptions are never resubscribed.
-   * @param queue The queue to stop consuming from.
-   * @return Resolves once every subscription on `queue` has been cancelled.
+   * Count of currently in-flight messages across every subscription (handler running, not yet
+   * acked/rejected).
    */
-  cancel(queue: string): Promise<void>;
-  /**
-   * cancel()s every subscription across every queue, and marks this consumer as shutting down so
-   * no subscription resubscribes/retries afterward.
-   * @return Resolves once every subscription has been cancelled.
-   */
-  cancelAll(): Promise<void>;
+  inFlight(): number;
+
   /**
    * Resolves once every in-flight message handler has finished (inFlight() reaches 0). Cancels
-   * nothing - pair with `cancel()`/`cancelAll()`. No timeout: a handler that never finishes means
-   * this never resolves.
+   * nothing - pair with `stop()`. No timeout: a handler that never finishes means this never
+   * resolves.
    */
-  drain(): Promise<void>;
+  private _drain(): Promise<void>;
   /**
-   * cancelAll(), then drain(). Idempotent - repeated/concurrent calls share the one in-flight
-   * shutdown promise.
+   * Cancels every subscription across every queue, then _drain()s. Idempotent - repeated/concurrent
+   * calls share the one in-flight shutdown promise. Internal - not part of the object arnavmq.js's
+   * factory returns publicly; call `close()` on the top-level module instead.
    * @return Resolves once every in-flight handler has finished.
    */
-  stop(): Promise<void>;
-  /**
-   * Count of currently in-flight messages (handler running, not yet acked/rejected).
-   * @param queue When given, count only subscriptions on this queue; otherwise every subscription.
-   */
-  inFlight(queue?: string): number;
-
+  private stop(): Promise<void>;
+  private _cancelAll(): Promise<void>;
   private _initializeChannel(subscription: Subscription): Promise<amqp.Channel>;
   private _consumeQueue(channel: amqp.Channel, subscription: Subscription): Promise<void>;
   private _rejectMessageAfterProcess(

@@ -38,7 +38,7 @@ async function withTimeout(promise, timeoutMs, what) {
   try {
     return await Promise.race([promise, timeout]);
   } finally {
-    return clearTimeout(timeoutId);
+    clearTimeout(timeoutId);
   }
 }
 

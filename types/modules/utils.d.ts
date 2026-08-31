@@ -13,4 +13,9 @@ export namespace emptyLogger {
 export function getCorrelationId(options: { correlationId?: string }): string;
 declare function empty(): void;
 export declare function timeoutPromise(timer: number): Promise<void>;
+/**
+ * Resolves with `promise`, or rejects once `timeoutMs` elapses - whichever happens first.
+ * @param what Described in the timeout error message.
+ */
+export declare function withTimeout<T>(promise: Promise<T>, timeoutMs: number, what: string): Promise<T>;
 export {};

@@ -43,9 +43,10 @@ declare class Producer {
   /**
    * Create a RPC-ready queue
    * @param  queue the queue name in which we send a RPC request
-   * @return Resolves with the the response queue name when the answer response queue is ready to receive messages
+   * @return Resolves with the response queue name once it's ready to receive messages, or
+   *   undefined if the connection is closed.
    */
-  private createRpcQueue(queue: string): Promise<string>;
+  private createRpcQueue(queue: string): Promise<string | undefined>;
   /**
    * Produces a message to a queue through the default exchange, or publishes to the given exchange if the options have a `routingKey`, using it for the queue name.
    * @param queue The queue to send or exchange to publish to.
@@ -66,9 +67,10 @@ declare class Producer {
    * @param queue the queue to send `msg` on
    * @param msg string, object, number.. anything bufferable/serializable
    * @param options contain rpc property (if true, enable rpc for this message)
-   * @return Resolves when message is correctly sent, or when response is received when rpc is enabled
+   * @return When `options.rpc` is true, resolves with the parsed RPC response body once it
+   *   arrives; otherwise resolves with whether the message was sent.
    */
-  private checkRpc(queue: string, msg: Buffer, options: ProduceOptions): Promise<boolean>;
+  private checkRpc(queue: string, msg: Buffer, options: ProduceOptions): Promise<boolean | unknown>;
   /**
    * @deprecated Use publish instead
    * Ensure channel exists and send message using `checkRpc`
@@ -89,6 +91,12 @@ declare class Producer {
   ): Promise<unknown>;
 
   private _shouldRetry(error: Error | ProducerError, currentRetryNumber: number): boolean;
+  /**
+   * Rejects every RPC promise currently pending in `amqpRPCQueues` with `ConnectionClosedError`,
+   * and clears its timeout. Idempotent: a second call is a no-op. Internal - not part of the
+   * object producer.js's factory returns publicly.
+   */
+  private stop(): void;
 }
 
 declare namespace Producer {

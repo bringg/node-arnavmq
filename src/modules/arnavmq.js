@@ -73,9 +73,6 @@ module.exports = (connection) => {
   const consumer = {
     consume: instance.consume.bind(instance),
     subscribe: instance.subscribe.bind(instance),
-    cancel: instance.consumer.cancel.bind(instance.consumer),
-    stop: instance.consumer.stop.bind(instance.consumer),
-    drain: instance.consumer.drain.bind(instance.consumer),
     inFlight: instance.consumer.inFlight.bind(instance.consumer),
   };
 

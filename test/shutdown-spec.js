@@ -61,6 +61,16 @@ function deliver(channel, queue, msg) {
   return fn(msg);
 }
 
+/**
+ * basic.cancel by consumerTag for every subscription on `queue` on this consumer - a stand-in for
+ * the removed public per-queue cancel(), for tests that need to cancel a single queue without a
+ * full stop().
+ */
+async function cancelQueue(consumer, queue) {
+  const subscriptions = consumer._subscriptions.filter((sub) => sub.queue === queue);
+  await Promise.all(subscriptions.map((sub) => consumer._cancelSubscription(sub)));
+}
+
 /** A fake amqp.node channel good enough to drive producer.js's RPC path without a broker. */
 function createFakeChannelForRpc() {
   const channel = new EventEmitter();
@@ -85,7 +95,7 @@ describe('graceful shutdown', () => {
         consumer = new Consumer(arnavmq.connection);
       });
 
-      it('cancel() cancels by consumerTag and never closes the shared channel', async () => {
+      it('cancelling a queue cancels by consumerTag and never closes the shared channel', async () => {
         const queue = 'shutdown:cancel:no-close';
         await consumer.consume(queue, () => {});
 
@@ -95,7 +105,7 @@ describe('graceful shutdown', () => {
         const closeSpy = sandbox.spy(channel, 'close');
         const cancelSpy = sandbox.spy(channel, 'cancel');
 
-        await consumer.cancel(queue);
+        await cancelQueue(consumer, queue);
 
         sinon.assert.calledWith(cancelSpy, record.consumerTag);
         sinon.assert.notCalled(closeSpy);
@@ -105,30 +115,30 @@ describe('graceful shutdown', () => {
         await channel.checkQueue(queue);
       });
 
-      // The test above proves cancel() never closes the shared channel via a spy; this proves the
-      // *consequence* end-to-end against the real broker - a live queueB consumer and a live
-      // producer RPC round-trip both keep working concurrently with cancelling queueA, and queueA
-      // itself really stops receiving.
-      it('cancel(queueA) stops A while a concurrent queueB consumer and a producer RPC call keep working (regression: cancel by tag, never close the shared channel)', async () => {
+      // The test above proves cancelling a queue never closes the shared channel via a spy; this
+      // proves the *consequence* end-to-end against the real broker - a live queueB consumer and a
+      // live producer RPC round-trip both keep working concurrently with cancelling queueA, and
+      // queueA itself really stops receiving.
+      it('cancelling queueA stops A while a concurrent queueB consumer and a producer RPC call keep working (regression: cancel by tag, never close the shared channel)', async () => {
         const queueA = 'shutdown:cancel:regression:a';
         const queueB = 'shutdown:cancel:regression:b';
         const rpcQueue = 'shutdown:cancel:regression:rpc';
 
         let countA = 0;
         let countB = 0;
-        await arnavmq.consumer.consume(queueA, () => {
+        await consumer.consume(queueA, () => {
           countA += 1;
         });
-        await arnavmq.consumer.consume(queueB, () => {
+        await consumer.consume(queueB, () => {
           countB += 1;
         });
-        await arnavmq.consumer.consume(rpcQueue, () => 'pong');
+        await consumer.consume(rpcQueue, () => 'pong');
 
         await arnavmq.producer.produce(queueA, { n: 1 });
         await utils.timeoutPromise(300);
         assert.strictEqual(countA, 1, 'expected queueA to receive its message before being cancelled');
 
-        await arnavmq.consumer.cancel(queueA);
+        await cancelQueue(consumer, queueA);
 
         // concurrently with queueA being cancelled: queueB keeps consuming, an RPC round-trip keeps
         // working, and a further produce to the now-cancelled queueA must never be delivered.
@@ -144,7 +154,7 @@ describe('graceful shutdown', () => {
         assert.strictEqual(countA, 1, 'the cancelled queueA subscription must not receive further deliveries');
       });
 
-      it('cancel()/cancelAll() on a record with no consumerTag yet just marks it cancelled', async () => {
+      it('cancelling a record with no consumerTag yet just marks it cancelled', async () => {
         const queue = 'shutdown:cancel:no-tag-yet';
         sandbox.stub(consumer, '_initializeChannel').resolves(null);
 
@@ -156,7 +166,7 @@ describe('graceful shutdown', () => {
         assert(record, 'expected a record to be registered synchronously by subscribe()');
         assert.strictEqual(record.consumerTag, null);
 
-        await consumer.cancel(queue);
+        await cancelQueue(consumer, queue);
 
         assert.strictEqual(record.cancelled, true);
         assert.strictEqual(await subscribePromise, false);
@@ -171,7 +181,7 @@ describe('graceful shutdown', () => {
         const record = [...consumer._subscriptions.values()].find((r) => r.queue === queue);
         assert(record, 'expected a record to be registered synchronously by subscribe()');
 
-        await consumer.cancel(queue);
+        await cancelQueue(consumer, queue);
         assert.strictEqual(await subscribePromise, false);
 
         const callCountAfterCancel = initStub.callCount;
@@ -183,8 +193,8 @@ describe('graceful shutdown', () => {
         );
       });
 
-      it('cancelAll() sets _shuttingDown so even brand-new subscribe() calls never consume', async () => {
-        await consumer.cancelAll();
+      it('_cancelAll() sets _shuttingDown so even brand-new subscribe() calls never consume', async () => {
+        await consumer._cancelAll();
         assert.strictEqual(consumer._shuttingDown, true);
 
         const initSpy = sandbox.spy(consumer, '_initializeChannel');
@@ -236,7 +246,7 @@ describe('graceful shutdown', () => {
 
         for (let i = 0; i < 5; i += 1) {
           await consumer.consume(queue, () => {});
-          await consumer.cancel(queue);
+          await cancelQueue(consumer, queue);
         }
 
         assert.strictEqual(
@@ -250,9 +260,9 @@ describe('graceful shutdown', () => {
     });
 
     // `record.channel` is set inside _initializeChannel, but `record.consumerTag` only exists once
-    // assertQueue+basic.consume have both round-tripped to the broker - a cancel() landing in that
+    // assertQueue+basic.consume have both round-tripped to the broker - a cancel landing in that
     // window must be re-checked once the tag arrives, or the subscription goes live anyway.
-    describe('cancel() landing mid-subscribe (before consumerTag exists)', () => {
+    describe('cancel landing mid-subscribe (before consumerTag exists)', () => {
       it('cancels the subscription on the broker once its tag arrives - two consume()s on one queue, the second cancelled mid-flight', async () => {
         const { channel, consumer } = newTestConsumer();
         const queue = 'shutdown:cancel:mid-flight';
@@ -277,8 +287,8 @@ describe('graceful shutdown', () => {
         assert.strictEqual(second.consumerTag, null, 'expected it to be mid-flight, without a tag yet');
         sinon.assert.called(channel.consume);
 
-        // cancel() here can send nothing to the broker - there is no tag yet.
-        await consumer.cancel(queue);
+        // cancelling here can send nothing to the broker - there is no tag yet.
+        await cancelQueue(consumer, queue);
         assert.strictEqual(second.cancelled, true);
         sinon.assert.neverCalledWith(channel.cancel, 'mid-flight-tag');
 
@@ -313,7 +323,7 @@ describe('graceful shutdown', () => {
         assert(record.channel, 'expected _initializeChannel to have already attached the shared channel');
         assert.strictEqual(record.consumerTag, null);
 
-        await consumer.cancel(queue);
+        await cancelQueue(consumer, queue);
         assertGate.resolve();
 
         assert.strictEqual(
@@ -378,12 +388,12 @@ describe('graceful shutdown', () => {
       });
     });
 
-    describe('drain()', () => {
+    describe('_drain()', () => {
       it('resolves immediately when nothing is in flight', async () => {
         const { consumer } = newTestConsumer();
         await consumer.consume('shutdown:drain:empty', () => 'ok');
 
-        await consumer.drain();
+        await consumer._drain();
       });
 
       it('resolves once the in-flight handler finishes, and cancels nothing', async () => {
@@ -395,7 +405,7 @@ describe('graceful shutdown', () => {
         const deliverPromise = deliver(channel, queue, fakeMessage({ a: 1 }));
 
         assert.strictEqual(consumer.inFlight(queue), 1);
-        const drainPromise = consumer.drain();
+        const drainPromise = consumer._drain();
 
         handlerDefer.resolve('ok');
         await deliverPromise;
@@ -413,12 +423,12 @@ describe('graceful shutdown', () => {
         const deliverPromise = deliver(channel, queue, fakeMessage({ a: 1 }));
 
         let drained = false;
-        consumer.drain().then(() => {
+        consumer._drain().then(() => {
           drained = true;
         });
 
         await utils.timeoutPromise(150);
-        assert.strictEqual(drained, false, 'expected drain() to still be waiting on the in-flight handler');
+        assert.strictEqual(drained, false, 'expected _drain() to still be waiting on the in-flight handler');
 
         handlerDefer.resolve('ok');
         await deliverPromise;
@@ -994,10 +1004,16 @@ describe('graceful shutdown', () => {
         assert.strictEqual(typeof arnavmq.connection.isClosed, 'boolean');
         assert.strictEqual(typeof arnavmq.consumer.consume, 'function');
         assert.strictEqual(typeof arnavmq.consumer.subscribe, 'function');
-        assert.strictEqual(typeof arnavmq.consumer.cancel, 'function');
-        assert.strictEqual(typeof arnavmq.consumer.stop, 'function');
-        assert.strictEqual(typeof arnavmq.consumer.drain, 'function');
         assert.strictEqual(typeof arnavmq.consumer.inFlight, 'function');
+      });
+
+      it('does not expose cancel/stop/drain on the consumer sub-API - close() is the only public shutdown entry point', () => {
+        const arnavmq = arnavmqConfigurator();
+
+        assert.strictEqual(arnavmq.consumer.cancel, undefined);
+        assert.strictEqual(arnavmq.consumer.stop, undefined);
+        assert.strictEqual(arnavmq.consumer.drain, undefined);
+        assert.strictEqual(arnavmq.producer.stop, undefined);
       });
 
       // `instanceof ConnectionClosedError` is how close()'s contract expects callers to detect the
@@ -1112,15 +1128,15 @@ describe('graceful shutdown', () => {
       const queue = 'shutdown:arnavmq-close:idempotent';
       await arnavmq.subscribe(queue, () => {});
 
-      const cancelAllSpy = sandbox.spy(arnavmq.consumer, 'cancelAll');
+      const cancelAllSpy = sandbox.spy(arnavmq.consumer, '_cancelAll');
       const connectionCloseSpy = sandbox.spy(arnavmq.connection, 'close');
 
       await Promise.all([arnavmq.close(), arnavmq.close()]);
       await arnavmq.close();
 
       assert.strictEqual(arnavmq.connection.isClosed, true);
-      // consumer.stop() memoizes its own shutdown promise, so cancelAll() only actually runs once no
-      // matter how many times the top-level close() calls into it.
+      // consumer.stop() memoizes its own shutdown promise, so _cancelAll() only actually runs once
+      // no matter how many times the top-level close() calls into it.
       sinon.assert.calledOnce(cancelAllSpy);
       // the top-level close() itself is called 3 times above and must not throw on any of them.
       sinon.assert.calledThrice(connectionCloseSpy);
@@ -1179,7 +1195,7 @@ describe('graceful shutdown', () => {
       await fresh.close();
     });
 
-    // cancelAll() must mark every record cancelled before the channel's/connection's own 'close'
+    // _cancelAll() must mark every record cancelled before the channel's/connection's own 'close'
     // event fires, or the onChannelClose listener would try to resubscribe against a connection
     // that's being torn down.
     it('after close(), _consumeQueue is never invoked again - no resubscribe fight with the closing connection', async () => {

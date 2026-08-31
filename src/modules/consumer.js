@@ -19,7 +19,7 @@ class Consumer {
     // the same queue with different callbacks are legal, and queue-keying would silently drop a
     // consumerTag).
     this._subscriptions = [];
-    // Set by cancelAll()/stop(): stops resubscribe/retry for every subscription, existing and future.
+    // Set by _cancelAll()/stop(): stops resubscribe/retry for every subscription, existing and future.
     this._shuttingDown = false;
     // Memoized stop() promise, so repeated calls share one in-flight shutdown instead of racing.
     this._stopPromise = null;
@@ -376,23 +376,12 @@ class Consumer {
   }
 
   /**
-   * basic.cancel by consumerTag for every subscription on `queue`. Does NOT close the channel (it
-   * is shared with other consumers and with RPC replies) and does NOT wait for in-flight handlers
-   * - use `drain()`/`stop()` for that. Cancelled subscriptions are never resubscribed.
-   * @param {string} queue The queue to stop consuming from.
-   * @return {Promise<void>}
-   */
-  async cancel(queue) {
-    const subscriptions = this._subscriptions.filter((sub) => sub.queue === queue);
-    await Promise.all(subscriptions.map((sub) => this._cancelSubscription(sub)));
-  }
-
-  /**
-   * cancel()s every subscription across every queue, and marks this consumer as shutting down so
+   * Cancels every subscription across every queue, and marks this consumer as shutting down so
    * no subscription resubscribes/retries afterward.
+   * @private
    * @return {Promise<void>}
    */
-  async cancelAll() {
+  async _cancelAll() {
     this._shuttingDown = true;
     await Promise.all(this._subscriptions.map((sub) => this._cancelSubscription(sub)));
   }
@@ -422,38 +411,37 @@ class Consumer {
 
   /**
    * Resolves once every in-flight message handler has finished (inFlight() reaches 0). Cancels
-   * nothing - pair with `cancel()`/`cancelAll()`. No timeout: a handler that never finishes means
+   * nothing - pair with `stop()`. No timeout: a handler that never finishes means
    * this never resolves, and shutdown is left to the process orchestrator's own kill grace period.
    *
    * Polls `inFlight()` every 50ms rather than resolving off a deferred set in the consume finally
    * block: with a shared channel and prefetch > 1, deliveries already buffered in the socket keep
    * arriving for a few ticks after cancel-ok, and a deferred would resolve on the first momentary
    * zero in between two such deliveries.
+   * @private
    * @return {Promise<void>}
    */
-  async drain() {
+  async _drain() {
     while (this.inFlight() > 0) {
       await utils.timeoutPromise(DRAIN_POLL_INTERVAL_MS);
     }
   }
 
   /**
-   * cancelAll(), then drain(). Idempotent - repeated calls share the one in-flight shutdown
-   * promise instead of running cancelAll()/drain() more than once.
+   * _cancelAll(), then _drain(). Idempotent - repeated calls share the one in-flight shutdown
+   * promise instead of running those steps more than once. Internal - not part of the object
+   * arnavmq.js's factory returns publicly; call `close()` on the top-level module instead.
    * @return {Promise<void>} Resolves once every in-flight handler has finished.
    */
   async stop() {
     if (!this._stopPromise) {
-      this._stopPromise = this._stop();
+      this._stopPromise = (async () => {
+        await this._cancelAll();
+        await this._drain();
+      })();
     }
 
     return await this._stopPromise;
-  }
-
-  /** @private */
-  async _stop() {
-    await this.cancelAll();
-    await this.drain();
   }
 
   /**

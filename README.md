@@ -144,18 +144,15 @@ For full details of the available hooks and callback signatures, check the docum
 
 ## Graceful shutdown
 
-Call `arnavmq.close()` to shut down cleanly: it cancels consumers, drains in-flight message handlers (no timeout — waits until every one finishes), rejects pending RPC waiters, then closes the connection. It is idempotent, so repeated calls are cheap no-ops.
+Call `arnavmq.close()` to shut down cleanly: it cancels consumers, drains in-flight message handlers (no timeout — waits until every one finishes), rejects pending RPC waiters, then closes the connection. It is idempotent, so repeated calls are cheap no-ops. This is the only supported shutdown API — the individual steps (consumer cancel/stop/drain, producer stop, connection close) are internal and not exposed.
 
 ```javascript
 await arnavmq.close();
 ```
 
-Lower-level primitives are also exposed on `arnavmq.consumer` for finer control:
+`arnavmq.consumer.inFlight()` is also exposed, for observing in-flight work without triggering a shutdown:
 
 ```javascript
-await arnavmq.consumer.cancel('queue:name'); // basic.cancel for a single queue, without closing the channel
-await arnavmq.consumer.drain(); // wait for in-flight handlers across all consumers to finish
-await arnavmq.consumer.stop(); // cancel + drain for every consumer
 arnavmq.consumer.inFlight(); // number of handlers currently running
 ```
 
