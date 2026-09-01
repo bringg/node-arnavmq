@@ -326,6 +326,7 @@ class Consumer {
         });
       } finally {
         subscription.inFlightCount -= 1;
+        this._removeIfDone(subscription);
       }
     };
 
@@ -406,6 +407,26 @@ class Consumer {
         error,
         params: { queue: subscription.queue },
       });
+    }
+
+    this._removeIfDone(subscription);
+  }
+
+  /**
+   * Drops a cancelled, fully-drained subscription from `_subscriptions` - otherwise repeated
+   * cancel/re-subscribe cycles in a long-lived process grow the registry (and its retained
+   * callbacks/options/channel references) without bound.
+   * @private
+   * @param {object} subscription
+   */
+  _removeIfDone(subscription) {
+    if (!subscription.cancelled || subscription.inFlightCount > 0) {
+      return;
+    }
+
+    const index = this._subscriptions.indexOf(subscription);
+    if (index !== -1) {
+      this._subscriptions.splice(index, 1);
     }
   }
 

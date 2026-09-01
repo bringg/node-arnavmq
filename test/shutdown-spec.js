@@ -254,8 +254,14 @@ describe('graceful shutdown', () => {
           0,
           'cancelled subscriptions must not leave their resubscribe listener on the shared channel',
         );
-        // ...but the records themselves stay: inFlight() still reads them.
-        assert.strictEqual(consumer._subscriptions.length, 5, 'cancelled records must remain in the registry');
+        // ...and once cancelled+drained, the records themselves are dropped - otherwise repeated
+        // subscribe->cancel cycles would grow the registry (and its retained callbacks/options)
+        // without bound in a long-lived process.
+        assert.strictEqual(
+          consumer._subscriptions.length,
+          0,
+          'cancelled and drained records must not remain in the registry',
+        );
       });
     });
 

@@ -222,6 +222,13 @@ class Producer {
       // reply to us if you receive this message!
       options.replyTo = await this.amqpRPCQueues[queue].resQueuePromise;
 
+      // stop() may have run its rejection sweep while createRpcQueue()/resQueuePromise were being
+      // awaited above; registering the waiter after that sweep would leave it pending forever
+      // once publishOrSendToQueue() below starts failing against the closed connection.
+      if (this._shuttingDown) {
+        throw new ConnectionClosedError();
+      }
+
       // deferred promise that will resolve when response is received
       const responsePromise = pDefer();
       this.amqpRPCQueues[queue][options.correlationId] = { responsePromise, timeoutId: null };
