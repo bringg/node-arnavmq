@@ -38,15 +38,24 @@ class ArnavMQ {
   }
 
   /**
-   * Graceful shutdown: cancel consumers -> drain in-flight handlers (no timeout - waits until
-   * every one finishes) -> reject pending RPC waiters -> close the connection. Idempotent - every
-   * step it delegates to (consumer.stop(), producer.stop(), connection.close()) is itself
-   * idempotent, so repeated calls are cheap no-ops rather than re-running the sequence.
+   * Graceful shutdown: reject pending RPC waiters -> cancel consumers -> drain in-flight handlers
+   * (no timeout - waits until every one finishes) -> close the connection. Idempotent - every step
+   * it delegates to (producer.stop(), consumer.stop(), connection.close()) is itself idempotent,
+   * so repeated calls are cheap no-ops rather than re-running the sequence.
    *
-   * The connection is deliberately kept open through the cancel/drain step: `checkRpc` needs it to
-   * reply, and handlers may still `produce()`/`publish()` as part of their work while draining.
-   * `connection.close()` (the last step) is the first point at which produce()/publish() starts
-   * failing with `ConnectionClosedError`.
+   * `producer.stop()` runs first, and is synchronous, so a handler parked on an RPC response can
+   * never hold the drain open. Whoever would have answered that request is being cancelled by the
+   * very next step, so the response is never coming - and draining first deadlocks: `drain()`
+   * waits on a handler that only `producer.stop()` can release, while `producer.stop()` waits on
+   * `drain()`. That stalls shutdown for `rpcTimeout` per parked handler, or forever with
+   * `rpcTimeout: 0` (no timeout timer is ever armed in that case).
+   *
+   * The connection is still deliberately kept open through the cancel/drain step. Only new
+   * outgoing RPC *requests* fail fast (with `ConnectionClosedError`) once the producer is stopped:
+   * non-RPC `produce()`/`publish()` keeps working, and consumer.js's `checkRpc` writes RPC
+   * *replies* straight to the channel rather than through the producer, so a draining handler can
+   * still answer a request it had already received. `connection.close()` (the last step) is the
+   * first point at which non-RPC produce()/publish() starts failing too.
    *
    * There is no drain timeout: a handler that never finishes means close() never resolves. That is
    * left to the process orchestrator's own kill grace period rather than this library abandoning
@@ -54,8 +63,10 @@ class ArnavMQ {
    * @return {Promise<void>}
    */
   async close() {
-    await this.consumer.stop();
+    // Synchronous, and ahead of consumer.stop(), so every pending RPC waiter is rejected in the
+    // same turn of the loop that flips the consumer's shutting-down latch.
     this.producer.stop();
+    await this.consumer.stop();
     await this.connection.close();
   }
 }

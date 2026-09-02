@@ -34,8 +34,9 @@ class Producer {
      */
     this.amqpRPCQueues = {};
 
-    // Set by stop(): does not gate any behavior here (unlike consumer.js's _shuttingDown), it is
-    // just the idempotency flag so a second stop() call is a no-op.
+    // Set by stop(): the idempotency flag so a second stop() call is a no-op, and the gate that
+    // makes any further outgoing RPC *request* fail fast with ConnectionClosedError instead of
+    // registering a waiter nothing will ever answer. Plain (non-RPC) publishes are not gated.
     this._shuttingDown = false;
   }
 
@@ -231,9 +232,25 @@ class Producer {
 
       // deferred promise that will resolve when response is received
       const responsePromise = pDefer();
+      // stop() can reject this deferred while the publish below is still a round-trip in flight -
+      // i.e. before the `await responsePromise.promise` at the end of this function has attached a
+      // handler. A rejection left unhandled across a full turn of the loop trips Node's
+      // unhandled-rejection detection, and under the default `--unhandled-rejections=throw` that
+      // kills the process during the very shutdown that rejected it. This no-op catch attaches to
+      // a derived promise, so the rejection still reaches the caller below unchanged.
+      responsePromise.promise.catch(() => {});
       this.amqpRPCQueues[queue][options.correlationId] = { responsePromise, timeoutId: null };
 
-      await this.publishOrSendToQueue(queue, msg, options);
+      try {
+        await this.publishOrSendToQueue(queue, msg, options);
+      } catch (error) {
+        // The request never made it out, so no response can ever arrive to settle this waiter, and
+        // prepareTimeoutRpc() below was never reached - nothing else will ever clear it. Left in
+        // the registry it lingers until some later stop() rejects it, long after this call's own
+        // handler is gone.
+        delete this.amqpRPCQueues[queue][options.correlationId];
+        throw error;
+      }
 
       // Using given timeout or default one
       const timeout = options.timeout || this._connection.config.rpcTimeout || 0;

@@ -81,6 +81,53 @@ function createFakeChannelForRpc() {
   return channel;
 }
 
+/** Polls `predicate` every 20ms until truthy, or throws once `timeoutMs` elapses. */
+async function waitFor(predicate, timeoutMs = 3000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) {
+      throw new Error('waitFor() timed out');
+    }
+    await utils.timeoutPromise(20);
+  }
+}
+
+/**
+ * Resolves after one full turn of the event loop. Node reports unhandled rejections once the
+ * microtask queue has drained, so draining microtasks alone (`await Promise.resolve()`, however
+ * many times) never observes one, while a single turn always does - making this exact rather than
+ * a sleep long enough to probably work. A sleep that turned out to be too short would report "no
+ * unhandled rejection" and pass a test that should have failed.
+ */
+function nextTurn() {
+  return new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+}
+
+/**
+ * Runs `fn` with every existing 'unhandledRejection' listener (mocha installs one that fails the
+ * current test from underneath it) swapped out for a recorder, and returns what Node reported.
+ * Lets a test assert on unhandled rejections itself, with its own message.
+ */
+async function recordUnhandledRejections(fn) {
+  const existing = process.listeners('unhandledRejection');
+  existing.forEach((listener) => process.removeListener('unhandledRejection', listener));
+
+  const seen = [];
+  const recorder = (error) => seen.push(error);
+  process.on('unhandledRejection', recorder);
+  try {
+    await fn();
+    await nextTurn(); // let Node report anything still unhandled
+  } finally {
+    process.removeListener('unhandledRejection', recorder);
+    existing.forEach((listener) => process.on('unhandledRejection', listener));
+  }
+
+  return seen;
+}
+
 describe('graceful shutdown', () => {
   describe('subscription registry (consumer.js)', () => {
     const sandbox = sinon.createSandbox();
@@ -964,10 +1011,80 @@ describe('graceful shutdown', () => {
         'expected resQueuePromise to still be present after stop()',
       );
     });
+
+    // checkRpc() registers the waiter *before* awaiting the publish and only attaches its own
+    // handler (`return await responsePromise.promise`) after it. A stop() landing in that window -
+    // which is exactly when close() now calls it - rejects a deferred nobody is listening to yet,
+    // and a rejection left unhandled for a full turn of the loop is fatal under Node's default
+    // `--unhandled-rejections=throw`: the process dies during the graceful shutdown that rejected
+    // it. Note the `settled` handler below is on checkRpc()'s own promise, which is a different
+    // promise than the deferred and does not mask this.
+    it('stop() landing while the RPC publish is still in flight does not leave the rejection unhandled', async () => {
+      const channel = createFakeChannelForRpc();
+      const publishGate = pDefer();
+      // A publish that is a real round-trip rather than a microtask, so the window is actually open.
+      channel.sendToQueue = sinon.stub().callsFake(() => publishGate.promise);
+      const connection = createFakeConnection(channel);
+      const producer = new Producer(connection);
+      const queue = 'shutdown:producer-stop:publish-window';
+
+      let settled;
+      const seen = await recordUnhandledRejections(async () => {
+        const rpcPromise = producer.checkRpc(queue, 'payload', { rpc: true });
+        settled = rpcPromise.then(
+          () => undefined,
+          (error) => error,
+        );
+
+        // wait on the actual condition rather than a duration: the waiter is registered and the
+        // publish is in flight exactly once sendToQueue has been called.
+        await waitFor(() => channel.sendToQueue.called);
+        assert(pendingCorrelationId(producer, queue), 'expected the waiter to be registered');
+
+        producer.stop();
+        await nextTurn(); // the turn in which Node would report the rejection as unhandled
+
+        publishGate.resolve(true); // now let the publish finish, so checkRpc() reaches its await
+      });
+
+      assert.deepStrictEqual(
+        seen.map((error) => error && error.message),
+        [],
+        'expected no unhandled rejection while stop() raced the in-flight publish',
+      );
+      assert((await settled) instanceof ConnectionClosedError, 'expected the rejection to still reach the caller');
+    });
+
+    it('deletes the waiter when the publish itself fails, so no orphan is left for a later stop()', async () => {
+      const channel = createFakeChannelForRpc();
+      channel.sendToQueue = sinon.stub().rejects(new Error('broker blip'));
+      const connection = createFakeConnection(channel);
+      const producer = new Producer(connection);
+      const queue = 'shutdown:producer-stop:publish-failed';
+
+      await assert.rejects(() => producer.checkRpc(queue, 'payload', { rpc: true }), /broker blip/);
+
+      // Left behind, the entry can never be settled - prepareTimeoutRpc() was never reached, so it
+      // has no timer - and a stop() minutes later would reject it with no handler attached at all.
+      assert.strictEqual(
+        pendingCorrelationId(producer, queue),
+        undefined,
+        'expected no orphaned RPC waiter after a failed publish',
+      );
+
+      const seen = await recordUnhandledRejections(async () => {
+        producer.stop();
+      });
+      assert.deepStrictEqual(
+        seen.map((error) => error && error.message),
+        [],
+        'expected no orphan to reject',
+      );
+    });
   });
 
-  // src/modules/arnavmq.js's top-level close() orchestrates, in order: cancel -> drain (reject-pass
-  // on timeout) -> producer.stop() -> connection.close().
+  // src/modules/arnavmq.js's top-level close() orchestrates, in order: producer.stop() -> cancel ->
+  // drain -> connection.close().
   describe('arnavmq.js close() orchestration', () => {
     const sandbox = sinon.createSandbox();
     afterEach(() => sandbox.restore());
@@ -988,17 +1105,6 @@ describe('graceful shutdown', () => {
         ...overrides,
       });
       return new ArnavMQ(conn);
-    }
-
-    /** Polls `predicate` every 20ms until truthy, or throws once `timeoutMs` elapses. */
-    async function waitFor(predicate, timeoutMs = 3000) {
-      const deadline = Date.now() + timeoutMs;
-      while (!predicate()) {
-        if (Date.now() >= deadline) {
-          throw new Error('waitFor() timed out');
-        }
-        await utils.timeoutPromise(20);
-      }
     }
 
     describe('the object returned by the top-level factory', () => {
@@ -1244,6 +1350,129 @@ describe('graceful shutdown', () => {
         elapsed < 5000,
         `expected close() to resolve quickly rather than waiting out rpcTimeout, took ${elapsed}ms`,
       );
+    });
+
+    // The reason producer.stop() runs first. A handler parked on an RPC response is in-flight, so
+    // drain() waits on it - and the only thing that can release it is producer.stop(). Draining
+    // first makes those two wait on each other: shutdown stalls for rpcTimeout per parked handler,
+    // and with rpcTimeout: 0 (newArnavmq()'s default here) no timer is ever armed, so close() never
+    // resolves at all and every later close() awaits that same memoized promise.
+    it('does not wait for a parked RPC response - close() resolves instead of deadlocking on the drain', async () => {
+      const arnavmq = newArnavmq();
+      const queue = 'shutdown:arnavmq-close:rpc-drain-deadlock';
+      // Deliberately unconsumed, so the request below cannot be answered while close() runs - the
+      // same position every peer in this process is in once close() has cancelled its consumers.
+      const peerQueue = 'shutdown:arnavmq-close:rpc-drain-deadlock:peer';
+
+      const handlerParked = pDefer();
+      const rpcOutcome = pDefer();
+
+      await arnavmq.subscribe(queue, async () => {
+        handlerParked.resolve();
+        try {
+          rpcOutcome.resolve({ answer: await arnavmq.publish(peerQueue, { ping: true }, { rpc: true }) });
+        } catch (error) {
+          rpcOutcome.resolve({ error });
+        }
+      });
+
+      await arnavmq.publish(queue, { n: 1 });
+      await handlerParked.promise;
+      await waitFor(() => !!arnavmq.producer.amqpRPCQueues[peerQueue]);
+      assert.strictEqual(arnavmq.consumer.inFlight(), 1, 'expected the parked handler to be in flight');
+
+      const start = Date.now();
+      await arnavmq.close();
+      const elapsed = Date.now() - start;
+
+      const outcome = await rpcOutcome.promise;
+      assert(
+        outcome.error instanceof ConnectionClosedError,
+        `expected the parked RPC to be rejected with ConnectionClosedError, got ${JSON.stringify(outcome)}`,
+      );
+      assert(elapsed < 3000, `expected close() not to wait on the parked RPC, took ${elapsed}ms`);
+      assert.strictEqual(arnavmq.connection.isClosed, true);
+    });
+
+    // The other half of the same ordering choice: stopping the producer must not stop a *draining*
+    // handler from finishing its work. Non-RPC publishes go out untouched (the connection is still
+    // open), and consumer.js's checkRpc() writes RPC replies straight to the channel rather than
+    // through the producer, so a handler that had already received an RPC request can still answer
+    // its caller. Only new outgoing RPC requests fail fast.
+    //
+    // The caller has to be a separate instance: producer.stop() rejects the *closing* instance's own
+    // pending waiters by design, so a same-instance caller would be rejected no matter what the
+    // reply path did, and would prove nothing about it.
+    it('a draining handler can still answer an RPC request it had already received', async () => {
+      const server = newArnavmq();
+      const caller = newArnavmq({ hostname: 'shutdown-arnavmq-close-test-caller', rpcTimeout: 15000 });
+      const queue = 'shutdown:arnavmq-close:reply-while-draining';
+
+      const proceedGate = pDefer();
+      await server.subscribe(queue, async () => {
+        await proceedGate.promise;
+        return { pong: true };
+      });
+
+      const callerPromise = caller.publish(queue, { ping: true }, { rpc: true });
+      await waitFor(() => server.consumer.inFlight() === 1);
+
+      const closePromise = server.close();
+      await utils.timeoutPromise(50); // cancelled, now draining; the handler is still gated
+      assert.strictEqual(server.connection.isClosed, false, 'connection must still be open mid-drain');
+
+      proceedGate.resolve(); // the handler returns, and checkRpc() writes the reply
+      assert.deepStrictEqual(await callerPromise, { pong: true });
+
+      await closePromise;
+      assert.strictEqual(server.connection.isClosed, true);
+      await caller.close();
+    });
+
+    // Same window, the outbound direction: once the producer is stopped a draining handler's plain
+    // publish() still has to go out (the connection is open until the last step), while a *new* RPC
+    // request must fail fast rather than register a waiter nothing is left to answer.
+    it('during the drain a handler can still publish, but a new RPC request fails fast', async () => {
+      const arnavmq = newArnavmq();
+      const queue = 'shutdown:arnavmq-close:publish-vs-rpc-while-draining';
+      const sideQueue = 'shutdown:arnavmq-close:publish-vs-rpc-while-draining:side';
+
+      const proceedGate = pDefer();
+      const outcomes = pDefer();
+      await arnavmq.subscribe(queue, async () => {
+        await proceedGate.promise;
+        const result = {};
+        try {
+          await arnavmq.publish(sideQueue, { plain: true });
+          result.plain = 'sent';
+        } catch (error) {
+          result.plain = error;
+        }
+        try {
+          await arnavmq.publish(sideQueue, { rpc: true }, { rpc: true });
+          result.rpc = 'answered';
+        } catch (error) {
+          result.rpc = error;
+        }
+        outcomes.resolve(result);
+      });
+
+      await arnavmq.publish(queue, { n: 1 });
+      await waitFor(() => arnavmq.consumer.inFlight() === 1);
+
+      const closePromise = arnavmq.close();
+      await utils.timeoutPromise(50);
+      proceedGate.resolve();
+
+      const result = await outcomes.promise;
+      assert.strictEqual(result.plain, 'sent', `expected a plain publish to still succeed, got ${result.plain}`);
+      assert(
+        result.rpc instanceof ConnectionClosedError,
+        `expected a new RPC request to fail fast with ConnectionClosedError, got ${result.rpc}`,
+      );
+
+      await closePromise;
+      assert.strictEqual(arnavmq.connection.isClosed, true);
     });
   });
 });
