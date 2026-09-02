@@ -92,11 +92,12 @@ declare class Producer {
 
   private _shouldRetry(error: Error | ProducerError, currentRetryNumber: number): boolean;
   /**
-   * Rejects every RPC promise currently pending in `amqpRPCQueues` with `ConnectionClosedError`,
-   * and clears its timeout. Idempotent: a second call is a no-op. Internal - not part of the
-   * object producer.js's factory returns publicly.
+   * Channel 'close' listener. Rejects every RPC request still pending in `amqpRPCQueues` with
+   * `ConnectionClosedError` and clears its timeout, then drops the registry so the dead reply
+   * queue is rebuilt on the next RPC publish. Fires on a deliberate `close()` and on a connection
+   * lost unexpectedly alike. Internal.
    */
-  private stop(): void;
+  private _onChannelClose(): void;
 }
 
 declare namespace Producer {

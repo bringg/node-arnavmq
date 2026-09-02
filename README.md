@@ -144,9 +144,13 @@ For full details of the available hooks and callback signatures, check the docum
 
 ## Graceful shutdown
 
-Call `arnavmq.close()` to shut down cleanly: it rejects pending RPC waiters, cancels consumers, drains in-flight message handlers (no timeout — waits until every one finishes), then closes the connection. It is idempotent, so repeated calls are cheap no-ops. This is the only supported shutdown API — the individual steps (consumer cancel/stop/drain, producer stop, connection close) are internal and not exposed.
+Call `arnavmq.close()` to shut down cleanly: it stops consuming, waits for every in-flight message handler to finish (no timeout — waits until every one does), then closes the connection. It is idempotent, so repeated calls are cheap no-ops. This is the only supported shutdown API — the individual steps (consumer cancel/drain, connection close) are internal and not exposed.
 
-Pending RPC waiters are rejected with `ConnectionClosedError` first, before the drain, so shutdown is never held open by a handler waiting on a response that the peer — cancelled a moment later — is never going to send. A handler that is still draining can therefore no longer make a _new_ RPC request, but it can still `publish()` normally, and can still reply to an RPC request it had already received.
+The connection stays open for the whole drain, so a handler can finish its work: `publish()` downstream, answer an RPC request it had already received, or complete a new RPC round-trip of its own. Anything a handler starts is waited on as well.
+
+There is no drain timeout, so a handler that never finishes means `close()` never resolves — deliberately left to your orchestrator's kill grace period (`terminationGracePeriodSeconds` and friends) rather than this library abandoning in-flight work on a clock. Note that this covers a handler awaiting an RPC response nobody is left to send, which is what happens when the peer is shutting down at the same time.
+
+Any RPC request still pending when the connection closes is rejected with `ConnectionClosedError` rather than hanging until `rpcTimeout` (which arms no timer at all when `rpcTimeout: 0`). That applies to a connection lost unexpectedly too, not just a deliberate `close()`.
 
 ```javascript
 await arnavmq.close();

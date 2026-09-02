@@ -34,10 +34,39 @@ class Producer {
      */
     this.amqpRPCQueues = {};
 
-    // Set by stop(): the idempotency flag so a second stop() call is a no-op, and the gate that
-    // makes any further outgoing RPC *request* fail fast with ConnectionClosedError instead of
-    // registering a waiter nothing will ever answer. Plain (non-RPC) publishes are not gated.
-    this._shuttingDown = false;
+    // Bound once so `_initializeRpcQueue` can remove-then-add it and stay at one listener.
+    this._onChannelClose = this._onChannelClose.bind(this);
+  }
+
+  /**
+   * Every pending RPC request has become unanswerable: the reply queue was exclusive to the
+   * connection that just went away, and each request was published carrying that queue's name as
+   * its replyTo, so no answer can ever arrive - not on a reconnect either. Reject the waiters now
+   * so callers fail fast instead of hanging out `rpcTimeout` for an answer that is not coming (and
+   * forever with `rpcTimeout: 0`, which arms no timer at all), and clear their timers so none keeps
+   * the process alive past shutdown. Dropping the whole registry also discards the dead reply-queue
+   * bookkeeping, so the next RPC publish rebuilds it.
+   *
+   * Fires on every teardown path: `Channels.closeAll()` during a graceful `close()`, and amqplib's
+   * `Connection.toClosed()` -> `_closeChannels()` for a channel wedged past closeAll's cap or a
+   * socket that died on its own.
+   * @private
+   */
+  _onChannelClose() {
+    const queues = this.amqpRPCQueues;
+    this.amqpRPCQueues = {};
+
+    Object.values(queues).forEach((rpcQueue) => {
+      Object.entries(rpcQueue).forEach(([key, waiter]) => {
+        // `resQueuePromise` is bookkeeping for the queue itself, not a correlationId waiter.
+        if (key === 'resQueuePromise') {
+          return;
+        }
+
+        clearTimeout(waiter.timeoutId);
+        waiter.responsePromise.reject(new ConnectionClosedError());
+      });
+    });
   }
 
   set connection(value) {
@@ -118,11 +147,10 @@ class Producer {
       const channel = await this._connection.getDefaultChannel();
       await channel.assertQueue(resQueue, { durable: true, exclusive: true });
 
-      // if channel is closed, we want to make sure we cleanup the queue so future calls will recreate it
-      this._connection.addListener('close', () => {
-        delete rpcQueue.resQueuePromise;
-        this.createRpcQueue(sourceQueue);
-      });
+      // Remove-then-add holds this at exactly one listener on the channel no matter how many RPC
+      // queues get initialized on it, and re-arms it on the fresh channel after a reconnect.
+      channel.removeListener('close', this._onChannelClose);
+      channel.addListener('close', this._onChannelClose);
 
       await channel.consume(resQueue, this.maybeAnswer(sourceQueue), {
         noAck: true,
@@ -161,48 +189,21 @@ class Producer {
    */
   prepareTimeoutRpc(queue, corrId, time) {
     const producer = this;
-    let waiter = producer.amqpRPCQueues[queue][corrId];
+    // `?.` because the channel-close sweep drops the whole per-queue entry: a close landing while
+    // the request was still being published leaves nothing here, and the waiter it would have timed
+    // out has already been rejected with ConnectionClosedError.
+    let waiter = producer.amqpRPCQueues[queue]?.[corrId];
     if (!waiter) {
       return;
     }
 
     waiter.timeoutId = setTimeout(() => {
-      waiter = producer.amqpRPCQueues[queue][corrId];
+      waiter = producer.amqpRPCQueues[queue]?.[corrId];
       if (waiter) {
         waiter.responsePromise.reject(new Error(ERRORS.TIMEOUT));
         delete producer.amqpRPCQueues[queue][corrId];
       }
     }, time);
-  }
-
-  /**
-   * Rejects every RPC promise currently pending in `amqpRPCQueues` (one that has sent its request
-   * and is waiting for a response) with `ConnectionClosedError`, and clears its timeout so no
-   * lingering timer keeps the process alive - without this, a caller awaiting an RPC response
-   * would otherwise hang until `rpcTimeout` (15s default) even though the connection is already
-   * gone. Internal - not part of the object producer.js's factory returns publicly. Idempotent:
-   * a second call is a no-op.
-   * @return {void}
-   */
-  stop() {
-    if (this._shuttingDown) {
-      return;
-    }
-    this._shuttingDown = true;
-
-    Object.values(this.amqpRPCQueues).forEach((rpcQueue) => {
-      Object.keys(rpcQueue).forEach((key) => {
-        // `resQueuePromise` is bookkeeping for the queue itself, not a pending correlationId waiter.
-        if (key === 'resQueuePromise') {
-          return;
-        }
-
-        const waiter = rpcQueue[key];
-        clearTimeout(waiter.timeoutId);
-        waiter.responsePromise.reject(new ConnectionClosedError());
-        delete rpcQueue[key];
-      });
-    });
   }
 
   /**
@@ -223,21 +224,14 @@ class Producer {
       // reply to us if you receive this message!
       options.replyTo = await this.amqpRPCQueues[queue].resQueuePromise;
 
-      // stop() may have run its rejection sweep while createRpcQueue()/resQueuePromise were being
-      // awaited above; registering the waiter after that sweep would leave it pending forever
-      // once publishOrSendToQueue() below starts failing against the closed connection.
-      if (this._shuttingDown) {
-        throw new ConnectionClosedError();
-      }
-
       // deferred promise that will resolve when response is received
       const responsePromise = pDefer();
-      // stop() can reject this deferred while the publish below is still a round-trip in flight -
-      // i.e. before the `await responsePromise.promise` at the end of this function has attached a
-      // handler. A rejection left unhandled across a full turn of the loop trips Node's
+      // A channel close can reject this deferred while the publish below is still a round-trip in
+      // flight - i.e. before the `await responsePromise.promise` at the end of this function has
+      // attached a handler. A rejection left unhandled across a full turn of the loop trips Node's
       // unhandled-rejection detection, and under the default `--unhandled-rejections=throw` that
-      // kills the process during the very shutdown that rejected it. This no-op catch attaches to
-      // a derived promise, so the rejection still reaches the caller below unchanged.
+      // kills the process. This no-op catch attaches to a derived promise, so the rejection still
+      // reaches the caller below unchanged.
       responsePromise.promise.catch(() => {});
       this.amqpRPCQueues[queue][options.correlationId] = { responsePromise, timeoutId: null };
 
@@ -246,9 +240,8 @@ class Producer {
       } catch (error) {
         // The request never made it out, so no response can ever arrive to settle this waiter, and
         // prepareTimeoutRpc() below was never reached - nothing else will ever clear it. Left in
-        // the registry it lingers until some later stop() rejects it, long after this call's own
-        // handler is gone.
-        delete this.amqpRPCQueues[queue][options.correlationId];
+        // the registry it leaks until the channel closes.
+        delete this.amqpRPCQueues[queue]?.[options.correlationId];
         throw error;
       }
 

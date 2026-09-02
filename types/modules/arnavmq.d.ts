@@ -13,14 +13,18 @@ declare namespace arnavmq {
     produce: typeof Producer.prototype.produce;
     publish: typeof Producer.prototype.produce;
     /**
-     * Graceful shutdown: reject pending RPC waiters -> cancel consumers -> drain in-flight
-     * handlers (no timeout) -> close the connection. Idempotent - repeated calls are cheap no-ops
-     * rather than re-running the sequence.
+     * Graceful shutdown: stop consuming -> let every in-flight handler finish (no timeout) ->
+     * close the connection. Idempotent - repeated calls are cheap no-ops rather than re-running
+     * the sequence.
      *
-     * Pending RPC waiters are rejected up front, so a handler awaiting a response never holds the
-     * drain open. From that point on a new outgoing RPC request fails with `ConnectionClosedError`;
-     * non-RPC publishes, and RPC replies from handlers still draining, keep working until the
-     * connection itself closes.
+     * The connection stays open for the whole drain, so a handler can finish its work: publish
+     * downstream, answer an RPC request it had already received, or complete a new RPC round-trip
+     * of its own. Anything a handler starts is waited on too.
+     *
+     * No drain timeout: a handler that never finishes means close() never resolves, which is left
+     * to the process orchestrator's kill grace period. Closing the connection is what fails any
+     * still-pending RPC waiter, with `ConnectionClosedError`, rather than letting it hang out
+     * `rpcTimeout`.
      * @return Resolves once shutdown has completed (never rejects).
      */
     close: () => Promise<void>;

@@ -22,6 +22,10 @@ class Consumer {
     // Set by _cancelAll()/stop(): stops resubscribe/retry for every subscription, existing and future.
     this._shuttingDown = false;
     // Memoized stop() promise, so repeated calls share one in-flight shutdown instead of racing.
+    // Not a mode flag - the same idempotency idiom as Connection._closePromise. Without it a
+    // concurrent close() re-runs _cancelAll() and sends basic.cancel for a tag already cancelled,
+    // and the obvious alternatives (an early return on `cancelled`, clearing consumerTag) both
+    // break _consumeQueue's deferred re-cancel for a subscription cancelled mid-flight.
     this._stopPromise = null;
   }
 
