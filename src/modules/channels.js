@@ -104,8 +104,17 @@ class Channels {
    * - so a handler's `ack()` returning only means the frame was written to the socket, not that the
    * broker processed it. `Channel.Close` *does* round-trip (amqplib resolves `close()` on
    * `Channel.Close-Ok`), and a broker processes one channel's frames in order, so once this
-   * resolves every frame previously written on those channels - the acks included - is guaranteed
-   * to have been processed.
+   * resolves every frame already *written* to the socket - the acks included - is guaranteed to have
+   * been processed.
+   *
+   * Written, not merely requested: acks and rejects go out through amqplib's `sendImmediately`, so
+   * they are genuinely ordered ahead of the `Channel.Close`. A synchronous method does not
+   * necessarily - `sendOrEnqueue` parks it in the channel's `pending` list whenever another RPC is
+   * still awaiting its reply, `Channel.Close` then jumps that list (it is `sendImmediately` too),
+   * and `toClosed()` -> `_rejectPending()` discards whatever was parked with "Channel ended, no
+   * reply will be forthcoming". So a `basic.cancel` that had been queued behind another RPC can be
+   * dropped here - which is where `_cancelSubscription`'s "Failed to cancel consumer" log comes
+   * from in that case: local frame dropping, not a broker refusal.
    *
    * Terminal: only call this when nothing in the process will ask for a channel again (see
    * `Connection.close()`, which is terminal for the process, and is the only caller).

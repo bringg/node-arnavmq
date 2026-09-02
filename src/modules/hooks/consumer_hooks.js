@@ -28,6 +28,11 @@ class ConsumerHooks extends BaseHooks {
    * - error - The error object in case the processing callback threw.
    * - rejectError - The error object in case a failed rejecting the message after a processing error.
    * - ackError - The error in case failed to 'ack' the message after processing it.
+   * - requeued - True when the message was handed straight back to the broker without the handler
+   *   running at all, because the subscription had already been cancelled - a delivery the broker
+   *   had buffered to us before cancel-ok landed, which happens for up to `prefetch` messages per
+   *   consumer on every shutdown. `content` is absent for these (nothing was deserialized) and no
+   *   "before process" event was emitted, since the processing callback is never invoked.
    * @param {Function | Function[]} callback A callback or callbacks array to register.
    */
   afterProcessMessage(callback) {

@@ -144,7 +144,9 @@ For full details of the available hooks and callback signatures, check the docum
 
 ## Graceful shutdown
 
-Call `arnavmq.close()` to shut down cleanly: it stops consuming, waits for every in-flight message handler to finish (no timeout — waits until every one does), then closes the connection. It is idempotent, so repeated calls are cheap no-ops. This is the only supported shutdown API — the individual steps (consumer cancel/drain, connection close) are internal and not exposed.
+Call `arnavmq.close()` to shut down cleanly: it stops consuming, waits for every in-flight message handler to finish (no timeout — waits until every one does), then closes the connection. It is idempotent, so repeated calls are cheap no-ops.
+
+`arnavmq.close()` is the only supported way to shut down, and it is terminal for the process: afterwards `publish()` and `subscribe()` both reject with `ConnectionClosedError`, and re-configuring the library hands back the same closed instance rather than reconnecting. `arnavmq.connection.close()` is reachable but is **not** a shutdown API - it closes the socket without stopping consumers or draining them, so a handler that is midway through its work loses the connection under it and its message is redelivered.
 
 The connection stays open for the whole drain, so a handler can finish its work: `publish()` downstream, answer an RPC request it had already received, or complete a new RPC round-trip of its own. Anything a handler starts is waited on as well.
 

@@ -44,7 +44,12 @@ declare class Consumer {
    * @param queue    The RabbitMQ queue name
    * @param options  (Optional) Options for the queue (durable, persistent, etc.) and channel (with prefetch, `{ channel: { prefetch: 100 } }`)
    * @param callback Callback function executed when a message is received on the queue name, can return a promise
-   * @return A promise that resolves when connection is established and consumer is ready
+   * @return Resolves `true` once the broker has confirmed the consumer (basic.consume-ok), or
+   *   `false` if the subscription was cancelled before that. Failures that may still clear - the
+   *   channel cannot be opened, the queue cannot be declared as asked - are retried behind
+   *   `config.timeout` rather than resolved, so this stays pending while a queue is undeclarable
+   *   and never reports success for a subscription that is not consuming.
+   * @throws ConnectionClosedError if the connection has already been closed - shutdown is terminal.
    */
   consume(queue: string, options: ConsumeOptions, callback: ConsumeCallback): Promise<boolean>;
   /**
@@ -52,7 +57,8 @@ declare class Consumer {
    * Automatically answers with the callback response (can be a Promise)
    * @param queue    The RabbitMQ queue name
    * @param callback Callback function executed when a message is received on the queue name, can return a promise
-   * @return A promise that resolves when connection is established and consumer is ready
+   * @return See the three-argument overload.
+   * @throws ConnectionClosedError if the connection has already been closed - shutdown is terminal.
    */
   consume(queue: string, callback: ConsumeCallback): Promise<boolean>;
 
@@ -82,7 +88,7 @@ declare class Consumer {
   private stop(): Promise<void>;
   private _cancelAll(): Promise<void>;
   private _initializeChannel(subscription: Subscription): Promise<amqp.Channel>;
-  private _consumeQueue(channel: amqp.Channel, subscription: Subscription): Promise<void>;
+  private _consumeQueue(channel: amqp.Channel, subscription: Subscription): Promise<boolean>;
   private _rejectMessageAfterProcess(
     channel: amqp.Channel,
     subscription: Subscription,

@@ -295,14 +295,26 @@ describe('graceful shutdown', () => {
         );
       });
 
-      it('after stop(), even brand-new subscribe() calls never consume', async () => {
+      // Resolving `false` here (as this used to) let a service that resubscribed after a shutdown
+      // boot "successfully", report healthy and consume nothing for the rest of its life. publish()
+      // already failed loudly on the same state.
+      it('after stop(), subscribe() rejects instead of quietly resolving false', async () => {
         await consumer.stop();
 
         const initSpy = sandbox.spy(consumer, '_initializeChannel');
-        const result = await consumer.subscribe('shutdown:after-cancel-all', () => {});
 
-        assert.strictEqual(result, false);
+        await assert.rejects(() => consumer.subscribe('shutdown:after-cancel-all', () => {}), ConnectionClosedError);
         sinon.assert.notCalled(initSpy);
+      });
+
+      it('rejects a subscribe after the connection itself was closed, without a stop() first', async () => {
+        const isolated = new Consumer(newConnection({ hostname: 'shutdown-subscribe-after-close' }));
+        await isolated.connection.close();
+
+        await assert.rejects(
+          () => isolated.subscribe('shutdown:after-connection-close', () => {}),
+          ConnectionClosedError,
+        );
       });
     });
 
@@ -432,6 +444,60 @@ describe('graceful shutdown', () => {
       });
     });
 
+    // A queue that cannot be declared as asked (PRECONDITION_FAILED from changed arguments,
+    // ACCESS_REFUSED) is answered with a channel-level error, which kills the channel. Consuming on
+    // it afterwards cannot work, so the declaration failing has to be treated as the subscription
+    // failing - not logged and stepped over.
+    describe('a subscription whose setup keeps failing', () => {
+      function newFailingAssertConsumer() {
+        const { channel, connection, consumer } = newTestConsumer({ timeout: 60 });
+        channel.assertQueue = sinon.stub().callsFake(async () => {
+          // what the broker actually does: channel-level error, so the channel dies with it
+          channel.emit('close');
+          throw new Error('PRECONDITION_FAILED - inequivalent arg durable');
+        });
+        return { channel, connection, consumer };
+      }
+
+      it('retries behind the configured backoff instead of once per broker round-trip', async () => {
+        const { connection, consumer } = newFailingAssertConsumer();
+
+        consumer.subscribe('shutdown:setup-failure:backoff', () => {}).catch(() => {});
+        await utils.timeoutPromise(400);
+
+        // ~400ms at a 60ms backoff is a handful of attempts. Unbounded, this opened a fresh channel
+        // per round-trip - measured at ~660/s against a real broker - and two competing retry
+        // loops would instead double every cycle.
+        const attempts = connection.getChannel.callCount;
+        assert(attempts > 1, 'expected it to keep retrying');
+        assert(attempts < 15, `expected the backoff to bound the retries, got ${attempts} channels in 400ms`);
+      });
+
+      it('never resolves true - the subscription is not consuming', async () => {
+        const { consumer } = newFailingAssertConsumer();
+
+        const settled = await Promise.race([
+          consumer.subscribe('shutdown:setup-failure:never-true', () => {}).then((value) => ({ value })),
+          utils.timeoutPromise(300).then(() => 'still-pending'),
+        ]);
+
+        assert.strictEqual(
+          settled,
+          'still-pending',
+          `expected subscribe() to stay pending, it settled: ${JSON.stringify(settled)}`,
+        );
+      });
+
+      it('resolves false when the broker refuses the basic.consume itself', async () => {
+        const { channel, consumer } = newTestConsumer();
+        channel.consume = sinon.stub().rejects(new Error('ACCESS_REFUSED - consume'));
+
+        // Unlike a dead channel there is nothing to retry against here, so the caller is told
+        // plainly rather than the failure being logged and reported as success.
+        assert.strictEqual(await consumer.subscribe('shutdown:setup-failure:consume-refused', () => {}), false);
+      });
+    });
+
     describe('in-flight tracking', () => {
       it('inFlight() brackets both the ack path and the reject path', async () => {
         const { channel, consumer } = newTestConsumer();
@@ -460,6 +526,27 @@ describe('graceful shutdown', () => {
         assert.strictEqual(observedDuringRejectHandler, 1, 'expected inFlight() to be 1 while the handler runs');
         assert.strictEqual(consumer.inFlight(), 0, 'expected inFlight() back to 0 once rejected');
         sinon.assert.calledOnce(channel.reject);
+      });
+
+      it('reports the requeue to the after-process hook, so the delivery is not invisible', async () => {
+        const { channel, consumer } = newTestConsumer();
+        const queue = 'shutdown:inflight:buffered-hook';
+        const payloads = [];
+        consumer.hooks.afterProcessMessage((payload) => payloads.push(payload));
+
+        await consumer.consume(queue, () => 'ok');
+        consumer._subscriptions[0].cancelled = true;
+
+        const msg = fakeMessage({ a: 1 });
+        await deliver(channel, queue, msg);
+
+        // Without this event a caller's received and completed counters silently disagree by every
+        // message the broker had buffered under prefetch when the shutdown started.
+        assert.strictEqual(payloads.length, 1);
+        assert.strictEqual(payloads[0].queue, queue);
+        assert.strictEqual(payloads[0].message, msg);
+        assert.strictEqual(payloads[0].requeued, true);
+        assert.strictEqual(payloads[0].rejectError, undefined);
       });
 
       it('rejects+requeues a buffered message without running the handler once the subscription is no longer live', async () => {
