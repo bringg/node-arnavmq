@@ -42,7 +42,7 @@ class Docker {
     try {
       const res = await exec(`docker container inspect -f '{{.State.Running}}' ${this.name}`);
       return res.stdout.trim() === 'true';
-    } catch (err) {
+    } catch {
       // We will get an error if container is not runnning.
       return false;
     }

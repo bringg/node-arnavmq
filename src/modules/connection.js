@@ -89,12 +89,12 @@ class Connection {
     try {
       connection = await this._connectionPromise;
     } catch (error) {
-      // The in-flight connect failed on its own; there's nothing for us to close.
+      // The in-flight connect failed on its own; there's nothing for us to close - `connection`
+      // keeps its initial null, since the assignment above never completed.
       logger.debug({
         message: `Ignoring failed in-flight connection attempt while closing: ${error.message}`,
         error,
       });
-      connection = null;
     }
 
     if (connection) {
