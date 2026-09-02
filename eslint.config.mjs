@@ -37,6 +37,15 @@ export default [
       'samples/**/*',
     ],
   },
+  // `js.configs.recommended` is handed to FlatCompat above as its `recommendedConfig` option, but
+  // that only tells FlatCompat how to resolve `extends: 'eslint:recommended'` inside a *legacy*
+  // config - it does not enable a single rule here. It has to be in this array to apply. Without
+  // it `npm run lint` enforced nothing but the explicit rules below: no-unsafe-finally,
+  // no-unused-vars and the rest of the recommended set were all off, which is how a
+  // `return clearTimeout(id)` inside a `finally` (silently swallowing every rejection routed
+  // through utils.withTimeout) passed CI.
+  js.configs.recommended,
+  // After recommended, so it can switch off anything that would fight the formatter.
   ...compat.extends('eslint-config-prettier'),
   {
     languageOptions: {

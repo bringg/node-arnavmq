@@ -16,14 +16,39 @@ function onConnectionError(error) {
   });
 }
 
+/**
+ * Thrown by `getConnection()` once `close()` has been called - the connection is terminally shut
+ * down for the process and will never reconnect.
+ */
+class ConnectionClosedError extends Error {
+  constructor(message = 'Connection is closed') {
+    super(message);
+
+    this.name = 'ConnectionClosedError';
+    this.message = message;
+
+    Error.captureStackTrace(this, this.constructor);
+  }
+}
+
 class Connection {
   constructor(config) {
     this._config = config;
 
     this._connectionPromise = null; // Promise of amqp connection
     this._channels = null;
+    this._closePromise = null;
     this.hooks = new ConnectionHooks();
     this.startedAt = new Date().toISOString();
+  }
+
+  /**
+   * Whether `close()` has been called on this connection. Once true, it never goes back to false -
+   * the connection is terminally shut down for the process.
+   * @return {boolean}
+   */
+  get isClosed() {
+    return !!this._closePromise;
   }
 
   /**
@@ -31,12 +56,62 @@ class Connection {
    * @return {Promise} A promise that resolve with an amqp.node connection object
    */
   async getConnection() {
+    if (this.isClosed) {
+      throw new ConnectionClosedError();
+    }
+
     // cache handling, if connection already opened, return it
     if (!this._connectionPromise) {
       this._connectionPromise = this._connect();
     }
 
     return await this._connectionPromise;
+  }
+
+  /**
+   * Terminally close this connection for the process: gracefully close every channel (which flushes
+   * any ack/reject still in flight to the broker - see `Channels.closeAll()`), then close the
+   * socket. Idempotent - safe to call more than once, sequentially or concurrently; every caller
+   * shares the same underlying close. Never rejects; teardown errors are logged. After this
+   * resolves, `getConnection()` (and anything built on it) rejects with `ConnectionClosedError`.
+   * @return {Promise<void>}
+   */
+  async close() {
+    if (!this._closePromise) {
+      this._closePromise = this._close();
+    }
+
+    return await this._closePromise;
+  }
+
+  async _close() {
+    let connection = null;
+    try {
+      connection = await this._connectionPromise;
+    } catch (error) {
+      // The in-flight connect failed on its own; there's nothing for us to close - `connection`
+      // keeps its initial null, since the assignment above never completed.
+      logger.debug({
+        message: `Ignoring failed in-flight connection attempt while closing: ${error.message}`,
+        error,
+      });
+    }
+
+    if (connection) {
+      await this._channels?.closeAll();
+
+      try {
+        await connection.close();
+      } catch (error) {
+        logger.error({
+          message: `Error closing amqp connection: ${error.message}`,
+          error,
+        });
+      }
+    }
+
+    this._connectionPromise = null;
+    this._channels = null;
   }
 
   async _connect() {
@@ -72,11 +147,22 @@ class Connection {
 
   async getChannel(queue, config) {
     await this.getConnection();
+    // `close()` flips `isClosed` synchronously (before any of its own awaits), so re-checking here,
+    // synchronously after `getConnection()` resolves and before touching `_channels`, closes the gap
+    // where `close()` ran entirely between the two awaits above and already snapshotted/cleared
+    // `_channels` in `closeAll()` - without this, we'd insert a new channel into that cleared map
+    // that `closeAll()` will never see or close before the connection socket is torn down.
+    if (this.isClosed) {
+      throw new ConnectionClosedError();
+    }
     return await this._channels.get(queue, config);
   }
 
   async getDefaultChannel() {
     await this.getConnection();
+    if (this.isClosed) {
+      throw new ConnectionClosedError();
+    }
     return await this._channels.defaultChannel();
   }
 
@@ -111,3 +197,9 @@ module.exports = (config) => {
   }
   return instance;
 };
+
+// Exposed for `instanceof` checks by consumers of the singleton (e.g. producer.js's
+// reconnect-on-close listener) and for tests that need a Connection instance isolated from the
+// process-wide singleton above.
+module.exports.ConnectionClosedError = ConnectionClosedError;
+module.exports.Connection = Connection;

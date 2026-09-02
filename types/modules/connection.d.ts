@@ -54,6 +54,14 @@ interface ConnectionConfig {
   logger?: Logger;
 }
 
+/**
+ * Thrown by `getConnection()` once `close()` has been called - the connection is terminally shut
+ * down for the process and will never reconnect.
+ */
+declare class ConnectionClosedError extends Error {
+  constructor(message?: string);
+}
+
 declare class Connection {
   constructor(config: ConnectionConfig);
 
@@ -64,6 +72,12 @@ declare class Connection {
   get config(): ConnectionConfig;
   set config(value: ConnectionConfig);
 
+  /**
+   * Whether `close()` has been called on this connection. Once true, it never goes back to false -
+   * the connection is terminally shut down for the process.
+   */
+  get isClosed(): boolean;
+
   getConnection(): Promise<amqp.ChannelModel>;
   getChannel(queue: string, config: channels.ChannelConfig): Promise<amqp.Channel>;
   getDefaultChannel(): Promise<amqp.Channel>;
@@ -73,6 +87,13 @@ declare class Connection {
    * @param func the callback function to execute when the event is called
    */
   addListener(on: string, func: Function): Promise<void>;
+  /**
+   * Terminally close this connection for the process. Idempotent - safe to call more than once,
+   * sequentially or concurrently; every caller shares the same underlying close. After this
+   * resolves, `getConnection()` (and anything built on it) rejects with `ConnectionClosedError`.
+   * @return Resolves once closed; never rejects.
+   */
+  close(): Promise<void>;
 
   private _connect(): Promise<amqp.ChannelModel>;
 }
@@ -90,12 +111,24 @@ declare namespace connection {
      * @param func the callback function to execute when the event is called
      */
     addListener(on: string, func: Function): Promise<void>;
+    /**
+     * Terminally close this connection for the process. Idempotent - safe to call more than once,
+     * sequentially or concurrently; every caller shares the same underlying close. After this
+     * resolves, `getConnection()` (and anything built on it) rejects with `ConnectionClosedError`.
+     * @return Resolves once closed; never rejects.
+     */
+    close(): Promise<void>;
+    /**
+     * Whether `close()` has been called on this connection. Once true, it never goes back to
+     * false - the connection is terminally shut down for the process.
+     */
+    get isClosed(): boolean;
 
     get config(): ConnectionConfig;
     set config(value: ConnectionConfig);
   }
 
-  export { ConnectionConfig };
+  export { ConnectionConfig, ConnectionClosedError };
 }
 
 export = connection;

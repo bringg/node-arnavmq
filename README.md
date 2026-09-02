@@ -142,6 +142,28 @@ For full details of the available hooks and callback signatures, check the docum
 - [Consumer](src/modules/hooks/consumer_hooks.js)
 - [Producer](src/modules/hooks/producer_hooks.js)
 
+## Graceful shutdown
+
+Call `arnavmq.close()` to shut down cleanly: it stops consuming, waits for every in-flight message handler to finish (no timeout — waits until every one does), then closes the connection. It is idempotent, so repeated calls are cheap no-ops.
+
+`arnavmq.close()` is the only supported way to shut down, and it is terminal for the process: afterwards `publish()` and `subscribe()` both reject with `ConnectionClosedError`, and re-configuring the library hands back the same closed instance rather than reconnecting. `arnavmq.connection.close()` is reachable but is **not** a shutdown API - it closes the socket without stopping consumers or draining them, so a handler that is midway through its work loses the connection under it and its message is redelivered.
+
+The connection stays open for the whole drain, so a handler can finish its work: `publish()` downstream, answer an RPC request it had already received, or complete a new RPC round-trip of its own. Anything a handler starts is waited on as well.
+
+There is no drain timeout, so a handler that never finishes means `close()` never resolves — deliberately left to your orchestrator's kill grace period (`terminationGracePeriodSeconds` and friends) rather than this library abandoning in-flight work on a clock. Note that this covers a handler awaiting an RPC response nobody is left to send, which is what happens when the peer is shutting down at the same time.
+
+Any RPC request still pending when the connection closes is rejected with `ConnectionClosedError` rather than hanging until `rpcTimeout` (which arms no timer at all when `rpcTimeout: 0`). That applies to a connection lost unexpectedly too, not just a deliberate `close()`.
+
+```javascript
+await arnavmq.close();
+```
+
+`arnavmq.consumer.inFlight()` is also exposed, for observing in-flight work without triggering a shutdown:
+
+```javascript
+arnavmq.consumer.inFlight(); // number of handlers currently running
+```
+
 ## Config
 
 You can specify a config object, properties and default values are:
