@@ -16,9 +16,16 @@ interface ConsumeInfo {
   action: {
     /** The raw amqplib message */
     message: amqp.Message;
-    /** The deserialized message content */
+    /**
+     * The deserialized message content. Absent for a message being requeued during shutdown - see
+     * `requeued` on {@link AfterConsumeInfo} - since nothing is deserialized on that path.
+     */
     content: unknown;
-    /** The callback to be executed with the message */
+    /**
+     * The callback to be executed with the message. Not guaranteed to run: it is skipped when this
+     * hook returns `false`, and for a message requeued during shutdown. Close anything opened here
+     * from the "after process" event rather than from a wrapper around this callback.
+     */
     callback: Function;
   };
 }
@@ -61,6 +68,14 @@ type AfterConsumeInfo = {
   rejectError?: Error;
   /** An amqplib error in case of a failed message ack following a successful callback. */
   ackError?: Error;
+  /**
+   * True when the message was handed straight back to the broker without the consume callback
+   * running at all, because the subscription had already been cancelled - a delivery the broker had
+   * buffered before cancel-ok landed, which happens for up to `prefetch` messages per consumer on
+   * every shutdown. `content` is absent for these, and `error`/`ackError` are never set: nothing
+   * was processed and nothing was acked.
+   */
+  requeued?: boolean;
 };
 
 declare class ConsumerHooks extends BaseHooks {

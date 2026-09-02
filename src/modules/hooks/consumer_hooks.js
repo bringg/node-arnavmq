@@ -8,6 +8,10 @@ class ConsumerHooks extends BaseHooks {
    * - message - The raw amqplib message.
    * - content - The deserialized message content.
    * The hook callback can return `false` in order to skip the message processing, rejecting it and jumping right to the "after process" hook.
+   * The processing callback is therefore not guaranteed to run after this event: it is also skipped
+   * for a message requeued during shutdown (see `requeued` on the "after process" hook). Anything
+   * this hook opens must be closed from the "after process" event rather than from a wrapper around
+   * `action.callback`, which in those cases is never invoked. `action.content` is absent then too.
    * @param {Function | Function[]} callback A callback or callbacks array to register.
    */
   beforeProcessMessage(callback) {
@@ -31,8 +35,8 @@ class ConsumerHooks extends BaseHooks {
    * - requeued - True when the message was handed straight back to the broker without the handler
    *   running at all, because the subscription had already been cancelled - a delivery the broker
    *   had buffered to us before cancel-ok landed, which happens for up to `prefetch` messages per
-   *   consumer on every shutdown. `content` is absent for these (nothing was deserialized) and no
-   *   "before process" event was emitted, since the processing callback is never invoked.
+   *   consumer on every shutdown. A "before process" event is emitted for these as usual, so a span
+   *   started there is still ended here; `content` is absent, since nothing was deserialized.
    * @param {Function | Function[]} callback A callback or callbacks array to register.
    */
   afterProcessMessage(callback) {

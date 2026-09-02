@@ -528,25 +528,41 @@ describe('graceful shutdown', () => {
         sinon.assert.calledOnce(channel.reject);
       });
 
-      it('reports the requeue to the after-process hook, so the delivery is not invisible', async () => {
+      // Instrumentation starts its span in the before hook and ends whatever the after hook finds,
+      // so emitting only the after event trades one invisible delivery for another: verified
+      // against the real @bringg/instrumentation-arnavmq hooks, after-alone produced no span at all.
+      // Without either, a caller's received and completed counters silently disagree by every
+      // message the broker had buffered under prefetch when the shutdown started.
+      it('emits the before/after hook pair for the requeue, so the delivery is not invisible', async () => {
         const { channel, consumer } = newTestConsumer();
         const queue = 'shutdown:inflight:buffered-hook';
-        const payloads = [];
-        consumer.hooks.afterProcessMessage((payload) => payloads.push(payload));
+        const events = [];
+        const handler = () => 'ok';
+        consumer.hooks.beforeProcessMessage((payload) => events.push(['before', payload]));
+        consumer.hooks.afterProcessMessage((payload) => events.push(['after', payload]));
 
-        await consumer.consume(queue, () => 'ok');
+        await consumer.consume(queue, handler);
         consumer._subscriptions[0].cancelled = true;
 
         const msg = fakeMessage({ a: 1 });
         await deliver(channel, queue, msg);
 
-        // Without this event a caller's received and completed counters silently disagree by every
-        // message the broker had buffered under prefetch when the shutdown started.
-        assert.strictEqual(payloads.length, 1);
-        assert.strictEqual(payloads[0].queue, queue);
-        assert.strictEqual(payloads[0].message, msg);
-        assert.strictEqual(payloads[0].requeued, true);
-        assert.strictEqual(payloads[0].rejectError, undefined);
+        assert.deepStrictEqual(
+          events.map(([name]) => name),
+          ['before', 'after'],
+        );
+
+        const [, before] = events[0];
+        assert.strictEqual(before.queue, queue);
+        assert.strictEqual(before.action.message, msg);
+        assert.strictEqual(before.action.callback, handler);
+        assert.strictEqual(before.action.content, undefined, 'nothing is deserialized on this path');
+
+        const [, after] = events[1];
+        assert.strictEqual(after.queue, queue);
+        assert.strictEqual(after.message, msg);
+        assert.strictEqual(after.requeued, true);
+        assert.strictEqual(after.rejectError, undefined);
       });
 
       it('rejects+requeues a buffered message without running the handler once the subscription is no longer live', async () => {

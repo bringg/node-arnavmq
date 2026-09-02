@@ -367,7 +367,7 @@ class Consumer {
     }
 
     if (!this._isLive(subscription)) {
-      await this._rejectAfterShutdown(channel, queue, msg);
+      await this._rejectAfterShutdown(channel, subscription, msg);
       return;
     }
 
@@ -385,20 +385,34 @@ class Consumer {
    * buffered to us before cancel-ok landed (prefetch > 1): running the handler would block
    * `_drain()`/`stop()`/`close()` on work that was never going to be allowed to finish here.
    *
-   * Emits `afterProcessMessageEvent` with `requeued: true` so this does not become a delivery the
+   * Emits the same before/after pair as any other delivery, so this does not become a delivery the
    * per-message instrumentation never hears about - during a rolling deploy that is up to
-   * `prefetch` messages per consumer, and without the event a caller's received and completed
-   * counters silently disagree by exactly that many. No `beforeProcessMessageEvent`: that hook
-   * exists to wrap `action.callback`, and the callback is never going to run here, so instrumentation
-   * that closes its span from inside the wrapper would leak one span per requeued message.
+   * `prefetch` messages per consumer, and without the events a caller's received and completed
+   * counters silently disagree by exactly that many. `afterProcessMessageEvent` carries
+   * `requeued: true` to distinguish it from a message that was actually processed.
    *
-   * Not counted in `inFlightCount`: the reject is already on the wire before the hook runs, so the
-   * message is safely back with the broker and the drain has nothing left to wait for. A slow hook
-   * can be cut off by the connection close that follows.
+   * Both events, not just the after one: instrumentation typically *starts* its span in the before
+   * hook and stores it on the message, and the after hook ends whatever it finds there - so an
+   * after event on its own does nothing at all, and the requeued delivery stays untraced. The
+   * before hook also wraps `action.callback`, which is never invoked here; that is safe as long as
+   * the span is ended from the after hook rather than from inside the wrapper, and it matches the
+   * shape the hook already documents for a `beforeProcessMessage` that skips processing.
+   * `action.content` is absent, since nothing is deserialized on this path.
+   *
+   * Not counted in `inFlightCount`: the reject is already on the wire before the after hook runs,
+   * so the message is safely back with the broker and the drain has nothing left to wait for. A
+   * slow hook can be cut off by the connection close that follows.
    * @private
    * @return {Promise<void>}
    */
-  async _rejectAfterShutdown(channel, queue, msg) {
+  async _rejectAfterShutdown(channel, subscription, msg) {
+    const { queue, callback } = subscription;
+
+    await this.hooks.trigger(this, ConsumerHooks.beforeProcessMessageEvent, {
+      queue,
+      action: { message: msg, content: undefined, callback },
+    });
+
     let rejectError;
     try {
       channel.reject(msg, true);
