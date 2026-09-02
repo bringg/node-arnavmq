@@ -997,6 +997,41 @@ describe('graceful shutdown', () => {
       );
     });
 
+    // The sweep drops the whole per-queue entry, and checkRpc() has two awaits between creating that
+    // entry and registering its waiter in it. A close landing in between used to leave checkRpc()
+    // indexing a key that was gone, so the caller got a TypeError instead of the publish's own
+    // retryable error - and with retries capped, a real message failed for the wrong reason.
+    it('survives a close landing between createRpcQueue() and the waiter registration', async () => {
+      const channel = createFakeChannel();
+      channel.sendToQueue = sinon.stub().callsFake(() => {
+        throw new Error('Channel closed');
+      });
+      const producer = new Producer(createFakeConnection(channel));
+      const queue = 'shutdown:producer-close:setup-window';
+
+      // drive the close into the window, exactly once
+      const createRpcQueue = producer.createRpcQueue.bind(producer);
+      let dropped = false;
+      producer.createRpcQueue = async (q) => {
+        const resQueue = await createRpcQueue(q);
+        if (!dropped) {
+          dropped = true;
+          channel.emit('close');
+        }
+        return resQueue;
+      };
+
+      await assert.rejects(() => producer.checkRpc(queue, 'payload', { rpc: true }), /Channel closed/);
+
+      // The publish's own error is what the caller must see: unlike ConnectionClosedError it is
+      // retryable, so _sendToQueue reconnects and republishes rather than losing the request.
+      assert.strictEqual(
+        pendingCorrelationId(producer, queue),
+        undefined,
+        'expected no orphaned RPC waiter after the failed publish',
+      );
+    });
+
     // The win from putting this on the channel rather than in close(): the same code covers a
     // connection that died on its own. amqplib routes every teardown through
     // Connection.toClosed() -> _closeChannels() -> Channel.toClosed(), which emits 'close' on every

@@ -218,11 +218,11 @@ class Producer {
     options.persistent = true;
 
     if (options.rpc) {
-      await this.createRpcQueue(queue);
       // generates a correlationId (random uuid) so we know which callback to execute on received response
       options.correlationId = utils.getCorrelationId(options);
-      // reply to us if you receive this message!
-      options.replyTo = await this.amqpRPCQueues[queue].resQueuePromise;
+      // reply to us if you receive this message! Taken from the return value rather than read back
+      // out of `amqpRPCQueues`, which a channel close landing in this very window would have swept.
+      options.replyTo = await this.createRpcQueue(queue);
 
       // deferred promise that will resolve when response is received
       const responsePromise = pDefer();
@@ -233,6 +233,11 @@ class Producer {
       // kills the process. This no-op catch attaches to a derived promise, so the rejection still
       // reaches the caller below unchanged.
       responsePromise.promise.catch(() => {});
+      // `??=` for the same reason: the sweep drops the whole per-queue entry, so a close landing
+      // between the two awaits above leaves nothing to index. Registering the waiter into a fresh
+      // entry keeps the publish below on its normal path - it fails against the dead channel with a
+      // retryable error, so `_sendToQueue` reconnects and republishes rather than losing the request.
+      this.amqpRPCQueues[queue] ??= {};
       this.amqpRPCQueues[queue][options.correlationId] = { responsePromise, timeoutId: null };
 
       try {
