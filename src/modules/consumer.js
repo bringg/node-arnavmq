@@ -6,7 +6,7 @@ const { logger } = require('./logger');
 
 const loggerAlias = 'arnav_mq:consumer';
 
-// How often `drain()` polls `inFlight()` while waiting for in-flight handlers to finish.
+// How often `_drain()` polls `inFlight()` while waiting for in-flight handlers to finish.
 const DRAIN_POLL_INTERVAL_MS = 50;
 
 class Consumer {
@@ -15,14 +15,11 @@ class Consumer {
     this._configuration = this._connection.config;
     this.hooks = new ConsumerHooks();
 
-    // Subscription registry, keyed by an incrementing id (NOT queue name - two consume() calls on
-    // the same queue with different callbacks are legal, and queue-keying would silently drop a
-    // consumerTag).
+    // One record per subscribe() call, NOT per queue - two subscribe() calls on the same queue with
+    // different callbacks are legal, and each gets its own consumerTag.
     this._subscriptions = [];
-    // Set by _cancelAll()/stop(): stops resubscribe/retry for every subscription, existing and future.
-    this._shuttingDown = false;
-    // Memoized stop() promise, so repeated calls share one in-flight shutdown instead of racing.
-    // Not a mode flag - the same idempotency idiom as Connection._closePromise. Without it a
+    // Memoized stop() promise - the same idiom as Connection._closePromise, and doubling as the
+    // "shutting down" flag that `_isLive` reads. It has to be memoized regardless: without it a
     // concurrent close() re-runs _cancelAll() and sends basic.cancel for a tag already cancelled,
     // and the obvious alternatives (an early return on `cancelled`, clearing consumerTag) both
     // break _consumeQueue's deferred re-cancel for a subscription cancelled mid-flight.
@@ -47,7 +44,7 @@ class Consumer {
    * @return {boolean}
    */
   _isLive(subscription) {
-    return !this._shuttingDown && !subscription.cancelled && !this._connection.isClosed;
+    return !this._stopPromise && !subscription.cancelled && !this._connection.isClosed;
   }
 
   /**
@@ -111,38 +108,17 @@ class Consumer {
    * @param  {Function} callback Callback function executed when a message is received on the queue name, can return a promise
    * @return {Promise}           A promise that resolves when connection is established and consumer is ready
    */
-  /* eslint no-param-reassign: "off" */
   consume(queue, options, callback) {
     return this.subscribe(queue, options, callback);
   }
 
   async subscribe(queue, options, callback) {
-    const defaultOptions = {
-      persistent: true,
-      durable: true,
-      channel: {
-        prefetch: this._configuration.prefetch,
-      },
-    };
-
-    if (typeof options === 'function') {
-      callback = options;
-      options = defaultOptions;
-    } else {
-      options = {
-        ...defaultOptions,
-        ...options,
-        channel: {
-          ...defaultOptions.channel,
-          ...(options.channel || {}),
-        },
-      };
-    }
+    const resolved = this._resolveSubscribeArgs(options, callback);
 
     const subscription = {
       queue,
-      options,
-      callback,
+      options: resolved.options,
+      callback: resolved.callback,
       channel: null,
       consumerTag: null,
       onChannelClose: null,
@@ -152,6 +128,40 @@ class Consumer {
     this._subscriptions.push(subscription);
 
     return await this._subscribe(subscription);
+  }
+
+  /**
+   * Resolves subscribe()'s two call shapes - `(queue, options, callback)` and `(queue, callback)` -
+   * and fills in the defaults, including the channel prefetch.
+   * @param {object|Function} options
+   * @param {Function} callback
+   * @private
+   * @return {{options: object, callback: Function}}
+   */
+  _resolveSubscribeArgs(options, callback) {
+    const defaults = {
+      persistent: true,
+      durable: true,
+      channel: {
+        prefetch: this._configuration.prefetch,
+      },
+    };
+
+    if (typeof options === 'function') {
+      return { options: defaults, callback: options };
+    }
+
+    return {
+      options: {
+        ...defaults,
+        ...options,
+        channel: {
+          ...defaults.channel,
+          ...(options.channel || {}),
+        },
+      },
+      callback,
+    };
   }
 
   async _subscribe(subscription) {
@@ -242,100 +252,12 @@ class Consumer {
   }
 
   async _consumeQueue(channel, subscription) {
-    const { queue, callback } = subscription;
-
-    const consumeFunc = async (msg) => {
-      if (!msg) {
-        // When forcefully cancelled by rabbitmq, consumer would receive a null message.
-        // https://amqp-node.github.io/amqplib/channel_api.html#channel_consume
-        logger.warn({
-          message: `${loggerAlias} Consumer was cancelled by server for queue '${queue}'`,
-          error: null,
-          params: { queue },
-        });
-        return;
-      }
-
-      if (!this._isLive(subscription)) {
-        // Buffered by the broker before cancel-ok landed (prefetch > 1) - hand it straight back
-        // instead of running the handler, so it can't block drain()/stop()/close() on work that
-        // was never going to be allowed to finish here.
-        try {
-          channel.reject(msg, true);
-        } catch (error) {
-          logger.error({
-            message: `${loggerAlias} Failed to reject message received after shutdown on queue ${queue}: ${error.message}`,
-            error,
-            params: { queue },
-          });
-        }
-        return;
-      }
-
-      subscription.inFlightCount += 1;
-      try {
-        const messageString = msg.content.toString();
-        logger.debug({
-          message: `${loggerAlias} [${queue}] < ${messageString}`,
-          params: { queue, message: messageString },
-        });
-
-        let body = {};
-        try {
-          body = parsers.in(msg);
-
-          const action = { message: msg, content: body, callback };
-          await this.hooks.trigger(this, ConsumerHooks.beforeProcessMessageEvent, {
-            queue,
-            action,
-          });
-          // Use callback from action in case it was changed/wrapped in the hook (for instance, for instrumentation)
-          const res = await action.callback(body, msg.properties);
-
-          await this.checkRpc(msg.properties, queue, res);
-        } catch (error) {
-          logger.error({
-            message: `${loggerAlias} Failed processing message from queue ${queue}: ${error.message}`,
-            error,
-            params: { queue, message: messageString },
-          });
-          // For callback errors, use default behavior with _rejectMessageAfterProcess
-          let shouldRequeue = this._connection.config.requeue;
-          if (error instanceof SyntaxError) {
-            // For parsing errors, reject the message and don't requeue it.
-            shouldRequeue = false;
-          }
-
-          await this._rejectMessageAfterProcess(channel, subscription, msg, body, shouldRequeue, error);
-          return;
-        }
-
-        let ackError;
-        try {
-          channel.ack(msg);
-        } catch (err) {
-          ackError = err;
-
-          logger.error({
-            message: `${loggerAlias} Failed to ack message after processing finished on queue ${queue}: ${ackError.message}`,
-            error: ackError,
-            params: { queue },
-          });
-        }
-        await this.hooks.trigger(this, ConsumerHooks.afterProcessMessageEvent, {
-          queue,
-          message: msg,
-          content: body,
-          ackError,
-        });
-      } finally {
-        subscription.inFlightCount -= 1;
-        this._removeIfDone(subscription);
-      }
-    };
+    const { queue } = subscription;
 
     try {
-      const { consumerTag } = await channel.consume(subscription.queue, consumeFunc, { noAck: false });
+      const { consumerTag } = await channel.consume(queue, (msg) => this._onDelivery(channel, subscription, msg), {
+        noAck: false,
+      });
       subscription.consumerTag = consumerTag;
 
       if (!this._isLive(subscription)) {
@@ -348,6 +270,125 @@ class Consumer {
         params: { queue },
       });
     }
+  }
+
+  /**
+   * amqplib's delivery callback for one subscription: the only place `inFlightCount` moves, so
+   * every delivery this consumer accepts is visible to `inFlight()`/`_drain()` for exactly as long
+   * as its handler runs.
+   * @private
+   */
+  async _onDelivery(channel, subscription, msg) {
+    const { queue } = subscription;
+
+    if (!msg) {
+      // When forcefully cancelled by rabbitmq, consumer would receive a null message.
+      // https://amqp-node.github.io/amqplib/channel_api.html#channel_consume
+      logger.warn({
+        message: `${loggerAlias} Consumer was cancelled by server for queue '${queue}'`,
+        error: null,
+        params: { queue },
+      });
+      return;
+    }
+
+    if (!this._isLive(subscription)) {
+      this._rejectAfterShutdown(channel, queue, msg);
+      return;
+    }
+
+    subscription.inFlightCount += 1;
+    try {
+      await this._processMessage(channel, subscription, msg);
+    } finally {
+      subscription.inFlightCount -= 1;
+      this._removeIfDone(subscription);
+    }
+  }
+
+  /**
+   * Hand a delivery back to the broker untouched. Reached for a message the broker had already
+   * buffered to us before cancel-ok landed (prefetch > 1): running the handler would block
+   * `_drain()`/`stop()`/`close()` on work that was never going to be allowed to finish here.
+   * @private
+   */
+  _rejectAfterShutdown(channel, queue, msg) {
+    try {
+      channel.reject(msg, true);
+    } catch (error) {
+      logger.error({
+        message: `${loggerAlias} Failed to reject message received after shutdown on queue ${queue}: ${error.message}`,
+        error,
+        params: { queue },
+      });
+    }
+  }
+
+  /**
+   * Parse one delivery, run the subscription's callback, reply to it if it was an RPC request, and
+   * settle it with the broker - an ack on success, a reject on any failure above.
+   * @private
+   * @return {Promise<void>}
+   */
+  async _processMessage(channel, subscription, msg) {
+    const { queue, callback } = subscription;
+    const messageString = msg.content.toString();
+    logger.debug({
+      message: `${loggerAlias} [${queue}] < ${messageString}`,
+      params: { queue, message: messageString },
+    });
+
+    let body = {};
+    try {
+      body = parsers.in(msg);
+
+      const action = { message: msg, content: body, callback };
+      await this.hooks.trigger(this, ConsumerHooks.beforeProcessMessageEvent, {
+        queue,
+        action,
+      });
+      // Use callback from action in case it was changed/wrapped in the hook (for instance, for instrumentation)
+      const res = await action.callback(body, msg.properties);
+
+      await this.checkRpc(msg.properties, queue, res);
+    } catch (error) {
+      logger.error({
+        message: `${loggerAlias} Failed processing message from queue ${queue}: ${error.message}`,
+        error,
+        params: { queue, message: messageString },
+      });
+      // A parsing error is never requeued - a redelivery of the same bytes fails identically.
+      // Anything else follows the configured requeue behavior.
+      const shouldRequeue = error instanceof SyntaxError ? false : this._connection.config.requeue;
+
+      await this._rejectMessageAfterProcess(channel, subscription, msg, body, shouldRequeue, error);
+      return;
+    }
+
+    await this._ackMessageAfterProcess(channel, queue, msg, body);
+  }
+
+  /** @private */
+  async _ackMessageAfterProcess(channel, queue, msg, parsedBody) {
+    let ackError;
+    try {
+      channel.ack(msg);
+    } catch (error) {
+      ackError = error;
+
+      logger.error({
+        message: `${loggerAlias} Failed to ack message after processing finished on queue ${queue}: ${ackError.message}`,
+        error: ackError,
+        params: { queue },
+      });
+    }
+
+    await this.hooks.trigger(this, ConsumerHooks.afterProcessMessageEvent, {
+      queue,
+      message: msg,
+      content: parsedBody,
+      ackError,
+    });
   }
 
   /** @private */
@@ -381,13 +422,13 @@ class Consumer {
   }
 
   /**
-   * Cancels every subscription across every queue, and marks this consumer as shutting down so
-   * no subscription resubscribes/retries afterward.
+   * Cancels every subscription across every queue. Only ever reached through `stop()`, which has
+   * already set `_stopPromise` - so no subscription, existing or created later, resubscribes or
+   * retries afterward.
    * @private
    * @return {Promise<void>}
    */
   async _cancelAll() {
-    this._shuttingDown = true;
     await Promise.all(this._subscriptions.map((sub) => this._cancelSubscription(sub)));
   }
 
@@ -395,7 +436,8 @@ class Consumer {
   async _cancelSubscription(subscription) {
     subscription.cancelled = true;
     if (subscription.onChannelClose) {
-      // Does nothing if the subscription is already cancelled
+      // Guarded because removeListener() rejects an undefined listener - there is none to remove
+      // until _initializeChannel has attached one.
       subscription.channel?.removeListener('close', subscription.onChannelClose);
     }
 
@@ -456,6 +498,10 @@ class Consumer {
    * _cancelAll(), then _drain(). Idempotent - repeated calls share the one in-flight shutdown
    * promise instead of running those steps more than once. Internal - not part of the object
    * arnavmq.js's factory returns publicly; call `close()` on the top-level module instead.
+   *
+   * `_stopPromise` is also what `_isLive` reads, so nothing here may consult `_isLive` before the
+   * assignment below completes - the steps' own synchronous prefixes run first, as the right-hand
+   * side of it.
    * @return {Promise<void>} Resolves once every in-flight handler has finished.
    */
   async stop() {

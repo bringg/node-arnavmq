@@ -98,17 +98,7 @@ class Connection {
     }
 
     if (connection) {
-      const channels = this._channels;
-      if (channels) {
-        try {
-          await channels.closeAll();
-        } catch (error) {
-          logger.error({
-            message: `Error closing amqp channels: ${error.message}`,
-            error,
-          });
-        }
-      }
+      await this._channels?.closeAll();
 
       try {
         await connection.close();

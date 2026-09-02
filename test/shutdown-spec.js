@@ -1,3 +1,4 @@
+/* eslint-disable no-underscore-dangle */
 const assert = require('assert');
 const sinon = require('sinon');
 const EventEmitter = require('events');
@@ -11,9 +12,9 @@ const { setLogger } = require('../src/modules/logger');
 const utils = require('../src/modules/utils');
 
 /**
- * A fake amqp.node channel good enough to drive consumer.js without a broker: it captures the
- * per-queue consume() callback so tests can deliver fake messages into it directly, and exposes
- * spies for every broker call consumer.js can make on a channel.
+ * A fake amqp.node channel good enough to drive consumer.js and producer.js without a broker: it
+ * captures the per-queue consume() callback so tests can deliver fake messages into it directly,
+ * and exposes spies for every broker call either module can make on a channel.
  */
 function createFakeChannel() {
   const channel = new EventEmitter();
@@ -28,14 +29,24 @@ function createFakeChannel() {
   channel.cancel = sinon.stub().resolves();
   channel.close = sinon.stub().resolves();
   channel.sendToQueue = sinon.stub().returns(true);
+  channel.publish = sinon.stub().returns(true);
   return channel;
 }
 
 function createFakeConnection(channel, overrides = {}) {
   return {
-    config: { prefetch: 5, timeout: 10, requeue: true, consumerSuffix: '', ...overrides },
+    config: {
+      prefetch: 5,
+      timeout: 10,
+      requeue: true,
+      consumerSuffix: '',
+      hostname: 'shutdown-fake-connection',
+      rpcTimeout: 15000,
+      ...overrides,
+    },
     getChannel: sinon.stub().resolves(channel),
     getDefaultChannel: sinon.stub().resolves(channel),
+    getConnection: sinon.stub().resolves({}),
   };
 }
 
@@ -71,14 +82,41 @@ async function cancelQueue(consumer, queue) {
   await Promise.all(subscriptions.map((sub) => consumer._cancelSubscription(sub)));
 }
 
-/** A fake amqp.node channel good enough to drive producer.js's RPC path without a broker. */
-function createFakeChannelForRpc() {
-  const channel = new EventEmitter();
-  channel.assertQueue = sinon.stub().resolves({});
-  channel.consume = sinon.stub().resolves({ consumerTag: 'fake-tag' });
-  channel.sendToQueue = sinon.stub().returns(true);
-  channel.publish = sinon.stub().returns(true);
-  return channel;
+/**
+ * A Connection against the real broker, built from the exported class rather than the module's
+ * singleton factory, so close() (which is terminal) never tears down what the other spec files use.
+ */
+function newConnection(overrides = {}) {
+  return new Connection({
+    host: 'amqp://localhost',
+    hostname: 'shutdown-test',
+    prefetch: 5,
+    timeout: 10,
+    requeue: true,
+    consumerSuffix: '',
+    producerMaxRetries: -1,
+    rpcTimeout: 0,
+    ...overrides,
+  });
+}
+
+/** A fresh, isolated ArnavMQ + Connection pair against the real broker. */
+function newArnavmq(overrides = {}) {
+  return new ArnavMQ(newConnection(overrides));
+}
+
+/** The correlationId of the pending RPC waiter registered in amqpRPCQueues[queue], if any. */
+function pendingCorrelationId(producer, queue) {
+  return Object.keys(producer.amqpRPCQueues[queue] || {}).find((key) => key !== 'resQueuePromise');
+}
+
+/** A producer with one RPC request already published and waiting for its response. */
+async function newPendingRpc(queue, overrides = {}) {
+  const channel = createFakeChannel();
+  const producer = new Producer(createFakeConnection(channel, overrides));
+  const rpcPromise = producer.checkRpc(queue, 'payload', { rpc: true });
+  await waitFor(() => !!pendingCorrelationId(producer, queue));
+  return { channel, producer, rpcPromise };
 }
 
 /** Polls `predicate` every 20ms until truthy, or throws once `timeoutMs` elapses. */
@@ -86,10 +124,29 @@ async function waitFor(predicate, timeoutMs = 3000) {
   const deadline = Date.now() + timeoutMs;
   while (!predicate()) {
     if (Date.now() >= deadline) {
-      throw new Error('waitFor() timed out');
+      throw new Error(`waitFor() timed out after ${timeoutMs}ms waiting for: ${predicate}`);
     }
     await utils.timeoutPromise(20);
   }
+}
+
+/**
+ * Runs `fn` and resolves with its result, or with the error it threw. For work done inside a
+ * consumer handler, where consumer.js swallows a throw into a reject+log and the test would
+ * otherwise never see it.
+ */
+async function settled(fn) {
+  try {
+    return await fn();
+  } catch (error) {
+    return error;
+  }
+}
+
+/** Resolves once close()'s cancel step has landed on every subscription registered on `mq`. */
+function waitForCancelled(mq) {
+  const subscriptions = mq.consumer._subscriptions;
+  return waitFor(() => subscriptions.length > 0 && subscriptions.every((sub) => sub.cancelled));
 }
 
 /**
@@ -146,7 +203,7 @@ describe('graceful shutdown', () => {
         const queue = 'shutdown:cancel:no-close';
         await consumer.consume(queue, () => {});
 
-        const record = [...consumer._subscriptions.values()][0];
+        const record = consumer._subscriptions[0];
         assert(record.consumerTag, 'expected a consumerTag to have been assigned');
         const { channel } = record;
         const closeSpy = sandbox.spy(channel, 'close');
@@ -166,7 +223,7 @@ describe('graceful shutdown', () => {
       // proves the *consequence* end-to-end against the real broker - a live queueB consumer and a
       // live producer RPC round-trip both keep working concurrently with cancelling queueA, and
       // queueA itself really stops receiving.
-      it('cancelling queueA stops A while a concurrent queueB consumer and a producer RPC call keep working (regression: cancel by tag, never close the shared channel)', async () => {
+      it('cancelling queueA leaves a concurrent queueB consumer and a producer RPC round-trip working', async () => {
         const queueA = 'shutdown:cancel:regression:a';
         const queueB = 'shutdown:cancel:regression:b';
         const rpcQueue = 'shutdown:cancel:regression:rpc';
@@ -182,8 +239,7 @@ describe('graceful shutdown', () => {
         await consumer.consume(rpcQueue, () => 'pong');
 
         await arnavmq.producer.produce(queueA, { n: 1 });
-        await utils.timeoutPromise(300);
-        assert.strictEqual(countA, 1, 'expected queueA to receive its message before being cancelled');
+        await waitFor(() => countA === 1);
 
         await cancelQueue(consumer, queueA);
 
@@ -194,10 +250,9 @@ describe('graceful shutdown', () => {
           arnavmq.producer.produce(queueB, { n: 1 }),
           arnavmq.producer.produce(queueA, { n: 2 }),
         ]);
-        await utils.timeoutPromise(300);
+        await waitFor(() => countB === 1); // queueB keeps receiving after queueA was cancelled
 
         assert.strictEqual(rpcResult, 'pong', 'expected the RPC round-trip to keep working after cancelling queueA');
-        assert.strictEqual(countB, 1, 'expected queueB to keep receiving messages after cancelling queueA');
         assert.strictEqual(countA, 1, 'the cancelled queueA subscription must not receive further deliveries');
       });
 
@@ -209,7 +264,7 @@ describe('graceful shutdown', () => {
         // so it is visible on the registry immediately even though the returned promise is still
         // pending (stuck in the retry loop because _initializeChannel always resolves null here).
         const subscribePromise = consumer.subscribe(queue, () => {});
-        const record = [...consumer._subscriptions.values()].find((r) => r.queue === queue);
+        const record = consumer._subscriptions.find((r) => r.queue === queue);
         assert(record, 'expected a record to be registered synchronously by subscribe()');
         assert.strictEqual(record.consumerTag, null);
 
@@ -225,7 +280,7 @@ describe('graceful shutdown', () => {
         const initStub = sandbox.stub(consumer, '_initializeChannel').resolves(null);
 
         const subscribePromise = consumer.subscribe(queue, () => {});
-        const record = [...consumer._subscriptions.values()].find((r) => r.queue === queue);
+        const record = consumer._subscriptions.find((r) => r.queue === queue);
         assert(record, 'expected a record to be registered synchronously by subscribe()');
 
         await cancelQueue(consumer, queue);
@@ -240,9 +295,8 @@ describe('graceful shutdown', () => {
         );
       });
 
-      it('_cancelAll() sets _shuttingDown so even brand-new subscribe() calls never consume', async () => {
-        await consumer._cancelAll();
-        assert.strictEqual(consumer._shuttingDown, true);
+      it('after stop(), even brand-new subscribe() calls never consume', async () => {
+        await consumer.stop();
 
         const initSpy = sandbox.spy(consumer, '_initializeChannel');
         const result = await consumer.subscribe('shutdown:after-cancel-all', () => {});
@@ -255,19 +309,9 @@ describe('graceful shutdown', () => {
     describe('listener hygiene on the shared channel', () => {
       it('does not accumulate close listeners across repeated _initializeChannel calls for one record', async () => {
         const { channel: sharedChannel, consumer } = newTestConsumer();
-        const record = {
-          id: 1,
-          queue: 'shared-channel-queue',
-          options: { channel: {} },
-          callback: () => {},
-          channel: null,
-          consumerTag: null,
-          onChannelClose: null,
-          cancelled: false,
-          inFlightCount: 0,
-        };
 
-        await consumer._initializeChannel(record);
+        await consumer.consume('shared-channel-queue', () => {});
+        const record = consumer._subscriptions[0];
         await consumer._initializeChannel(record);
         await consumer._initializeChannel(record);
 
@@ -278,7 +322,7 @@ describe('graceful shutdown', () => {
         const { channel: sharedChannel, consumer } = newTestConsumer();
 
         await consumer.consume('shutdown:onclose:guard', () => {});
-        const record = [...consumer._subscriptions.values()][0];
+        const record = consumer._subscriptions[0];
         const subscribeSpy = sinon.spy(consumer, '_subscribe');
 
         record.cancelled = true;
@@ -287,7 +331,7 @@ describe('graceful shutdown', () => {
         sinon.assert.notCalled(subscribeSpy);
       });
 
-      it('_cancelSubscription removes the record close listener, so repeated subscribe->cancel cycles do not leak listeners', async () => {
+      it('repeated subscribe->cancel cycles leave no listener and no record behind', async () => {
         const { channel: sharedChannel, consumer } = newTestConsumer();
         const queue = 'shutdown:cancel:listener-hygiene';
 
@@ -321,7 +365,7 @@ describe('graceful shutdown', () => {
         const queue = 'shutdown:cancel:mid-flight';
 
         await consumer.consume(queue, () => {});
-        const [first] = [...consumer._subscriptions.values()];
+        const [first] = consumer._subscriptions;
         assert(first.consumerTag, 'expected the first subscription to be fully subscribed');
 
         // The second one is held inside channel.consume() - i.e. past _initializeChannel (so
@@ -334,11 +378,10 @@ describe('graceful shutdown', () => {
         });
 
         const subscribePromise = consumer.consume(queue, () => {});
-        await utils.timeoutPromise(20); // let it reach the gated channel.consume()
-        const second = [...consumer._subscriptions.values()][1];
+        await waitFor(() => channel.consume.called); // it has reached the gated channel.consume()
+        const second = consumer._subscriptions[1];
         assert(second, 'expected the second subscription to be registered');
         assert.strictEqual(second.consumerTag, null, 'expected it to be mid-flight, without a tag yet');
-        sinon.assert.called(channel.consume);
 
         // cancelling here can send nothing to the broker - there is no tag yet.
         await cancelQueue(consumer, queue);
@@ -371,8 +414,8 @@ describe('graceful shutdown', () => {
         });
 
         const subscribePromise = consumer.subscribe(queue, () => {});
-        await utils.timeoutPromise(20); // let it reach the gated assertQueue()
-        const record = [...consumer._subscriptions.values()][0];
+        await waitFor(() => channel.assertQueue.called); // it has reached the gated assertQueue()
+        const record = consumer._subscriptions[0];
         assert(record.channel, 'expected _initializeChannel to have already attached the shared channel');
         assert.strictEqual(record.consumerTag, null);
 
@@ -396,26 +439,26 @@ describe('graceful shutdown', () => {
         const ackQueue = 'shutdown:inflight:ack-path';
         let observedDuringAckHandler = null;
         await consumer.consume(ackQueue, () => {
-          observedDuringAckHandler = consumer.inFlight(ackQueue);
+          observedDuringAckHandler = consumer.inFlight();
           return 'ok';
         });
 
-        assert.strictEqual(consumer.inFlight(ackQueue), 0);
+        assert.strictEqual(consumer.inFlight(), 0);
         await deliver(channel, ackQueue, fakeMessage({ a: 1 }));
         assert.strictEqual(observedDuringAckHandler, 1, 'expected inFlight() to be 1 while the handler runs');
-        assert.strictEqual(consumer.inFlight(ackQueue), 0, 'expected inFlight() back to 0 once acked');
+        assert.strictEqual(consumer.inFlight(), 0, 'expected inFlight() back to 0 once acked');
         sinon.assert.calledOnce(channel.ack);
 
         const rejectQueue = 'shutdown:inflight:reject-path';
         let observedDuringRejectHandler = null;
         await consumer.consume(rejectQueue, () => {
-          observedDuringRejectHandler = consumer.inFlight(rejectQueue);
+          observedDuringRejectHandler = consumer.inFlight();
           throw new Error('boom');
         });
 
         await deliver(channel, rejectQueue, fakeMessage({ a: 1 }));
         assert.strictEqual(observedDuringRejectHandler, 1, 'expected inFlight() to be 1 while the handler runs');
-        assert.strictEqual(consumer.inFlight(rejectQueue), 0, 'expected inFlight() back to 0 once rejected');
+        assert.strictEqual(consumer.inFlight(), 0, 'expected inFlight() back to 0 once rejected');
         sinon.assert.calledOnce(channel.reject);
       });
 
@@ -428,13 +471,13 @@ describe('graceful shutdown', () => {
           handlerCalls += 1;
           return 'ok';
         });
-        const record = [...consumer._subscriptions.values()][0];
+        const record = consumer._subscriptions[0];
         record.cancelled = true; // simulates a delivery buffered before cancel-ok landed
 
         await deliver(channel, queue, fakeMessage({ a: 1 }));
 
         assert.strictEqual(handlerCalls, 0, 'the handler must not run for a message delivered after cancel');
-        assert.strictEqual(consumer.inFlight(queue), 0);
+        assert.strictEqual(consumer.inFlight(), 0);
         sinon.assert.calledOnce(channel.reject);
         sinon.assert.calledWith(channel.reject, sinon.match.any, true);
         sinon.assert.notCalled(channel.ack);
@@ -457,7 +500,7 @@ describe('graceful shutdown', () => {
         await consumer.consume(queue, () => handlerDefer.promise);
         const deliverPromise = deliver(channel, queue, fakeMessage({ a: 1 }));
 
-        assert.strictEqual(consumer.inFlight(queue), 1);
+        assert.strictEqual(consumer.inFlight(), 1);
         const drainPromise = consumer._drain();
 
         handlerDefer.resolve('ok');
@@ -498,7 +541,6 @@ describe('graceful shutdown', () => {
         await consumer.stop();
         sinon.assert.called(channel.cancel);
         sinon.assert.notCalled(channel.close);
-        assert.strictEqual(consumer._shuttingDown, true);
       });
 
       it('is idempotent - concurrent calls share one in-flight shutdown', async () => {
@@ -536,62 +578,41 @@ describe('graceful shutdown', () => {
       });
     });
 
-    describe('inFlight()', () => {
-      it('inFlight() counts across all queues', async () => {
-        const { channel, consumer } = newTestConsumer();
-        const queueA = 'shutdown:inflight:scope-a';
-        const queueB = 'shutdown:inflight:scope-b';
-        const deferA = pDefer();
-        const deferB = pDefer();
+    it('inFlight() counts across all queues', async () => {
+      const { channel, consumer } = newTestConsumer();
+      const queueA = 'shutdown:inflight:scope-a';
+      const queueB = 'shutdown:inflight:scope-b';
+      const deferA = pDefer();
+      const deferB = pDefer();
 
-        await consumer.consume(queueA, () => deferA.promise);
-        await consumer.consume(queueB, () => deferB.promise);
+      await consumer.consume(queueA, () => deferA.promise);
+      await consumer.consume(queueB, () => deferB.promise);
 
-        const deliverA = deliver(channel, queueA, fakeMessage({ a: 1 }));
-        const deliverB = deliver(channel, queueB, fakeMessage({ b: 1 }));
+      const deliverA = deliver(channel, queueA, fakeMessage({ a: 1 }));
+      const deliverB = deliver(channel, queueB, fakeMessage({ b: 1 }));
 
-        assert.strictEqual(consumer.inFlight(), 2);
+      assert.strictEqual(consumer.inFlight(), 2);
 
-        deferA.resolve('ok');
-        deferB.resolve('ok');
-        await Promise.all([deliverA, deliverB]);
+      deferA.resolve('ok');
+      deferB.resolve('ok');
+      await Promise.all([deliverA, deliverB]);
 
-        assert.strictEqual(consumer.inFlight(), 0);
-      });
+      assert.strictEqual(consumer.inFlight(), 0);
     });
   });
 
-  // These tests construct their own `Connection` instances (via the exported `Connection` class,
-  // not the module's singleton factory) so they can freely call `close()` against a real broker
-  // connection without tearing down the shared singleton every other spec file in this suite relies
-  // on.
   describe('connection.js', () => {
     const sandbox = sinon.createSandbox();
     afterEach(() => sandbox.restore());
 
-    function newConnection(overrides = {}) {
-      return new Connection({
-        host: 'amqp://localhost',
-        hostname: 'shutdown-connection-test',
-        timeout: 10,
-        ...overrides,
-      });
-    }
+    it('isClosed is false before close() and true as soon as close() is invoked, before it resolves', () => {
+      const conn = newConnection();
+      assert.strictEqual(conn.isClosed, false);
 
-    describe('isClosed', () => {
-      it('is false before close() and true as soon as close() is invoked (before it even resolves)', () => {
-        const conn = newConnection();
-        assert.strictEqual(conn.isClosed, false);
+      const closePromise = conn.close();
+      assert.strictEqual(conn.isClosed, true, 'expected isClosed to flip synchronously, before any await in close()');
 
-        const closePromise = conn.close();
-        assert.strictEqual(
-          conn.isClosed,
-          true,
-          'expected _closed to flip synchronously, before any await inside close()',
-        );
-
-        return closePromise;
-      });
+      return closePromise;
     });
 
     describe('close()', () => {
@@ -709,36 +730,11 @@ describe('graceful shutdown', () => {
         assert.strictEqual(conn.isClosed, true);
       });
 
-      it('gives up on a channel that never confirms its close rather than hanging shutdown forever', async () => {
-        const conn = newConnection({ prefetch: 5 });
-        const amqpConnection = await conn.getConnection();
-        const channel = await conn.getDefaultChannel();
-        const connectionCloseSpy = sandbox.spy(amqpConnection, 'close');
-        // amqplib leaves `channel.close()` pending forever if the Channel.Close-Ok never arrives (the
-        // socket dying mid-handshake does not settle it, nor does a simultaneous server-side close).
-        // The barrier is best-effort: it must be capped, or a wedged broker means a pod that never exits.
-        sandbox.stub(channel, 'close').returns(new Promise(() => {}));
-
-        const start = Date.now();
-        await conn.close();
-        const elapsed = Date.now() - start;
-
-        sinon.assert.calledOnce(connectionCloseSpy);
-        assert.strictEqual(conn.isClosed, true);
-        assert(elapsed >= 4000, `expected close() to actually wait out the channel-close cap, took only ${elapsed}ms`);
-        assert(elapsed < 15000, `expected close() to give up on the wedged channel, took ${elapsed}ms`);
-      });
-
-      it('gives up on a channel whose creation never finishes rather than hanging shutdown forever', async () => {
-        const conn = newConnection({ prefetch: 5 });
+      // The channel-close barrier is best-effort and has to be capped, or one wedged channel means a
+      // pod that never exits. Both tests below wedge a different step of it.
+      async function assertClosesByWaitingOutTheCap(conn, what) {
         const amqpConnection = await conn.getConnection();
         const connectionCloseSpy = sandbox.spy(amqpConnection, 'close');
-
-        // A cache entry still pending when shutdown starts - a channel allocated moments earlier whose
-        // Channel.Open-Ok/Basic.Qos-Ok never arrived from a broker that stopped answering while its TCP
-        // connection stayed up. The cap has to cover awaiting the entry itself, not just close().
-        // eslint-disable-next-line no-underscore-dangle
-        conn._channels._channels.set('never-opens', { chann: new Promise(() => {}), config: { prefetch: 5 } });
 
         const start = Date.now();
         await conn.close();
@@ -747,7 +743,29 @@ describe('graceful shutdown', () => {
         sinon.assert.calledOnce(connectionCloseSpy);
         assert.strictEqual(conn.isClosed, true);
         assert(elapsed >= 4000, `expected close() to actually wait out the cap, took only ${elapsed}ms`);
-        assert(elapsed < 15000, `expected close() to give up on the never-opened channel, took ${elapsed}ms`);
+        assert(elapsed < 15000, `expected close() to give up on the ${what}, took ${elapsed}ms`);
+      }
+
+      it('gives up on a channel that never confirms its close rather than hanging shutdown forever', async () => {
+        const conn = newConnection();
+        const channel = await conn.getDefaultChannel();
+        // amqplib leaves `channel.close()` pending forever if the Channel.Close-Ok never arrives - the
+        // socket dying mid-handshake does not settle it, nor does a simultaneous server-side close.
+        sandbox.stub(channel, 'close').returns(new Promise(() => {}));
+
+        await assertClosesByWaitingOutTheCap(conn, 'wedged channel');
+      });
+
+      it('gives up on a channel whose creation never finishes rather than hanging shutdown forever', async () => {
+        const conn = newConnection();
+        await conn.getConnection();
+
+        // A cache entry still pending when shutdown starts - a channel allocated moments earlier whose
+        // Channel.Open-Ok/Basic.Qos-Ok never arrived from a broker that stopped answering while its TCP
+        // connection stayed up. The cap has to cover awaiting the entry itself, not just close().
+        conn._channels._channels.set('never-opens', { chann: new Promise(() => {}), config: { prefetch: 5 } });
+
+        await assertClosesByWaitingOutTheCap(conn, 'never-opened channel');
       });
     });
 
@@ -764,10 +782,7 @@ describe('graceful shutdown', () => {
 
         const channelPromise = conn.getDefaultChannel();
         // wait until we are inside the prefetch round-trip, with the channel allocated but qos pending
-        for (let i = 0; i < 100 && !fakeChannel.prefetch.called; i += 1) {
-          await utils.timeoutPromise(10);
-        }
-        sinon.assert.calledOnce(fakeChannel.prefetch);
+        await waitFor(() => fakeChannel.prefetch.called);
 
         assert.strictEqual(fakeChannel.listenerCount('error'), 1, "expected the 'error' listener on before prefetch");
         assert.strictEqual(fakeChannel.listenerCount('close'), 1, "expected the 'close' listener on before prefetch");
@@ -789,13 +804,7 @@ describe('graceful shutdown', () => {
         await conn.getConnection();
         await conn.close();
 
-        await assert.rejects(
-          () => conn.getConnection(),
-          (err) => {
-            assert(err instanceof ConnectionClosedError, `expected ConnectionClosedError, got ${err.constructor.name}`);
-            return true;
-          },
-        );
+        await assert.rejects(() => conn.getConnection(), ConnectionClosedError);
       });
 
       it('also rejects for a connection that was never connected before close()', async () => {
@@ -831,26 +840,22 @@ describe('graceful shutdown', () => {
         });
       }
 
-      it('getChannel() rejects with ConnectionClosedError instead of creating an orphan channel', async () => {
-        const conn = newConnection();
-        const amqpConnection = await conn.getConnection();
-        const createChannelSpy = sandbox.spy(amqpConnection, 'createChannel');
+      const accessors = {
+        'getChannel()': (conn) => conn.getChannel('some-queue', {}),
+        'getDefaultChannel()': (conn) => conn.getDefaultChannel(),
+      };
 
-        driveCloseIntoTheGap(conn);
+      Object.entries(accessors).forEach(([name, getChannel]) => {
+        it(`${name} rejects with ConnectionClosedError instead of creating an orphan channel`, async () => {
+          const conn = newConnection();
+          const amqpConnection = await conn.getConnection();
+          const createChannelSpy = sandbox.spy(amqpConnection, 'createChannel');
 
-        await assert.rejects(() => conn.getChannel('some-queue', {}), ConnectionClosedError);
-        sinon.assert.notCalled(createChannelSpy);
-      });
+          driveCloseIntoTheGap(conn);
 
-      it('getDefaultChannel() rejects with ConnectionClosedError instead of creating an orphan channel', async () => {
-        const conn = newConnection();
-        const amqpConnection = await conn.getConnection();
-        const createChannelSpy = sandbox.spy(amqpConnection, 'createChannel');
-
-        driveCloseIntoTheGap(conn);
-
-        await assert.rejects(() => conn.getDefaultChannel(), ConnectionClosedError);
-        sinon.assert.notCalled(createChannelSpy);
+          await assert.rejects(() => getChannel(conn), ConnectionClosedError);
+          sinon.assert.notCalled(createChannelSpy);
+        });
       });
     });
   });
@@ -863,26 +868,8 @@ describe('graceful shutdown', () => {
     const sandbox = sinon.createSandbox();
     afterEach(() => sandbox.restore());
 
-    function createFakeConnection(channel, overrides = {}) {
-      return {
-        config: { hostname: 'shutdown-producer-test', timeout: 10, rpcTimeout: 15000, ...overrides },
-        getDefaultChannel: sinon.stub().resolves(channel),
-        getConnection: sinon.stub().resolves({}),
-      };
-    }
-
-    /** correlationId key registered in amqpRPCQueues[queue] for the pending waiter (not 'resQueuePromise'). */
-    function pendingCorrelationId(producer, queue) {
-      return Object.keys(producer.amqpRPCQueues[queue] || {}).find((key) => key !== 'resQueuePromise');
-    }
-
     it('rejects a pending RPC promise with ConnectionClosedError instead of waiting out rpcTimeout', async () => {
-      const channel = createFakeChannelForRpc();
-      const producer = new Producer(createFakeConnection(channel));
-      const queue = 'shutdown:producer-close:pending';
-
-      const rpcPromise = producer.checkRpc(queue, 'payload', { rpc: true });
-      await waitFor(() => !!pendingCorrelationId(producer, queue));
+      const { channel, rpcPromise } = await newPendingRpc('shutdown:producer-close:pending');
 
       channel.emit('close');
 
@@ -890,15 +877,11 @@ describe('graceful shutdown', () => {
     });
 
     it('clears the pending timeout so no lingering timer keeps the process alive', async () => {
-      const channel = createFakeChannelForRpc();
-      const producer = new Producer(createFakeConnection(channel));
-      const queue = 'shutdown:producer-close:clear-timeout';
       const clearTimeoutSpy = sandbox.spy(global, 'clearTimeout');
+      const queue = 'shutdown:producer-close:clear-timeout';
+      const { channel, producer, rpcPromise } = await newPendingRpc(queue);
 
-      const rpcPromise = producer.checkRpc(queue, 'payload', { rpc: true });
-      await waitFor(() => !!pendingCorrelationId(producer, queue));
-      const corrId = pendingCorrelationId(producer, queue);
-      const { timeoutId } = producer.amqpRPCQueues[queue][corrId];
+      const { timeoutId } = producer.amqpRPCQueues[queue][pendingCorrelationId(producer, queue)];
       assert(timeoutId, 'expected a timer to have been scheduled for the pending RPC');
 
       channel.emit('close');
@@ -908,12 +891,8 @@ describe('graceful shutdown', () => {
     });
 
     it('drops the dead reply-queue bookkeeping, so the next RPC publish rebuilds it', async () => {
-      const channel = createFakeChannelForRpc();
-      const producer = new Producer(createFakeConnection(channel));
       const queue = 'shutdown:producer-close:resqueue-rebuilt';
-
-      const rpcPromise = producer.checkRpc(queue, 'payload', { rpc: true });
-      await waitFor(() => !!pendingCorrelationId(producer, queue));
+      const { channel, producer, rpcPromise } = await newPendingRpc(queue);
       assert(producer.amqpRPCQueues[queue].resQueuePromise, 'expected a reply queue to have been set up');
 
       channel.emit('close');
@@ -926,12 +905,7 @@ describe('graceful shutdown', () => {
     });
 
     it('is idempotent - a second close does not throw or double-reject', async () => {
-      const channel = createFakeChannelForRpc();
-      const producer = new Producer(createFakeConnection(channel));
-      const queue = 'shutdown:producer-close:idempotent';
-
-      const rpcPromise = producer.checkRpc(queue, 'payload', { rpc: true });
-      await waitFor(() => !!pendingCorrelationId(producer, queue));
+      const { channel, rpcPromise } = await newPendingRpc('shutdown:producer-close:idempotent');
 
       channel.emit('close');
       channel.emit('close');
@@ -943,7 +917,7 @@ describe('graceful shutdown', () => {
     // remove-then-add in _initializeRpcQueue does - without piling up one listener per RPC queue on
     // the channel every consumer and the reply path share.
     it('stays at exactly one listener on the channel however many RPC queues are initialized', async () => {
-      const channel = createFakeChannelForRpc();
+      const channel = createFakeChannel();
       const producer = new Producer(createFakeConnection(channel));
 
       await producer.createRpcQueue('shutdown:producer-close:listeners:a');
@@ -953,9 +927,8 @@ describe('graceful shutdown', () => {
       assert.strictEqual(channel.listenerCount('close'), 1);
     });
 
-    it('createRpcQueue() stops retrying (does not spin) once getDefaultChannel rejects with ConnectionClosedError', async () => {
-      const channel = createFakeChannelForRpc();
-      const connection = createFakeConnection(channel);
+    it('createRpcQueue() stops retrying once getDefaultChannel rejects with ConnectionClosedError', async () => {
+      const connection = createFakeConnection(createFakeChannel());
       connection.getDefaultChannel = sinon.stub().rejects(new ConnectionClosedError());
       const producer = new Producer(connection);
       const timeoutSpy = sandbox.spy(utils, 'timeoutPromise');
@@ -975,7 +948,7 @@ describe('graceful shutdown', () => {
     // handler below is on checkRpc()'s own promise, a different promise than the deferred, and does
     // not mask this.
     it('a close landing while the RPC publish is still in flight does not leave the rejection unhandled', async () => {
-      const channel = createFakeChannelForRpc();
+      const channel = createFakeChannel();
       const publishGate = pDefer();
       // A publish that is a real round-trip rather than a microtask, so the window is actually open.
       channel.sendToQueue = sinon.stub().callsFake(() => publishGate.promise);
@@ -1008,7 +981,7 @@ describe('graceful shutdown', () => {
     });
 
     it('deletes the waiter when the publish itself fails, so nothing is left in the registry', async () => {
-      const channel = createFakeChannelForRpc();
+      const channel = createFakeChannel();
       channel.sendToQueue = sinon.stub().rejects(new Error('broker blip'));
       const producer = new Producer(createFakeConnection(channel));
       const queue = 'shutdown:producer-close:publish-failed';
@@ -1030,13 +1003,8 @@ describe('graceful shutdown', () => {
     // channel - so a broker that goes away no longer leaves RPC callers hanging out rpcTimeout, or
     // forever with rpcTimeout: 0.
     it('rejects pending RPC waiters when the socket dies on its own, not just on close()', async () => {
-      const connection = new Connection({
-        host: 'amqp://localhost',
-        hostname: 'shutdown-producer-socket-death',
-        prefetch: 5,
-        timeout: 10,
-        rpcTimeout: 0, // no timer is armed at all, so only the listener can settle this
-      });
+      // rpcTimeout: 0 arms no timer at all, so only the channel-close listener can settle this
+      const connection = newConnection({ hostname: 'shutdown-producer-socket-death', rpcTimeout: 0 });
       const mq = new ArnavMQ(connection);
       const queue = 'shutdown:producer-close:socket-death';
       // deliberately unconsumed - only the channel-close listener can ever settle this
@@ -1061,24 +1029,6 @@ describe('graceful shutdown', () => {
   describe('arnavmq.js close() orchestration', () => {
     const sandbox = sinon.createSandbox();
     afterEach(() => sandbox.restore());
-
-    // A fresh, isolated ArnavMQ+Connection pair against the real broker - not the process-wide
-    // singleton every other spec file (including arnavmqConfigurator() calls elsewhere in this
-    // file) shares, since close() is terminal and would otherwise poison every test that runs after.
-    function newArnavmq(overrides = {}) {
-      const conn = new Connection({
-        host: 'amqp://localhost',
-        hostname: 'shutdown-arnavmq-close-test',
-        prefetch: 5,
-        timeout: 10,
-        requeue: true,
-        consumerSuffix: '',
-        producerMaxRetries: -1,
-        rpcTimeout: 0,
-        ...overrides,
-      });
-      return new ArnavMQ(conn);
-    }
 
     describe('the object returned by the top-level factory', () => {
       it('exposes close(), connection.close()/isClosed, and the additive consumer sub-API', () => {
@@ -1124,14 +1074,12 @@ describe('graceful shutdown', () => {
       });
 
       await arnavmq.publish(queue, { n: 1 });
-      await waitFor(() => arnavmq.consumer.inFlight(queue) === 1);
+      await waitFor(() => arnavmq.consumer.inFlight() === 1);
 
       const closePromise = arnavmq.close();
-      await utils.timeoutPromise(100); // give close() time to cancel and start draining
+      await waitForCancelled(arnavmq); // cancelled, now draining
 
       assert.strictEqual(arnavmq.connection.isClosed, false, 'connection must stay open while draining');
-      const [record] = [...arnavmq.consumer._subscriptions.values()];
-      assert.strictEqual(record.cancelled, true, 'expected close() to have cancelled the subscription by now');
       assert.strictEqual(callCount, 1);
 
       gate.resolve();
@@ -1151,7 +1099,7 @@ describe('graceful shutdown', () => {
       });
 
       await arnavmq.publish(queue, { n: 1 });
-      await waitFor(() => arnavmq.consumer.inFlight(queue) === 1);
+      await waitFor(() => arnavmq.consumer.inFlight() === 1);
 
       let closed = false;
       const closePromise = arnavmq.close().then(() => {
@@ -1167,7 +1115,7 @@ describe('graceful shutdown', () => {
       assert.strictEqual(arnavmq.connection.isClosed, true);
     });
 
-    it('calls producer.stop() before connection.close() - produce() during the drain window still succeeds; only fails with ConnectionClosedError once close() fully resolves', async () => {
+    it('a handler can publish during the drain, and publishing only fails once close() has resolved', async () => {
       const arnavmq = newArnavmq();
       const queue = 'shutdown:arnavmq-close:producer-order';
       const sideQueue = 'shutdown:arnavmq-close:producer-order:side';
@@ -1176,26 +1124,21 @@ describe('graceful shutdown', () => {
 
       await arnavmq.subscribe(queue, async () => {
         await proceedGate.promise;
-        try {
-          await arnavmq.publish(sideQueue, { ok: true });
-          publishSettled.resolve({ ok: true });
-        } catch (error) {
-          publishSettled.resolve({ error });
-        }
+        publishSettled.resolve(await settled(() => arnavmq.publish(sideQueue, { ok: true })));
       });
 
       await arnavmq.publish(queue, { n: 1 });
-      await waitFor(() => arnavmq.consumer.inFlight(queue) === 1);
+      await waitFor(() => arnavmq.consumer.inFlight() === 1);
 
       const closePromise = arnavmq.close();
-      await utils.timeoutPromise(50); // close() is now cancelling/draining; the handler is still gated
+      await waitForCancelled(arnavmq); // cancelled, now draining; the handler is still gated
 
       assert.strictEqual(arnavmq.connection.isClosed, false, 'connection must still be open mid-drain');
 
       proceedGate.resolve(); // let the handler publish downstream while the connection is still open
       const publishOutcome = await publishSettled.promise;
 
-      assert.strictEqual(publishOutcome.error, undefined, 'expected produce() during the drain window to succeed');
+      assert(!(publishOutcome instanceof Error), `expected a publish during the drain to succeed: ${publishOutcome}`);
       assert.strictEqual(
         arnavmq.connection.isClosed,
         false,
@@ -1250,10 +1193,10 @@ describe('graceful shutdown', () => {
       });
 
       await arnavmq.publish(queue, { n: 1 });
-      await waitFor(() => arnavmq.consumer.inFlight(queue) === 1);
+      await waitFor(() => arnavmq.consumer.inFlight() === 1);
 
       const closePromise = arnavmq.close();
-      await utils.timeoutPromise(50); // close() has cancelled and is draining; the handler is gated
+      await waitForCancelled(arnavmq); // cancelled, now draining; the handler is gated
       gate.resolve(); // handler finishes and acks
       await closePromise;
 
@@ -1307,7 +1250,7 @@ describe('graceful shutdown', () => {
       // deliberately no consumer subscribed on `queue` - this RPC call never gets answered on its own.
 
       const rpcPromise = arnavmq.publish(queue, { ping: true }, { rpc: true });
-      await utils.timeoutPromise(100); // let checkRpc()/createRpcQueue() register the pending waiter
+      await waitFor(() => !!pendingCorrelationId(arnavmq.producer, queue));
 
       // Attach the rejection expectation *before/alongside* close(), not after awaiting it: the
       // waiter is rejected from the channel-close listener partway through connection.close(),
@@ -1345,7 +1288,7 @@ describe('graceful shutdown', () => {
       await waitFor(() => server.consumer.inFlight() === 1);
 
       const closePromise = server.close();
-      await utils.timeoutPromise(50); // cancelled, now draining; the handler is still gated
+      await waitForCancelled(server); // cancelled, now draining; the handler is still gated
       assert.strictEqual(server.connection.isClosed, false, 'connection must still be open mid-drain');
 
       proceedGate.resolve(); // the handler returns, and checkRpc() writes the reply
@@ -1372,30 +1315,21 @@ describe('graceful shutdown', () => {
       const outcomes = pDefer();
       await app.subscribe(queue, async () => {
         await proceedGate.promise;
-        const result = {};
-        try {
-          await app.publish(sideQueue, { plain: true });
-          result.plain = 'sent';
-        } catch (error) {
-          result.plain = error;
-        }
-        try {
-          result.rpc = await app.publish(rpcQueue, { ping: true }, { rpc: true });
-        } catch (error) {
-          result.rpc = error;
-        }
-        outcomes.resolve(result);
+        outcomes.resolve({
+          plain: await settled(() => app.publish(sideQueue, { plain: true })),
+          rpc: await settled(() => app.publish(rpcQueue, { ping: true }, { rpc: true })),
+        });
       });
 
       await app.publish(queue, { n: 1 });
       await waitFor(() => app.consumer.inFlight() === 1);
 
       const closePromise = app.close();
-      await utils.timeoutPromise(50); // cancelled, now draining; the handler is still gated
+      await waitForCancelled(app); // cancelled, now draining; the handler is still gated
       proceedGate.resolve();
 
       const result = await outcomes.promise;
-      assert.strictEqual(result.plain, 'sent', `expected a plain publish to still succeed, got ${result.plain}`);
+      assert(!(result.plain instanceof Error), `expected a plain publish to still succeed, got ${result.plain}`);
       assert.deepStrictEqual(result.rpc, { pong: true }, `expected the RPC to be answered, got ${result.rpc}`);
 
       await closePromise;
