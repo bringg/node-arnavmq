@@ -56,10 +56,14 @@ interface ConnectionConfig {
 
 /**
  * Thrown by `getConnection()` once `close()` has been called - the connection is terminally shut
- * down for the process and will never reconnect.
+ * down for the process and will never reconnect. Also used to fail pending work (e.g. RPC waiters)
+ * that a channel/connection close leaves unanswerable, whether that close was requested or not.
  */
 declare class ConnectionClosedError extends Error {
-  constructor(message?: string);
+  constructor(origin?: 'shutdown' | 'unexpected', message?: string);
+
+  /** Whether the connection went away because `close()` was called, or on its own. */
+  origin: 'shutdown' | 'unexpected';
 }
 
 declare class Connection {

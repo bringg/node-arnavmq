@@ -18,14 +18,21 @@ function onConnectionError(error) {
 
 /**
  * Thrown by `getConnection()` once `close()` has been called - the connection is terminally shut
- * down for the process and will never reconnect.
+ * down for the process and will never reconnect. Also used to fail pending work (e.g. RPC waiters)
+ * that a channel/connection close leaves unanswerable, whether that close was requested or not.
  */
 class ConnectionClosedError extends Error {
-  constructor(message = 'Connection is closed') {
+  /**
+   * @param {'shutdown'|'unexpected'} [origin] Whether the connection went away because `close()`
+   *   was called ('shutdown'), or because the socket/channel closed on its own ('unexpected').
+   * @param {string} [message]
+   */
+  constructor(origin = 'shutdown', message = 'Connection is closed') {
     super(message);
 
     this.name = 'ConnectionClosedError';
     this.message = message;
+    this.origin = origin;
 
     Error.captureStackTrace(this, this.constructor);
   }

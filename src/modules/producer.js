@@ -49,7 +49,8 @@ class Producer {
    *
    * Fires on every teardown path: `Channels.closeAll()` during a graceful `close()`, and amqplib's
    * `Connection.toClosed()` -> `_closeChannels()` for a channel wedged past closeAll's cap or a
-   * socket that died on its own.
+   * socket that died on its own. The rejection's `origin` tells them apart: 'shutdown' when
+   * `close()` had already flipped `this._connection.isClosed`, 'unexpected' otherwise.
    * @private
    */
   _onChannelClose() {
@@ -64,7 +65,9 @@ class Producer {
         }
 
         clearTimeout(waiter.timeoutId);
-        waiter.responsePromise.reject(new ConnectionClosedError());
+        waiter.responsePromise.reject(
+          new ConnectionClosedError(this._connection.isClosed ? 'shutdown' : 'unexpected')
+        );
       });
     });
   }

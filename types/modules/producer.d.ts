@@ -95,7 +95,8 @@ declare class Producer {
    * Channel 'close' listener. Rejects every RPC request still pending in `amqpRPCQueues` with
    * `ConnectionClosedError` and clears its timeout, then drops the registry so the dead reply
    * queue is rebuilt on the next RPC publish. Fires on a deliberate `close()` and on a connection
-   * lost unexpectedly alike. Internal.
+   * lost unexpectedly alike - the rejection's `origin` ('shutdown' vs 'unexpected') tells them
+   * apart. Internal.
    */
   private _onChannelClose(): void;
 }
