@@ -50,12 +50,17 @@ class Producer {
    * Fires on every teardown path: `Channels.closeAll()` during a graceful `close()`, and amqplib's
    * `Connection.toClosed()` -> `_closeChannels()` for a channel wedged past closeAll's cap or a
    * socket that died on its own. The rejection's `origin` tells them apart: 'shutdown' when
-   * `close()` had already flipped `this._connection.isClosed`, 'unexpected' otherwise.
+   * `close()` had already flipped `this._connection.isClosed`, 'unexpected' otherwise. Warn-logs
+   * how many waiters were discarded, so a silent connection drop doesn't disappear pending RPCs
+   * without a trace.
    * @private
    */
   _onChannelClose() {
     const queues = this.amqpRPCQueues;
     this.amqpRPCQueues = {};
+
+    const origin = this._connection.isClosed ? 'shutdown' : 'unexpected';
+    let discardedCount = 0;
 
     Object.values(queues).forEach((rpcQueue) => {
       Object.entries(rpcQueue).forEach(([key, waiter]) => {
@@ -64,12 +69,20 @@ class Producer {
           return;
         }
 
+        discardedCount += 1;
         clearTimeout(waiter.timeoutId);
-        waiter.responsePromise.reject(
-          new ConnectionClosedError(this._connection.isClosed ? 'shutdown' : 'unexpected')
-        );
+        waiter.responsePromise.reject(new ConnectionClosedError(origin));
       });
     });
+
+    if (discardedCount > 0) {
+      logger.warn({
+        message: `${loggerAlias} discarded ${discardedCount} pending RPC ${
+          discardedCount === 1 ? 'request' : 'requests'
+        } on channel close (${origin})`,
+        params: { discardedCount, origin },
+      });
+    }
   }
 
   set connection(value) {
