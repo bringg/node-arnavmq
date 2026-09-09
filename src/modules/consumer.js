@@ -10,6 +10,18 @@ const loggerAlias = 'arnav_mq:consumer';
 // How often `_drain()` polls `inFlight()` while waiting for in-flight handlers to finish.
 const DRAIN_POLL_INTERVAL_MS = 50;
 
+/**
+ * @typedef {Object} Subscription
+ * @property {string} queue
+ * @property {object} options
+ * @property {Function} callback
+ * @property {import('amqplib').Channel|null} channel
+ * @property {string|null} consumerTag
+ * @property {Function|null} onChannelClose
+ * @property {boolean} cancelled
+ * @property {number} inFlightCount handlers currently running, not yet acked/rejected.
+ */
+
 class Consumer {
   constructor(connection) {
     this._connection = connection;
@@ -18,6 +30,7 @@ class Consumer {
 
     // One record per subscribe() call, NOT per queue - two subscribe() calls on the same queue with
     // different callbacks are legal, and each gets its own consumerTag.
+    /** @type {Subscription[]} */
     this._subscriptions = [];
     // Memoized stop() promise - the same idiom as Connection._closePromise, and doubling as the
     // "shutting down" flag that `_isLive` reads. It has to be memoized regardless: without it a
@@ -41,7 +54,7 @@ class Consumer {
    * as a whole nor this particular subscription has been told to shut down, and the underlying
    * connection isn't terminally closed (checked directly so this holds even for a caller that
    * closes the connection without going through `arnavmq.close()`'s consumer.stop() first).
-   * @param {object} subscription
+   * @param {Subscription} subscription
    * @return {boolean}
    */
   _isLive(subscription) {
@@ -572,7 +585,7 @@ class Consumer {
    * cancel/re-subscribe cycles in a long-lived process grow the registry (and its retained
    * callbacks/options/channel references) without bound.
    * @private
-   * @param {object} subscription
+   * @param {Subscription} subscription
    */
   _removeIfDone(subscription) {
     if (!subscription.cancelled || subscription.inFlightCount > 0) {
