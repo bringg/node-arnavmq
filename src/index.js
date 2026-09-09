@@ -46,3 +46,9 @@ module.exports = (config) => {
 
   return require('./modules/arnavmq')(connection(configuration));
 };
+
+// `instanceof arnavmq.ConnectionClosedError` is the documented way callers detect the
+// "connection is shutting down" rejection from produce()/publish(), so the class has to exist on the
+// package's main entry point at runtime, not just in types/index.d.ts. Assigned after the
+// module.exports assignment above - assigning it before would be clobbered by it.
+module.exports.ConnectionClosedError = connection.ConnectionClosedError;
