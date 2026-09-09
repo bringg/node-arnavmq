@@ -85,16 +85,18 @@ class Connection {
   }
 
   async _close() {
-    let connection = null;
+    let connection;
     try {
       connection = await this._connectionPromise;
     } catch (error) {
       // The in-flight connect failed on its own; there's nothing for us to close - `connection`
-      // keeps its initial null, since the assignment above never completed.
+      // stays unset, since the assignment above never completed.
       logger.debug({
         message: `Ignoring failed in-flight connection attempt while closing: ${error.message}`,
         error,
       });
+
+      return;
     }
 
     if (connection) {
