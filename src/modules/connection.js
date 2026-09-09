@@ -32,6 +32,7 @@ class ConnectionClosedError extends Error {
 
     this.name = 'ConnectionClosedError';
     this.message = message;
+    /** @type {'shutdown'|'unexpected'} */
     this.origin = origin;
 
     Error.captureStackTrace(this, this.constructor);
@@ -39,13 +40,22 @@ class ConnectionClosedError extends Error {
 }
 
 class Connection {
+  /**
+   * @param {import('../../types/modules/connection').ConnectionConfig} config
+   */
   constructor(config) {
+    /** @type {import('../../types/modules/connection').ConnectionConfig} */
     this._config = config;
 
-    this._connectionPromise = null; // Promise of amqp connection
+    /** @type {Promise<import('amqplib').ChannelModel>|null} */
+    this._connectionPromise = null;
+    /** @type {import('./channels').Channels|null} */
     this._channels = null;
+    /** @type {Promise<void>|null} */
     this._closePromise = null;
+    /** @type {ConnectionHooks} */
     this.hooks = new ConnectionHooks();
+    /** @type {string} */
     this.startedAt = new Date().toISOString();
   }
 
@@ -60,7 +70,7 @@ class Connection {
 
   /**
    * Connect to the broker. We keep only 1 connection for each connection string provided in config, as advised by RabbitMQ
-   * @return {Promise} A promise that resolve with an amqp.node connection object
+   * @return {Promise<import('amqplib').ChannelModel>} A promise that resolve with an amqp.node connection object
    */
   async getConnection() {
     if (this.isClosed) {
@@ -154,6 +164,11 @@ class Connection {
     }
   }
 
+  /**
+   * @param {string} queue
+   * @param {import('./channels').ChannelConfig} config
+   * @return {Promise<import('amqplib').Channel>}
+   */
   async getChannel(queue, config) {
     await this.getConnection();
     // `close()` flips `isClosed` synchronously (before any of its own awaits), so re-checking here,
@@ -167,6 +182,9 @@ class Connection {
     return await this._channels.get(queue, config);
   }
 
+  /**
+   * @return {Promise<import('amqplib').Channel>}
+   */
   async getDefaultChannel() {
     await this.getConnection();
     if (this.isClosed) {
@@ -185,17 +203,24 @@ class Connection {
     channel.on(on, func);
   }
 
+  /** @return {import('../../types/modules/connection').ConnectionConfig} */
   get config() {
     return this._config;
   }
 
+  /** @param {import('../../types/modules/connection').ConnectionConfig} value */
   set config(value) {
     this._config = value;
   }
 }
 
+/** @type {Connection} */
 let instance;
 
+/**
+ * @param {import('../../types/modules/connection').ConnectionConfig} config
+ * @return {Connection}
+ */
 module.exports = (config) => {
   assert(instance || config, 'Connection can not be created because config does not exist');
   assert(config.hostname);

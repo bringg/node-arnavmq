@@ -9,10 +9,21 @@ const DEFAULT_CHANNEL = 'DEFAULT_CHANNEL';
 const CLOSE_CHANNEL_TIMEOUT_MS = 5000;
 
 /**
+ * @typedef {Object} ChannelConfig
+ * @property {number} prefetch
+ */
+
+/**
+ * @typedef {Object} ChannelCacheEntry
+ * @property {Promise<import('amqplib').Channel>} chann
+ * @property {ChannelConfig} config
+ */
+
+/**
  * Gracefully close one cached channel, bounded by `CLOSE_CHANNEL_TIMEOUT_MS`. Never rejects - see
  * `Channels.closeAll()`, its only caller.
  * @param {string} key The channel cache key, for logging.
- * @param {{chann: Promise}} entry The channel cache entry.
+ * @param {ChannelCacheEntry} entry The channel cache entry.
  * @return {Promise<void>}
  */
 async function closeChannel(key, entry) {
@@ -34,6 +45,10 @@ async function closeChannel(key, entry) {
 }
 
 class ChannelAlreadyExistsError extends Error {
+  /**
+   * @param {string} name
+   * @param {ChannelConfig} config
+   */
   constructor(name, config) {
     const message = `Channel "${name}" already exists with config ${JSON.stringify(config)}`;
 
@@ -47,18 +62,35 @@ class ChannelAlreadyExistsError extends Error {
   }
 }
 
+/**
+ * @param {ChannelConfig} a
+ * @param {ChannelConfig} b
+ * @return {boolean}
+ */
 function isSameConfig(a, b) {
   return a.prefetch === b.prefetch;
 }
 
 class Channels {
+  /**
+   * @param {import('amqplib').ChannelModel} connection
+   * @param {ChannelConfig} config
+   */
   constructor(connection, config) {
+    /** @type {import('amqplib').ChannelModel} */
     this._connection = connection;
+    /** @type {ChannelConfig} */
     this._config = config;
 
+    /** @type {Map<string, ChannelCacheEntry>} */
     this._channels = new Map();
   }
 
+  /**
+   * @param {string} queue
+   * @param {ChannelConfig} config
+   * @return {Promise<import('amqplib').Channel>}
+   */
   async get(queue, config) {
     const defaultPrefetch = this._config.prefetch;
     const requestedPrefetch = config.prefetch || defaultPrefetch;
@@ -69,13 +101,16 @@ class Channels {
     return await this.defaultChannel();
   }
 
+  /** @return {Promise<import('amqplib').Channel>} */
   async defaultChannel() {
     return await this._get(DEFAULT_CHANNEL, { prefetch: this._config.prefetch });
   }
 
   /**
    * Creates or returns an existing channel by it's key and config.
-   * @return {Promise} A promise that resolve with an amqp.node channel object
+   * @param {string} key
+   * @param {ChannelConfig} [config]
+   * @return {Promise<import('amqplib').Channel>} A promise that resolve with an amqp.node channel object
    */
   async _get(key, config = {}) {
     const existingChannel = this._channels.get(key);
@@ -127,6 +162,11 @@ class Channels {
     await Promise.all(entries.map(([key, entry]) => closeChannel(key, entry)));
   }
 
+  /**
+   * @param {string} key
+   * @param {ChannelConfig} config
+   * @return {Promise<import('amqplib').Channel>}
+   */
   async _initNewChannel(key, config) {
     let channel;
     try {

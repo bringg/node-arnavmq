@@ -11,6 +11,18 @@ const ERRORS = {
 
 const loggerAlias = 'arnav_mq:producer';
 
+/**
+ * @typedef {Object} RpcWaiter
+ * @property {import('p-defer').DeferredPromise} responsePromise
+ * @property {NodeJS.Timeout|null} timeoutId
+ */
+
+/**
+ * @typedef {Object.<string, RpcWaiter>} RpcQueue Correlation ID -> waiter, plus a
+ *   `resQueuePromise` bookkeeping key for the queue itself (not a waiter).
+ * @property {Promise<string>} [resQueuePromise]
+ */
+
 class ProducerError extends Error {
   constructor({ name, message }) {
     super(message);
@@ -23,18 +35,25 @@ class ProducerError extends Error {
 }
 
 class Producer {
+  /**
+   * @param {import('./connection').Connection} connection
+   */
   constructor(connection) {
+    /** @type {import('./connection').Connection} */
     this._connection = connection;
+    /** @type {ProducerHooks} */
     this.hooks = new ProducerHooks();
 
     /**
      * Map of rpc queues
      *
      * [queue: string] -> [correlationId: string] -> {responsePromise, timeoutId}
+     * @type {Object.<string, RpcQueue>}
      */
     this.amqpRPCQueues = {};
 
     // Bound once so `_initializeRpcQueue` can remove-then-add it and stay at one listener.
+    /** @type {() => void} */
     this._onChannelClose = this._onChannelClose.bind(this);
   }
 

@@ -23,9 +23,15 @@ const DRAIN_POLL_INTERVAL_MS = 50;
  */
 
 class Consumer {
+  /**
+   * @param {import('./connection').Connection} connection
+   */
   constructor(connection) {
+    /** @type {import('./connection').Connection} */
     this._connection = connection;
+    /** @type {import('./connection').ConnectionConfig} */
     this._configuration = this._connection.config;
+    /** @type {ConsumerHooks} */
     this.hooks = new ConsumerHooks();
 
     // One record per subscribe() call, NOT per queue - two subscribe() calls on the same queue with
@@ -37,14 +43,17 @@ class Consumer {
     // concurrent close() re-runs _cancelAll() and sends basic.cancel for a tag already cancelled,
     // and the obvious alternatives (an early return on `cancelled`, clearing consumerTag) both
     // break _consumeQueue's deferred re-cancel for a subscription cancelled mid-flight.
+    /** @type {Promise<void>|null} */
     this._stopPromise = null;
   }
 
+  /** @param {import('./connection').Connection} value */
   set connection(value) {
     this._connection = value;
     this._configuration = value.config;
   }
 
+  /** @return {import('./connection').Connection} */
   get connection() {
     return this._connection;
   }
@@ -62,11 +71,12 @@ class Consumer {
   }
 
   /**
-   * Get a function to execute on incoming messages to handle RPC
-   * @param  {any} messageProperties   An amqp.node message properties object, containing the rpc settings
+   * Sends the RPC reply to the response queue according to the message properties when required.
+   * @param  {import('amqplib').MessageProperties} messageProperties An amqp.node message properties object, containing the rpc settings
    * @param  {string} queue The initial queue on which the handler received the message
-   * @param  {any} reply the received message to reply the rpc if needed:
-   * @return {any}       object, string, number... the current received message
+   * @param  {unknown} reply the received message to reply the rpc if needed:
+   * @return {Promise<boolean|import('amqplib').MessageProperties>} The message properties if it is
+   *   not an rpc request, or a boolean indicating the produce result when an rpc response was produced.
    */
   async checkRpc(messageProperties, queue, reply) {
     if (!messageProperties.replyTo) {
@@ -118,8 +128,8 @@ class Consumer {
    * Create a durable queue on RabbitMQ and consumes messages from it - executing a callback function.
    * Automatically answers with the callback response (can be a Promise)
    * @param  {string}   queue    The RabbitMQ queue name
-   * @param  {object}   options  (Optional) Options for the queue (durable, persistent, etc.) and channel (with prefetch, `{ channel: { prefetch: 100 } }`)
-   * @param  {Function} callback Callback function executed when a message is received on the queue name, can return a promise
+   * @param  {object|Function}   options  (Optional) Options for the queue (durable, persistent, etc.) and channel (with prefetch, `{ channel: { prefetch: 100 } }`), or the callback when omitted
+   * @param  {Function} [callback] Callback function executed when a message is received on the queue name, can return a promise
    * @return {Promise<boolean>}  Resolves `true` once the broker has confirmed the consumer
    *   (basic.consume-ok), or `false` if the subscription was cancelled before that. Failures that
    *   may still clear - the channel cannot be opened, the queue cannot be declared as asked - are
@@ -131,6 +141,12 @@ class Consumer {
     return this.subscribe(queue, options, callback);
   }
 
+  /**
+   * @param {string} queue
+   * @param {object|Function} options
+   * @param {Function} [callback]
+   * @return {Promise<boolean>}
+   */
   async subscribe(queue, options, callback) {
     // Shutdown is terminal for the process, and both this consumer and the connection hand back the
     // same memoized instance on a repeat require+configure - so a subscribe after it can never
@@ -192,6 +208,11 @@ class Consumer {
     };
   }
 
+  /**
+   * @private
+   * @param {Subscription} subscription
+   * @return {Promise<boolean>}
+   */
   async _subscribe(subscription) {
     if (!this._isLive(subscription)) {
       return false;
@@ -234,6 +255,8 @@ class Consumer {
    * subscription to `_retrySubscribe()` instead of letting it fall through to a dead
    * `basic.consume` and then report success.
    * @private
+   * @param {import('amqplib').Channel} channel
+   * @param {Subscription} subscription
    * @return {Promise<boolean>} Whether the queue is declared and the channel still usable.
    */
   async _assertQueue(channel, subscription) {
@@ -270,6 +293,7 @@ class Consumer {
    * dead `basic.consume`, and the channel's own 'close' then resubscribed with no delay at all -
    * a fresh channel per broker round-trip, for as long as the queue stayed undeclarable.
    * @private
+   * @param {Subscription} subscription
    * @return {Promise<boolean>}
    */
   async _retrySubscribe(subscription) {
@@ -280,6 +304,11 @@ class Consumer {
     return await this._subscribe(subscription);
   }
 
+  /**
+   * @private
+   * @param {Subscription} subscription
+   * @return {Promise<import('amqplib').Channel|null>}
+   */
   async _initializeChannel(subscription) {
     const { queue, options } = subscription;
     let channel;
@@ -334,6 +363,8 @@ class Consumer {
   /**
    * Register the delivery callback with the broker.
    * @private
+   * @param {import('amqplib').Channel} channel
+   * @param {Subscription} subscription
    * @return {Promise<boolean>} Whether the broker confirmed the consumer (basic.consume-ok).
    */
   async _consumeQueue(channel, subscription) {
@@ -364,6 +395,10 @@ class Consumer {
    * every delivery this consumer accepts is visible to `inFlight()`/`_drain()` for exactly as long
    * as its handler runs.
    * @private
+   * @param {import('amqplib').Channel} channel
+   * @param {Subscription} subscription
+   * @param {import('amqplib').Message|null} msg
+   * @return {Promise<void>}
    */
   async _onDelivery(channel, subscription, msg) {
     const { queue } = subscription;
@@ -416,6 +451,9 @@ class Consumer {
    * so the message is safely back with the broker and the drain has nothing left to wait for. A
    * slow hook can be cut off by the connection close that follows.
    * @private
+   * @param {import('amqplib').Channel} channel
+   * @param {Subscription} subscription
+   * @param {import('amqplib').Message} msg
    * @return {Promise<void>}
    */
   async _rejectAfterShutdown(channel, subscription, msg) {
@@ -450,6 +488,9 @@ class Consumer {
    * Parse one delivery, run the subscription's callback, reply to it if it was an RPC request, and
    * settle it with the broker - an ack on success, a reject on any failure above.
    * @private
+   * @param {import('amqplib').Channel} channel
+   * @param {Subscription} subscription
+   * @param {import('amqplib').Message} msg
    * @return {Promise<void>}
    */
   async _processMessage(channel, subscription, msg) {
@@ -490,7 +531,14 @@ class Consumer {
     await this._ackMessageAfterProcess(channel, queue, msg, body);
   }
 
-  /** @private */
+  /**
+   * @private
+   * @param {import('amqplib').Channel} channel
+   * @param {string} queue
+   * @param {import('amqplib').Message} msg
+   * @param {unknown} parsedBody
+   * @return {Promise<void>}
+   */
   async _ackMessageAfterProcess(channel, queue, msg, parsedBody) {
     let ackError;
     try {
@@ -513,7 +561,16 @@ class Consumer {
     });
   }
 
-  /** @private */
+  /**
+   * @private
+   * @param {import('amqplib').Channel} channel
+   * @param {Subscription} subscription
+   * @param {import('amqplib').Message} msg
+   * @param {unknown} parsedBody
+   * @param {boolean} requeue
+   * @param {Error} error
+   * @return {Promise<void>}
+   */
   async _rejectMessageAfterProcess(channel, subscription, msg, parsedBody, requeue, error) {
     const { queue } = subscription;
     let rejectError;
@@ -554,7 +611,11 @@ class Consumer {
     await Promise.all(this._subscriptions.map((sub) => this._cancelSubscription(sub)));
   }
 
-  /** @private */
+  /**
+   * @private
+   * @param {Subscription} subscription
+   * @return {Promise<void>}
+   */
   async _cancelSubscription(subscription) {
     subscription.cancelled = true;
     if (subscription.onChannelClose) {
