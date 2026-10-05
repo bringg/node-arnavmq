@@ -10,6 +10,8 @@ const loggerAlias = 'arnav_mq:consumer';
 // How often `_drain()` polls `inFlight()` while waiting for in-flight handlers to finish.
 const DRAIN_POLL_INTERVAL_MS = 50;
 
+const ERROR_LOG_PAYLOAD_BYTES = 8192;
+
 /**
  * @typedef {Object} Subscription
  * @property {string} queue
@@ -495,11 +497,6 @@ class Consumer {
    */
   async _processMessage(channel, subscription, msg) {
     const { queue, callback } = subscription;
-    const messageString = msg.content.toString();
-    logger.debug({
-      message: `${loggerAlias} [${queue}] < ${messageString}`,
-      params: { queue, message: messageString },
-    });
 
     let body = {};
     try {
@@ -518,7 +515,9 @@ class Consumer {
       logger.error({
         message: `${loggerAlias} Failed processing message from queue ${queue}: ${error.message}`,
         error,
-        params: { queue, message: messageString },
+        // Built here and cut, never kept as a local: V8 keeps every local of this async function
+        // alive for as long as the handler is awaited.
+        params: { queue, message: msg.content.toString('utf8', 0, ERROR_LOG_PAYLOAD_BYTES) },
       });
       // A parsing error is never requeued - a redelivery of the same bytes fails identically.
       // Anything else follows the configured requeue behavior.
