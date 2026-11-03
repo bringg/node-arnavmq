@@ -4,13 +4,14 @@ const utils = require('../src/modules/utils');
 class Docker {
   constructor() {
     this.name = 'arnavmq-tests';
+    this.image = process.env.RABBITMQ_IMAGE || 'rabbitmq:3.8-alpine';
   }
 
   async start() {
     // We might be already running, let's cleanup so can a have a fresh start ;)
     await exec(`docker rm --force --volumes ${this.name} || true`);
 
-    await exec(`docker run --detach --network=bridge --name=${this.name} -p 5672:5672 rabbitmq:3.8-alpine`);
+    await exec(`docker run --detach --network=bridge --name=${this.name} -p 5672:5672 ${this.image}`);
     await this.waitForReady();
   }
 
