@@ -85,10 +85,21 @@ class Producer {
     const queues = this.amqpRPCQueues;
     this.amqpRPCQueues = {};
 
+    this._discardWaiters(Object.values(queues), 'on channel close');
+  }
+
+  /**
+   * Reject every waiter in `rpcQueues` with `ConnectionClosedError`, clear their timers, and
+   * warn-log how many were discarded.
+   * @private
+   * @param {RpcQueue[]} rpcQueues
+   * @param {string} why ends the log message
+   */
+  _discardWaiters(rpcQueues, why) {
     const origin = this._connection.isClosed ? 'shutdown' : 'unexpected';
     let discardedCount = 0;
 
-    Object.values(queues).forEach((rpcQueue) => {
+    rpcQueues.forEach((rpcQueue) => {
       Object.entries(rpcQueue).forEach(([key, waiter]) => {
         // `replyQueue` is bookkeeping for the reply queue itself, not a correlationId waiter.
         if (key === 'replyQueue') {
@@ -105,7 +116,7 @@ class Producer {
       logger.warn({
         message: `${loggerAlias} discarded ${discardedCount} pending RPC ${
           discardedCount === 1 ? 'request' : 'requests'
-        } on channel close (${origin})`,
+        } ${why} (${origin})`,
         params: { discardedCount, origin },
       });
     }
@@ -128,6 +139,18 @@ class Producer {
     const rpcQueue = this.amqpRPCQueues[queue];
 
     return (msg) => {
+      // amqplib calls a consumer with null when the broker cancels it - for an exclusive reply queue,
+      // that means the queue was deleted, for instance from the management UI. Nothing will answer
+      // the requests waiting on it: reject them, and drop the entry so the next RPC sets the reply
+      // queue up again - unless a channel close already swept it.
+      if (msg === null) {
+        if (this.amqpRPCQueues[queue] === rpcQueue) {
+          delete this.amqpRPCQueues[queue];
+          this._discardWaiters([rpcQueue], `after the broker cancelled the reply consumer for ${queue}`);
+        }
+        return;
+      }
+
       // check the correlation ID sent by the initial message using RPC
       const { correlationId } = msg.properties;
       const waiter = rpcQueue[correlationId];
@@ -163,8 +186,9 @@ class Producer {
 
   /**
    * Create a RPC-ready queue. Every RPC to `queue` shares one setup, kept in the registry until a
-   * channel close sweeps it. Callers wait in its `waiters` rather than on a shared promise, so one
-   * that times out is dropped instead of being held until a failing setup finally succeeds.
+   * channel close or a cancelled reply consumer drops it. Callers wait in its `waiters` rather than
+   * on a shared promise, so one that times out is dropped instead of being held until a failing
+   * setup finally succeeds.
    * @param  {string} queue the queue name in which we send a RPC request
    * @param  {number} [timeout] ms to wait; anything but a positive number waits as long as it takes
    * @return {Promise<string|undefined>} Resolves with the reply queue name once it is ready to
