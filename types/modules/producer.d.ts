@@ -79,6 +79,8 @@ declare class Producer {
    * @return the reply queue name, or undefined if the connection is closed
    */
   private _initializeRpcQueue(sourceQueue: string): Promise<string | undefined>;
+  /** Publish `msg` on `channel`, through the default exchange or to `queue` as an exchange with `options.routingKey`. */
+  private _publishOn(channel: amqp.Channel, queue: string, msg: Buffer, options: ProduceOptions): boolean;
   /** Reject every waiter in `rpcQueues` with `ConnectionClosedError` and warn-log the count. */
   private _discardWaiters(rpcQueues: RpcQueue[], why: string): void;
   /**
