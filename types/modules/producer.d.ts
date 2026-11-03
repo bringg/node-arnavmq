@@ -15,9 +15,27 @@ interface ProduceOptions extends amqp.Options.Publish {
   routingKey?: string;
   /** When true, will produce the request with RPC settings, waiting for a response on a dedicated response queue after sending the message, and finally returning it. */
   rpc?: boolean;
-  /** Timeout in milliseconds for producing RPC request and waiting for the response. Does not affect non-rpc requests. */
+  /** Timeout in milliseconds for setting up the reply queue, producing RPC request and waiting for the response. Does not affect non-rpc requests. */
   timeout?: number;
 }
+
+/** A pending RPC request. */
+interface RpcWaiter {
+  responsePromise: pDefer.DeferredPromise<unknown>;
+  /** Armed once the request is published, when it has a timeout. */
+  timeoutId: NodeJS.Timeout | null;
+}
+
+/** The reply queue's setup for one target queue. */
+interface ReplyQueueSetup {
+  /** The reply queue name, once it is declared and consumed. */
+  name?: string;
+  /** RPCs waiting for the setup to finish. */
+  waiters: Set<pDefer.DeferredPromise<string>>;
+}
+
+/** Correlation ID -> waiter, plus the `replyQueue` setup (not a waiter). */
+type RpcQueue = Record<string, RpcWaiter> & { replyQueue?: ReplyQueueSetup };
 
 declare class Producer {
   constructor(connection: Connection);
@@ -25,12 +43,10 @@ declare class Producer {
   /**
    * Map of rpc queues
    *
-   * [queue: string] -> [correlationId: string] -> {responsePromise, timeoutId}
+   * [queue: string] -> [correlationId: string] -> {responsePromise, timeoutId}, plus the
+   * `replyQueue` setup
    */
-  private readonly amqpRPCQueues: Record<
-    string,
-    Record<string, { responsePromise: pDefer.DeferredPromise<unknown>; timeoutId: NodeJS.Timeout }>
-  >;
+  private readonly amqpRPCQueues: Record<string, RpcQueue>;
   private _connection: Connection;
   private set connection(value: Connection);
   get connection(): Connection;
@@ -41,17 +57,28 @@ declare class Producer {
    */
   private maybeAnswer(queue: string): (msg: amqp.Message) => void;
   /**
-   * Create a RPC-ready queue
+   * Create a RPC-ready queue. Every RPC to `queue` shares one setup; a caller that times out is
+   * dropped from it.
    * @param  queue the queue name in which we send a RPC request
-   * @return Resolves with the response queue name once it's ready to receive messages, or
-   *   undefined if the connection is closed.
+   * @param  timeout ms to wait; 0 (the default) means no limit
+   * @return Resolves with the reply queue name once it's ready to receive messages. Rejects with
+   *   `ConnectionClosedError` once the connection is closed, or with the RPC timeout error when
+   *   `timeout` elapses first.
    */
-  private createRpcQueue(queue: string): Promise<string | undefined>;
+  private createRpcQueue(queue: string, timeout?: number): Promise<string>;
+  /** Starts the reply-queue setup for `queue` and returns its record. */
+  private _startReplyQueueSetup(queue: string): ReplyQueueSetup;
   /**
    * The reply-queue name for `sourceQueue` on the current connection:
    * `<sourceQueue>:<hostname>:<pid>:<connection id>:res`.
    */
   private _replyQueueName(sourceQueue: string): string;
+  /**
+   * Declare and consume the reply queue for `sourceQueue`, retrying every `config.timeout` ms until
+   * it works or the connection is closed.
+   * @return the reply queue name, or undefined if the connection is closed
+   */
+  private _initializeRpcQueue(sourceQueue: string): Promise<string | undefined>;
   /**
    * Produces a message to a queue through the default exchange, or publishes to the given exchange if the options have a `routingKey`, using it for the queue name.
    * @param queue The queue to send or exchange to publish to.
