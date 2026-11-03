@@ -81,6 +81,11 @@ declare class Connection {
    * the connection is terminally shut down for the process.
    */
   get isClosed(): boolean;
+  /**
+   * A random id for the latest broker connection, new on every connect. Names the RPC reply
+   * queues, so a new connection never asks for a name the broker may still hold for an old one.
+   */
+  readonly connectionId: string | null;
 
   getConnection(): Promise<amqp.ChannelModel>;
   getChannel(queue: string, config: channels.ChannelConfig): Promise<amqp.Channel>;
@@ -127,6 +132,8 @@ declare namespace connection {
      * false - the connection is terminally shut down for the process.
      */
     get isClosed(): boolean;
+    /** A random id for the latest broker connection, new on every connect. */
+    readonly connectionId: string | null;
 
     get config(): ConnectionConfig;
     set config(value: ConnectionConfig);

@@ -98,6 +98,8 @@ The optional `timeout` option results in a rejection when no answer has been rec
 When '0' is given, there will be no timeout for this call.
 This value will overwrite the default timeout set in the config in `rpcTimeout`.
 
+Answers come back on an exclusive reply queue named `<queue>:<hostname>:<pid>:<random>:res`. Every new connection gives it a new name, so a name the broker still holds for a lost connection - on RabbitMQ 4.2+, for a connection on a lost node until that node is removed with `forget_cluster_node` - never blocks RPC calls.
+
 ## Routing keys
 
 You can send publish commands with routing keys (thanks to @nekrasoft)

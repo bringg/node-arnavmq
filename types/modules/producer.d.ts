@@ -48,6 +48,11 @@ declare class Producer {
    */
   private createRpcQueue(queue: string): Promise<string | undefined>;
   /**
+   * The reply-queue name for `sourceQueue` on the current connection:
+   * `<sourceQueue>:<hostname>:<pid>:<connection id>:res`.
+   */
+  private _replyQueueName(sourceQueue: string): string;
+  /**
    * Produces a message to a queue through the default exchange, or publishes to the given exchange if the options have a `routingKey`, using it for the queue name.
    * @param queue The queue to send or exchange to publish to.
    * @param msg The message to publish
@@ -92,11 +97,11 @@ declare class Producer {
 
   private _shouldRetry(error: Error | ProducerError, currentRetryNumber: number): boolean;
   /**
-   * Channel 'close' listener. Rejects every RPC request still pending in `amqpRPCQueues` with
-   * `ConnectionClosedError` and clears its timeout, then drops the registry so the dead reply
-   * queue is rebuilt on the next RPC publish. Fires on a deliberate `close()` and on a connection
-   * lost unexpectedly alike - the rejection's `origin` ('shutdown' vs 'unexpected') tells them
-   * apart. Internal.
+   * Default channel 'close' listener. Rejects every RPC request still pending in `amqpRPCQueues`
+   * with `ConnectionClosedError` and clears its timeout, then drops the registry so the next RPC
+   * publish sets the reply queue up again. Fires on a deliberate `close()`, on a connection lost
+   * unexpectedly, and on the broker closing the channel - the rejection's `origin` ('shutdown' vs
+   * 'unexpected') tells a `close()` apart from the rest. Internal.
    */
   private _onChannelClose(): void;
 }

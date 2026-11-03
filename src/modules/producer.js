@@ -58,20 +58,20 @@ class Producer {
   }
 
   /**
-   * Every pending RPC request has become unanswerable: the reply queue was exclusive to the
-   * connection that just went away, and each request was published carrying that queue's name as
-   * its replyTo, so no answer can ever arrive - not on a reconnect either. Reject the waiters now
-   * so callers fail fast instead of hanging out `rpcTimeout` for an answer that is not coming (and
+   * Every pending RPC request has lost its answer path: the reply queues were consumed on the
+   * default channel that just closed, and a request written just before the close may have been
+   * dropped with it - with no publisher confirms, there is no telling which. Reject the waiters now
+   * so callers fail fast instead of hanging out `rpcTimeout` for an answer that may not come (and
    * forever with `rpcTimeout: 0`, which arms no timer at all), and clear their timers so none keeps
-   * the process alive past shutdown. Dropping the whole registry also discards the dead reply-queue
+   * the process alive past shutdown. Dropping the whole registry also discards the reply-queue
    * bookkeeping, so the next RPC publish rebuilds it.
    *
    * Fires on every teardown path: `Channels.closeAll()` during a graceful `close()`, and amqplib's
    * `Connection.toClosed()` -> `_closeChannels()` for a channel wedged past closeAll's cap or a
-   * socket that died on its own. The rejection's `origin` tells them apart: 'shutdown' when
-   * `close()` had already flipped `this._connection.isClosed`, 'unexpected' otherwise. Warn-logs
-   * how many waiters were discarded, so a silent connection drop doesn't disappear pending RPCs
-   * without a trace.
+   * socket that died on its own, and the broker closing the channel by itself with a channel-level
+   * error. The rejection's `origin` tells them apart: 'shutdown' when `close()` had already flipped
+   * `this._connection.isClosed`, 'unexpected' otherwise. Warn-logs how many waiters were discarded,
+   * so a silent connection drop doesn't disappear pending RPCs without a trace.
    * @private
    */
   _onChannelClose() {
@@ -171,15 +171,31 @@ class Producer {
     return await rpcData.resQueuePromise;
   }
 
+  /**
+   * The reply-queue name for `sourceQueue` on the current connection:
+   * `<sourceQueue>:<hostname>:<pid>:<connection id>:res`.
+   *
+   * The connection id keeps a new connection from reusing an old name. The broker can hold an
+   * exclusive queue's name after its connection is gone - until missed heartbeats are noticed, or on
+   * RabbitMQ 4.2+ (Khepri), for a connection on a lost node, until that node is removed with
+   * `forget_cluster_node` - and refuses to declare it again with RESOURCE_LOCKED meanwhile. On the
+   * same connection the name stays the same, so a replaced default channel picks the existing queue
+   * back up.
+   * @private
+   * @param {string} sourceQueue the queue in which we send RPC requests
+   * @return {string}
+   */
+  _replyQueueName(sourceQueue) {
+    return `${sourceQueue}:${this._connection.config.hostname}:${process.pid}:${this._connection.connectionId}:res`;
+  }
+
   async _initializeRpcQueue(sourceQueue) {
     const rpcQueue = this.amqpRPCQueues[sourceQueue];
 
-    // we create the callback queue using base queue name + appending config hostname and :res for clarity
-    // ie. if hostname is gateway-http and queue is service-oauth, response queue will be service-oauth:gateway-http:res
-    // it is important to have different hostname or no hostname on each module sending message or there will be conflicts
-    const resQueue = `${sourceQueue}:${this._connection.config.hostname}:${process.pid}:res`;
     try {
       const channel = await this._connection.getDefaultChannel();
+      // Named after the channel is open, so the name is for the connection the channel is on.
+      const resQueue = this._replyQueueName(sourceQueue);
       await channel.assertQueue(resQueue, { durable: true, exclusive: true });
 
       // Remove-then-add holds this at exactly one listener on the channel no matter how many RPC
