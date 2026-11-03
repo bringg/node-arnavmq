@@ -9,17 +9,21 @@ const fixtures = {
 };
 
 describe('Producer/Consumer RPC messaging:', () => {
+  let lastReplyTo; // the reply queue name carried by the latest RPC request received on rpc-queue-0
+
   it('should be able to create a consumer that returns a message if called as RPC [rpc-queue-0]', async () => {
-    const created = await arnavmq.consumer.consume(fixtures.queues[0], () => 'Power Ranger Red');
+    const created = await arnavmq.consumer.consume(fixtures.queues[0], (msg, properties) => {
+      lastReplyTo = properties.replyTo;
+      return 'Power Ranger Red';
+    });
 
     assert(created === true);
   });
 
   it('should be able to send directly to the queue, without correlationId and not crash [rpc-queue-0]', async () => {
     await arnavmq.producer.produce(fixtures.queues[0], { nothing: true }, { rpc: true });
-    await arnavmq.producer.produce(`${fixtures.queues[0]}:${arnavmq.connection.config.hostname}:${process.pid}:res`, {
-      nothing: true,
-    });
+    // the reply queue name is random, so take it from the request the consumer just received
+    await arnavmq.producer.produce(lastReplyTo, { nothing: true });
     await utils.timeoutPromise(500);
   });
 
