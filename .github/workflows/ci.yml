@@ -11,12 +11,13 @@ on:
 
 jobs:
   tests:
-    name: Build and run unit tests
+    name: Build and run unit tests (node ${{ matrix.node-version }}, ${{ matrix.rabbitmq-image }})
     runs-on: ubuntu-latest
 
     strategy:
       matrix:
         node-version: [20.x, 22.x, 24.x]
+        rabbitmq-image: ['rabbitmq:3-alpine', 'rabbitmq:4-alpine']
 
     steps:
     - uses: actions/checkout@v3
@@ -29,6 +30,8 @@ jobs:
     - run: npm i
     - run: npm run lint
     - run: npm test
+      env:
+        RABBITMQ_IMAGE: ${{ matrix.rabbitmq-image }}
 
   publish:
     name: Publish to NPM registry
