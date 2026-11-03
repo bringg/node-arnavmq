@@ -58,20 +58,13 @@ class Producer {
   }
 
   /**
-   * Every pending RPC request has become unanswerable: the reply queue was exclusive to the
-   * connection that just went away, and each request was published carrying that queue's name as
-   * its replyTo, so no answer can ever arrive - not on a reconnect either. Reject the waiters now
-   * so callers fail fast instead of hanging out `rpcTimeout` for an answer that is not coming (and
-   * forever with `rpcTimeout: 0`, which arms no timer at all), and clear their timers so none keeps
-   * the process alive past shutdown. Dropping the whole registry also discards the dead reply-queue
-   * bookkeeping, so the next RPC publish rebuilds it.
+   * Default channel 'close' listener. The reply queues were consumed on that channel, so pending
+   * RPC requests may never get an answer: reject them now instead of letting them wait out
+   * `rpcTimeout` (or forever with `rpcTimeout: 0`). Dropping the registry makes the next RPC set the
+   * reply queue up again.
    *
-   * Fires on every teardown path: `Channels.closeAll()` during a graceful `close()`, and amqplib's
-   * `Connection.toClosed()` -> `_closeChannels()` for a channel wedged past closeAll's cap or a
-   * socket that died on its own. The rejection's `origin` tells them apart: 'shutdown' when
-   * `close()` had already flipped `this._connection.isClosed`, 'unexpected' otherwise. Warn-logs
-   * how many waiters were discarded, so a silent connection drop doesn't disappear pending RPCs
-   * without a trace.
+   * Fires on `close()`, on a connection lost on its own, and on the broker closing the channel. The
+   * rejection's `origin` is 'shutdown' after `close()`, 'unexpected' otherwise.
    * @private
    */
   _onChannelClose() {
@@ -171,15 +164,25 @@ class Producer {
     return await rpcData.resQueuePromise;
   }
 
+  /**
+   * The reply-queue name for `sourceQueue`: `<sourceQueue>:<hostname>:<pid>:<connection id>:res`.
+   * The connection id changes on reconnect, and the name with it. This avoids RESOURCE_LOCKED when
+   * the broker still considers the old connection's queue to exist.
+   * @private
+   * @param {string} sourceQueue the queue in which we send RPC requests
+   * @return {string}
+   */
+  _replyQueueName(sourceQueue) {
+    return `${sourceQueue}:${this._connection.config.hostname}:${process.pid}:${this._connection.connectionId}:res`;
+  }
+
   async _initializeRpcQueue(sourceQueue) {
     const rpcQueue = this.amqpRPCQueues[sourceQueue];
 
-    // we create the callback queue using base queue name + appending config hostname and :res for clarity
-    // ie. if hostname is gateway-http and queue is service-oauth, response queue will be service-oauth:gateway-http:res
-    // it is important to have different hostname or no hostname on each module sending message or there will be conflicts
-    const resQueue = `${sourceQueue}:${this._connection.config.hostname}:${process.pid}:res`;
     try {
       const channel = await this._connection.getDefaultChannel();
+      // Named after the channel is open, so the name is for the connection the channel is on.
+      const resQueue = this._replyQueueName(sourceQueue);
       await channel.assertQueue(resQueue, { durable: true, exclusive: true });
 
       // Remove-then-add holds this at exactly one listener on the channel no matter how many RPC

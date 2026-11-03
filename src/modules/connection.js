@@ -1,4 +1,5 @@
 const assert = require('assert');
+const crypto = require('crypto');
 const amqp = require('amqplib');
 const { Channels } = require('./channels');
 const { ConnectionHooks } = require('./hooks');
@@ -57,6 +58,11 @@ class Connection {
     this.hooks = new ConnectionHooks();
     /** @type {string} */
     this.startedAt = new Date().toISOString();
+    /**
+     * A random id, new on every connect. Part of the RPC reply-queue names.
+     * @type {string|null}
+     */
+    this.connectionId = null;
   }
 
   /**
@@ -146,6 +152,7 @@ class Connection {
       });
 
       this._channels = new Channels(connection, this._config);
+      this.connectionId = crypto.randomBytes(4).toString('hex');
       // on connection close, delete connection
       connection.on('close', () => {
         this._connectionPromise = null;
