@@ -18,9 +18,15 @@ const loggerAlias = 'arnav_mq:producer';
  */
 
 /**
+ * @typedef {Object} ReplyQueueSetup
+ * @property {string} [name] the reply queue name, once it is declared and consumed
+ * @property {Set<import('p-defer').DeferredPromise<string|undefined>>} waiters RPCs waiting for it
+ */
+
+/**
  * @typedef {Object.<string, RpcWaiter>} RpcQueue Correlation ID -> waiter, plus a
- *   `resQueuePromise` bookkeeping key for the queue itself (not a waiter).
- * @property {Promise<string>} [resQueuePromise]
+ *   `replyQueue` bookkeeping key for the reply queue's setup (not a waiter).
+ * @property {ReplyQueueSetup} [replyQueue]
  */
 
 class ProducerError extends Error {
@@ -47,7 +53,8 @@ class Producer {
     /**
      * Map of rpc queues
      *
-     * [queue: string] -> [correlationId: string] -> {responsePromise, timeoutId}
+     * [queue: string] -> [correlationId: string] -> {responsePromise, timeoutId}, plus the
+     * `replyQueue` setup - see `RpcQueue`
      * @type {Object.<string, RpcQueue>}
      */
     this.amqpRPCQueues = {};
@@ -83,8 +90,8 @@ class Producer {
 
     Object.values(queues).forEach((rpcQueue) => {
       Object.entries(rpcQueue).forEach(([key, waiter]) => {
-        // `resQueuePromise` is bookkeeping for the queue itself, not a correlationId waiter.
-        if (key === 'resQueuePromise') {
+        // `replyQueue` is bookkeeping for the reply queue itself, not a correlationId waiter.
+        if (key === 'replyQueue') {
           return;
         }
 
@@ -155,20 +162,61 @@ class Producer {
   }
 
   /**
-   * Create a RPC-ready queue
+   * Create a RPC-ready queue. Every RPC to `queue` shares one setup, kept in the registry until a
+   * channel close sweeps it. Callers wait in its `waiters` rather than on a shared promise, so one
+   * that times out is dropped instead of being held until a failing setup finally succeeds.
    * @param  {string} queue the queue name in which we send a RPC request
-   * @return {Promise}       Resolves with the the response queue name when the answer response queue is ready to receive messages
+   * @param  {number} [timeout] ms to wait; anything but a positive number waits as long as it takes
+   * @return {Promise<string|undefined>} Resolves with the reply queue name once it is ready to
+   *   receive messages, or undefined if the connection is closed. Rejects with the RPC timeout
+   *   error when `timeout` elapses first.
    */
-  async createRpcQueue(queue) {
-    this.amqpRPCQueues[queue] = this.amqpRPCQueues[queue] || {};
-
-    const rpcData = this.amqpRPCQueues[queue];
-    if (rpcData.resQueuePromise) {
-      return await rpcData.resQueuePromise;
+  async createRpcQueue(queue, timeout = 0) {
+    this.amqpRPCQueues[queue] ??= {};
+    this.amqpRPCQueues[queue].replyQueue ??= this._startReplyQueueSetup(queue);
+    const setup = this.amqpRPCQueues[queue].replyQueue;
+    if (setup.name) {
+      return setup.name;
     }
 
-    rpcData.resQueuePromise = this._initializeRpcQueue(queue);
-    return await rpcData.resQueuePromise;
+    const waiter = pDefer();
+    setup.waiters.add(waiter);
+    let timeoutId;
+    if (timeout > 0) {
+      timeoutId = setTimeout(() => {
+        setup.waiters.delete(waiter);
+        waiter.reject(new Error(ERRORS.TIMEOUT));
+      }, timeout);
+    }
+    try {
+      return await waiter.promise;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  /**
+   * Start setting up the reply queue for `queue`. Its waiters are settled when the setup finishes.
+   * @private
+   * @param {string} queue the queue name in which we send a RPC request
+   * @return {ReplyQueueSetup}
+   */
+  _startReplyQueueSetup(queue) {
+    /** @type {ReplyQueueSetup} */
+    const setup = { name: undefined, waiters: new Set() };
+    const settleWaiters = (settle) => {
+      setup.waiters.forEach(settle);
+      setup.waiters.clear();
+    };
+
+    this._initializeRpcQueue(queue).then(
+      (name) => {
+        setup.name = name;
+        settleWaiters((waiter) => waiter.resolve(name));
+      },
+      (error) => settleWaiters((waiter) => waiter.reject(error)),
+    );
+    return setup;
   }
 
   /**
@@ -189,37 +237,53 @@ class Producer {
     return `${sourceQueue}:${this._connection.config.hostname}:${process.pid}:${this._connection.connectionId}:res`;
   }
 
+  /**
+   * Declare and consume the reply queue for `sourceQueue`, retrying every `config.timeout` ms until
+   * it works or the connection is closed.
+   * @private
+   * @param {string} sourceQueue the queue in which we send RPC requests
+   * @return {Promise<string|undefined>} the reply queue name, or undefined if the connection is closed
+   */
   async _initializeRpcQueue(sourceQueue) {
     const rpcQueue = this.amqpRPCQueues[sourceQueue];
 
-    try {
-      const channel = await this._connection.getDefaultChannel();
-      // Named after the channel is open, so the name is for the connection the channel is on.
-      const resQueue = this._replyQueueName(sourceQueue);
-      await channel.assertQueue(resQueue, { durable: true, exclusive: true });
+    while (this.amqpRPCQueues[sourceQueue] === rpcQueue) {
+      try {
+        const channel = await this._connection.getDefaultChannel();
+        // Named after the channel is open, so the name is for the connection the channel is on.
+        const resQueue = this._replyQueueName(sourceQueue);
+        await channel.assertQueue(resQueue, { durable: true, exclusive: true });
 
-      // Remove-then-add holds this at exactly one listener on the channel no matter how many RPC
-      // queues get initialized on it, and re-arms it on the fresh channel after a reconnect.
-      channel.removeListener('close', this._onChannelClose);
-      channel.addListener('close', this._onChannelClose);
+        // Remove-then-add holds this at exactly one listener on the channel no matter how many RPC
+        // queues get initialized on it, and re-arms it on the fresh channel after a reconnect.
+        channel.removeListener('close', this._onChannelClose);
+        channel.addListener('close', this._onChannelClose);
 
-      await channel.consume(resQueue, this.maybeAnswer(sourceQueue), {
-        noAck: true,
-      });
-      return resQueue;
-    } catch (error) {
-      delete rpcQueue.resQueuePromise;
-
-      if (error instanceof ConnectionClosedError) {
-        logger.warn({
-          message: `${loggerAlias} not reinitializing RPC queue for ${sourceQueue}: connection is closed`,
+        await channel.consume(resQueue, this.maybeAnswer(sourceQueue), {
+          noAck: true,
         });
-        return undefined;
-      }
+        return resQueue;
+      } catch (error) {
+        if (error instanceof ConnectionClosedError || this._connection.isClosed) {
+          delete rpcQueue.replyQueue;
+          logger.warn({
+            message: `${loggerAlias} not reinitializing RPC queue for ${sourceQueue}: connection is closed`,
+          });
+          return undefined;
+        }
 
-      await utils.timeoutPromise(this._connection.config.timeout);
-      return await this.createRpcQueue(sourceQueue);
+        logger.warn({
+          message: `${loggerAlias} failed to set up RPC reply queue for ${sourceQueue}, retrying in ${this._connection.config.timeout}ms: ${error.message}`,
+          error,
+          params: { queue: sourceQueue },
+        });
+        await utils.timeoutPromise(this._connection.config.timeout);
+      }
     }
+
+    // A channel close swept the registry meanwhile: join the setup new RPCs find instead of running
+    // a second one.
+    return await this.createRpcQueue(sourceQueue);
   }
 
   async publishOrSendToQueue(queue, msg, options) {
@@ -269,11 +333,16 @@ class Producer {
     options.persistent = true;
 
     if (options.rpc) {
+      // Using given timeout or default one. It also covers setting up the reply queue, so no caller
+      // waits past it for a reply queue that cannot be declared. `Number()`, since callers pass it
+      // as a string too.
+      const timeout = Number(options.timeout || this._connection.config.rpcTimeout || 0);
+      const deadline = Date.now() + timeout;
       // generates a correlationId (random uuid) so we know which callback to execute on received response
       options.correlationId = utils.getCorrelationId(options);
       // reply to us if you receive this message! Taken from the return value rather than read back
       // out of `amqpRPCQueues`, which a channel close landing in this very window would have swept.
-      options.replyTo = await this.createRpcQueue(queue);
+      options.replyTo = await this.createRpcQueue(queue, timeout);
 
       // deferred promise that will resolve when response is received
       const responsePromise = pDefer();
@@ -301,10 +370,9 @@ class Producer {
         throw error;
       }
 
-      // Using given timeout or default one
-      const timeout = options.timeout || this._connection.config.rpcTimeout || 0;
+      // Whatever is left of the timeout after the setup and the publish above.
       if (timeout > 0) {
-        this.prepareTimeoutRpc(queue, options.correlationId, timeout);
+        this.prepareTimeoutRpc(queue, options.correlationId, Math.max(deadline - Date.now(), 0));
       }
 
       return await responsePromise.promise;

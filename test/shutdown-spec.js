@@ -107,7 +107,7 @@ function newArnavmq(overrides = {}) {
 
 /** The correlationId of the pending RPC waiter registered in amqpRPCQueues[queue], if any. */
 function pendingCorrelationId(producer, queue) {
-  return Object.keys(producer.amqpRPCQueues[queue] || {}).find((key) => key !== 'resQueuePromise');
+  return Object.keys(producer.amqpRPCQueues[queue] || {}).find((key) => key !== 'replyQueue');
 }
 
 /** A producer with one RPC request already published and waiting for its response. */
@@ -996,7 +996,7 @@ describe('graceful shutdown', () => {
     it('drops the dead reply-queue bookkeeping, so the next RPC publish rebuilds it', async () => {
       const queue = 'shutdown:producer-close:resqueue-rebuilt';
       const { channel, producer, rpcPromise } = await newPendingRpc(queue);
-      assert(producer.amqpRPCQueues[queue].resQueuePromise, 'expected a reply queue to have been set up');
+      assert(producer.amqpRPCQueues[queue].replyQueue, 'expected a reply queue to have been set up');
 
       channel.emit('close');
       await assert.rejects(() => rpcPromise, ConnectionClosedError);

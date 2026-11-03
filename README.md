@@ -97,6 +97,7 @@ arnavmq.publish('queue:name', { message: 'content' }, { rpc: true, timeout: 1000
 The optional `timeout` option results in a rejection when no answer has been received after the given amount of milliseconds.
 When '0' is given, there will be no timeout for this call.
 This value will overwrite the default timeout set in the config in `rpcTimeout`.
+The timeout also covers setting up the reply queue.
 
 Answers come back on an exclusive reply queue named `<queue>:<hostname>:<pid>:<random>:res`. Every new connection gives it a new name, so a name the broker still holds for a lost connection - on RabbitMQ 4.2+, for a connection on a lost node until that node is removed with `forget_cluster_node` - never blocks RPC calls.
 
