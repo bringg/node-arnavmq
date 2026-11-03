@@ -3,7 +3,7 @@ const assert = require('assert');
 const amqplib = require('amqplib');
 const sinon = require('sinon');
 const pDefer = require('p-defer');
-const { Connection } = require('../src/modules/connection');
+const { Connection, ConnectionClosedError } = require('../src/modules/connection');
 const { ArnavMQ } = require('../src/modules/arnavmq');
 const utils = require('../src/modules/utils');
 
@@ -217,6 +217,35 @@ describe('RPC reply queue', () => {
 
       const result = await Promise.race([setup, utils.timeoutPromise(1000).then(() => 'still retrying')]);
       assert.ok(result instanceof ConnectionClosedError);
+    });
+  });
+
+  describe('reply queue deleted by the broker while an RPC is pending', () => {
+    it('rejects the pending RPC with ConnectionClosedError and sets up again for the next one', async () => {
+      const gate = pDefer();
+      const received = pDefer();
+      await arnavmq.consumer.consume(`${queue}:slow`, async (msg, properties) => {
+        received.resolve(properties.replyTo);
+        await gate.promise;
+        return 'late';
+      });
+
+      const pending = arnavmq.publish(`${queue}:slow`, {}, { rpc: true, timeout: 5000 });
+      const outcome = pending.then(
+        () => undefined,
+        (error) => error,
+      );
+      const replyQueue = await received.promise;
+      // exclusive queues refuse other connections, so delete it over the same one
+      const probe = await (await arnavmq.connection.getConnection()).createChannel();
+      await probe.deleteQueue(replyQueue);
+
+      const error = await outcome;
+      assert(error instanceof ConnectionClosedError);
+      assert.strictEqual(error.message, 'RPC reply consumer was cancelled by the broker');
+
+      gate.resolve();
+      assert.strictEqual(await arnavmq.publish(`${queue}:slow`, {}, { rpc: true, timeout: 5000 }), 'late');
     });
   });
 });

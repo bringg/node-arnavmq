@@ -99,7 +99,8 @@ When '0' is given, there will be no timeout for this call.
 This value will overwrite the default timeout set in the config in `rpcTimeout`.
 The timeout also covers setting up the reply queue.
 
-Answers come back on an exclusive reply queue named `<queue>:<hostname>:<pid>:<random>:res`. Every new connection gives it a new name, so a name the broker still holds for a lost connection - on RabbitMQ 4.2+, for a connection on a lost node until that node is removed with `forget_cluster_node` - never blocks RPC calls.
+Answers come back on an exclusive reply queue named `<queue>:<hostname>:<pid>:<random>:res`. The random part changes on every reconnect, so a reply queue the broker still holds for the old connection can't block RPC calls with `RESOURCE_LOCKED`.
+If the reply queue is deleted on the broker, the RPC calls waiting on it are rejected with `ConnectionClosedError`, and the next RPC call declares it again.
 
 ## Routing keys
 

@@ -7,6 +7,7 @@ const { ConnectionClosedError } = require('./connection');
 
 const ERRORS = {
   TIMEOUT: 'Timeout reached',
+  REPLY_CONSUMER_CANCELLED: 'RPC reply consumer was cancelled by the broker',
 };
 
 const loggerAlias = 'arnav_mq:producer';
@@ -78,10 +79,22 @@ class Producer {
     const queues = this.amqpRPCQueues;
     this.amqpRPCQueues = {};
 
+    this._discardWaiters(Object.values(queues), 'on channel close');
+  }
+
+  /**
+   * Reject every waiter in `rpcQueues` with `ConnectionClosedError`, clear their timers, and
+   * warn-log how many were discarded.
+   * @private
+   * @param {RpcQueue[]} rpcQueues
+   * @param {string} why ends the log message
+   * @param {string} [message] the rejection's message; 'Connection is closed' by default
+   */
+  _discardWaiters(rpcQueues, why, message = undefined) {
     const origin = this._connection.isClosed ? 'shutdown' : 'unexpected';
     let discardedCount = 0;
 
-    Object.values(queues).forEach((rpcQueue) => {
+    rpcQueues.forEach((rpcQueue) => {
       Object.entries(rpcQueue).forEach(([key, waiter]) => {
         // `replyQueue` is bookkeeping for the reply queue itself, not a correlationId waiter.
         if (key === 'replyQueue') {
@@ -90,7 +103,7 @@ class Producer {
 
         discardedCount += 1;
         clearTimeout(waiter.timeoutId);
-        waiter.responsePromise.reject(new ConnectionClosedError(origin));
+        waiter.responsePromise.reject(new ConnectionClosedError(origin, message));
       });
     });
 
@@ -98,7 +111,7 @@ class Producer {
       logger.warn({
         message: `${loggerAlias} discarded ${discardedCount} pending RPC ${
           discardedCount === 1 ? 'request' : 'requests'
-        } on channel close (${origin})`,
+        } ${why} (${origin})`,
         params: { discardedCount, origin },
       });
     }
@@ -121,6 +134,21 @@ class Producer {
     const rpcQueue = this.amqpRPCQueues[queue];
 
     return (msg) => {
+      // null: the broker cancelled the consumer, for instance because the queue was deleted. Reject
+      // the pending requests and drop the entry, so the next RPC sets the reply queue up again.
+      // Skipped if a channel close already swept the entry.
+      if (msg === null) {
+        if (this.amqpRPCQueues[queue] === rpcQueue) {
+          delete this.amqpRPCQueues[queue];
+          this._discardWaiters(
+            [rpcQueue],
+            `after the broker cancelled the reply consumer for ${queue}`,
+            ERRORS.REPLY_CONSUMER_CANCELLED,
+          );
+        }
+        return;
+      }
+
       // check the correlation ID sent by the initial message using RPC
       const { correlationId } = msg.properties;
       const waiter = rpcQueue[correlationId];
@@ -155,14 +183,13 @@ class Producer {
   }
 
   /**
-   * Create a RPC-ready queue. Every RPC to `queue` shares one setup, kept in the registry until a
-   * channel close sweeps it. Callers wait in its `waiters` rather than on a shared promise, so one
-   * that times out is dropped instead of being held until a failing setup finally succeeds.
+   * Create a RPC-ready queue. All RPCs to `queue` share one setup. A caller that times out is
+   * removed from its `waiters`, so nothing of it stays attached to a setup that keeps failing.
    * @param  {string} queue the queue name in which we send a RPC request
-   * @param  {number} [timeout] ms to wait; anything but a positive number waits as long as it takes
-   * @return {Promise<string|undefined>} Resolves with the reply queue name once it is ready to
-   *   receive messages, or undefined if the connection is closed. Rejects with the RPC timeout
-   *   error when `timeout` elapses first.
+   * @param  {number} [timeout] ms to wait; 0 (the default) means no limit
+   * @return {Promise<string>} Resolves with the reply queue name once it is ready to receive
+   *   messages. Rejects with `ConnectionClosedError` once the connection is closed, or with the RPC
+   *   timeout error when `timeout` elapses first.
    */
   async createRpcQueue(queue, timeout = 0) {
     this.amqpRPCQueues[queue] ??= {};

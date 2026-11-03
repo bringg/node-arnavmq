@@ -55,7 +55,7 @@ declare class Producer {
    * @param queue name of the queue where messages are SENT
    * @return function executed by an amqp.node channel consume callback method
    */
-  private maybeAnswer(queue: string): (msg: amqp.Message) => void;
+  private maybeAnswer(queue: string): (msg: amqp.ConsumeMessage | null) => void;
   /**
    * Create a RPC-ready queue. Every RPC to `queue` shares one setup; a caller that times out is
    * dropped from it.
@@ -79,6 +79,8 @@ declare class Producer {
    * @return the reply queue name, or undefined if the connection is closed
    */
   private _initializeRpcQueue(sourceQueue: string): Promise<string | undefined>;
+  /** Reject every waiter in `rpcQueues` with `ConnectionClosedError` and warn-log the count. */
+  private _discardWaiters(rpcQueues: RpcQueue[], why: string): void;
   /**
    * Produces a message to a queue through the default exchange, or publishes to the given exchange if the options have a `routingKey`, using it for the queue name.
    * @param queue The queue to send or exchange to publish to.
