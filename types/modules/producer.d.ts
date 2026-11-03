@@ -34,8 +34,13 @@ interface ReplyQueueSetup {
   waiters: Set<pDefer.DeferredPromise<string | undefined>>;
 }
 
-/** Correlation ID -> waiter, plus the `replyQueue` setup (not a waiter). */
-type RpcQueue = Record<string, RpcWaiter> & { replyQueue?: ReplyQueueSetup };
+/** The RPC bookkeeping for one target queue. */
+interface RpcQueue {
+  /** The reply queue's setup. */
+  replyQueue?: ReplyQueueSetup;
+  /** Correlation ID -> pending request. */
+  requests: Record<string, RpcWaiter>;
+}
 
 declare class Producer {
   constructor(connection: Connection);
@@ -43,8 +48,8 @@ declare class Producer {
   /**
    * Map of rpc queues
    *
-   * [queue: string] -> [correlationId: string] -> {responsePromise, timeoutId}, plus the
-   * `replyQueue` setup
+   * [queue: string] -> {replyQueue, requests: [correlationId: string] ->
+   *   {responsePromise, timeoutId}}
    */
   private readonly amqpRPCQueues: Record<string, RpcQueue>;
   private _connection: Connection;
@@ -82,7 +87,7 @@ declare class Producer {
   private _initializeRpcQueue(sourceQueue: string): Promise<string | undefined>;
   /** Publish `msg` on `channel`, through the default exchange or to `queue` as an exchange with `options.routingKey`. */
   private _publishOn(channel: amqp.Channel, queue: string, msg: Buffer, options: ProduceOptions): boolean;
-  /** Reject every waiter in `rpcQueues` with `ConnectionClosedError` and warn-log the count. */
+  /** Reject every pending request in `rpcQueues` with `ConnectionClosedError` and warn-log the count. */
   private _discardWaiters(rpcQueues: RpcQueue[], why: string): void;
   /**
    * Produces a message to a queue through the default exchange, or publishes to the given exchange if the options have a `routingKey`, using it for the queue name.

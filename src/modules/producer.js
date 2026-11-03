@@ -12,9 +12,9 @@ const ERRORS = {
 const loggerAlias = 'arnav_mq:producer';
 
 /**
- * @typedef {Object} RpcWaiter
- * @property {import('p-defer').DeferredPromise} responsePromise
- * @property {NodeJS.Timeout|null} timeoutId
+ * @typedef {Object} RpcWaiter A pending RPC request.
+ * @property {import('p-defer').DeferredPromise<unknown>} responsePromise
+ * @property {NodeJS.Timeout|null} timeoutId armed once the request is published, when it has a timeout
  */
 
 /**
@@ -24,9 +24,9 @@ const loggerAlias = 'arnav_mq:producer';
  */
 
 /**
- * @typedef {Object.<string, RpcWaiter>} RpcQueue Correlation ID -> waiter, plus a
- *   `replyQueue` bookkeeping key for the reply queue's setup (not a waiter).
- * @property {ReplyQueueSetup} [replyQueue]
+ * @typedef {Object} RpcQueue The RPC bookkeeping for one target queue.
+ * @property {ReplyQueueSetup} [replyQueue] the reply queue's setup
+ * @property {Object.<string, RpcWaiter>} requests correlation ID -> pending request
  */
 
 class ProducerError extends Error {
@@ -53,8 +53,8 @@ class Producer {
     /**
      * Map of rpc queues
      *
-     * [queue: string] -> [correlationId: string] -> {responsePromise, timeoutId}, plus the
-     * `replyQueue` setup - see `RpcQueue`
+     * [queue: string] -> {replyQueue, requests: [correlationId: string] ->
+     *   {responsePromise, timeoutId}}
      * @type {Object.<string, RpcQueue>}
      */
     this.amqpRPCQueues = {};
@@ -89,8 +89,8 @@ class Producer {
   }
 
   /**
-   * Reject every waiter in `rpcQueues` with `ConnectionClosedError`, clear their timers, and
-   * warn-log how many were discarded.
+   * Reject every pending request in `rpcQueues` with `ConnectionClosedError`, clear their timers,
+   * and warn-log how many were discarded.
    * @private
    * @param {RpcQueue[]} rpcQueues
    * @param {string} why ends the log message
@@ -100,12 +100,7 @@ class Producer {
     let discardedCount = 0;
 
     rpcQueues.forEach((rpcQueue) => {
-      Object.entries(rpcQueue).forEach(([key, waiter]) => {
-        // `replyQueue` is bookkeeping for the reply queue itself, not a correlationId waiter.
-        if (key === 'replyQueue') {
-          return;
-        }
-
+      Object.values(rpcQueue.requests).forEach((waiter) => {
         discardedCount += 1;
         clearTimeout(waiter.timeoutId);
         waiter.responsePromise.reject(new ConnectionClosedError(origin));
@@ -153,7 +148,7 @@ class Producer {
 
       // check the correlation ID sent by the initial message using RPC
       const { correlationId } = msg.properties;
-      const waiter = rpcQueue[correlationId];
+      const waiter = rpcQueue.requests[correlationId];
 
       // On timeout the waiter is deleted, so we need to handle the race when the response arrives too late.
       if (waiter === undefined) {
@@ -179,7 +174,7 @@ class Producer {
         waiter.responsePromise.reject(new ProducerError(e));
       } finally {
         clearTimeout(waiter.timeoutId);
-        delete rpcQueue[correlationId];
+        delete rpcQueue.requests[correlationId];
       }
     };
   }
@@ -196,7 +191,7 @@ class Producer {
    *   error when `timeout` elapses first.
    */
   async createRpcQueue(queue, timeout = 0) {
-    this.amqpRPCQueues[queue] ??= {};
+    this.amqpRPCQueues[queue] ??= { requests: {} };
     this.amqpRPCQueues[queue].replyQueue ??= this._startReplyQueueSetup(queue);
     const setup = this.amqpRPCQueues[queue].replyQueue;
     if (setup.name) {
@@ -344,16 +339,16 @@ class Producer {
     const producer = this;
     // `?.` because a channel close or a cancelled reply consumer drops the whole per-queue entry,
     // and the waiter in it has then already been rejected with ConnectionClosedError.
-    let waiter = producer.amqpRPCQueues[queue]?.[corrId];
+    let waiter = producer.amqpRPCQueues[queue]?.requests[corrId];
     if (!waiter) {
       return;
     }
 
     waiter.timeoutId = setTimeout(() => {
-      waiter = producer.amqpRPCQueues[queue]?.[corrId];
+      waiter = producer.amqpRPCQueues[queue]?.requests[corrId];
       if (waiter) {
         waiter.responsePromise.reject(new Error(ERRORS.TIMEOUT));
-        delete producer.amqpRPCQueues[queue][corrId];
+        delete producer.amqpRPCQueues[queue].requests[corrId];
       }
     }, time);
   }
@@ -392,7 +387,7 @@ class Producer {
 
       // deferred promise that will resolve when response is received
       const responsePromise = pDefer();
-      rpcQueue[options.correlationId] = { responsePromise, timeoutId: null };
+      rpcQueue.requests[options.correlationId] = { responsePromise, timeoutId: null };
 
       try {
         this._publishOn(channel, queue, msg, options);
@@ -400,7 +395,7 @@ class Producer {
         // The request never made it out, so no response can ever arrive to settle this waiter, and
         // prepareTimeoutRpc() below was never reached - nothing else will ever clear it. Left in
         // the registry it leaks until the channel closes.
-        delete rpcQueue[options.correlationId];
+        delete rpcQueue.requests[options.correlationId];
         throw error;
       }
 

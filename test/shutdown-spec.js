@@ -105,9 +105,9 @@ function newArnavmq(overrides = {}) {
   return new ArnavMQ(newConnection(overrides));
 }
 
-/** The correlationId of the pending RPC waiter registered in amqpRPCQueues[queue], if any. */
+/** The correlationId of the pending RPC waiter registered in amqpRPCQueues[queue].requests, if any. */
 function pendingCorrelationId(producer, queue) {
-  return Object.keys(producer.amqpRPCQueues[queue] || {}).find((key) => key !== 'replyQueue');
+  return Object.keys(producer.amqpRPCQueues[queue]?.requests || {})[0];
 }
 
 /** A producer with one RPC request already published and waiting for its response. */
@@ -948,7 +948,7 @@ describe('graceful shutdown', () => {
       const queue = 'shutdown:producer-close:clear-timeout';
       const { channel, producer, rpcPromise } = await newPendingRpc(queue);
 
-      const { timeoutId } = producer.amqpRPCQueues[queue][pendingCorrelationId(producer, queue)];
+      const { timeoutId } = producer.amqpRPCQueues[queue].requests[pendingCorrelationId(producer, queue)];
       assert(timeoutId, 'expected a timer to have been scheduled for the pending RPC');
 
       channel.emit('close');
