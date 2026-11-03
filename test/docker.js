@@ -28,7 +28,9 @@ class Docker {
       }
 
       try {
-        await exec(`docker exec ${this.name} rabbitmqctl status`);
+        // Run as the server's user: run as root, rabbitmqctl can create a root-owned
+        // .erlang.cookie before the server does, and the server then crashes reading it.
+        await exec(`docker exec --user rabbitmq ${this.name} rabbitmqctl status`);
         return;
       } catch (err) {
         lastErr = err;
