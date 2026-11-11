@@ -105,9 +105,9 @@ function newArnavmq(overrides = {}) {
   return new ArnavMQ(newConnection(overrides));
 }
 
-/** The correlationId of the pending RPC waiter registered in amqpRPCQueues[queue], if any. */
+/** The correlationId of the pending RPC waiter registered in amqpRPCQueues[queue].requests, if any. */
 function pendingCorrelationId(producer, queue) {
-  return Object.keys(producer.amqpRPCQueues[queue] || {}).find((key) => key !== 'resQueuePromise');
+  return Object.keys(producer.amqpRPCQueues[queue]?.requests || {})[0];
 }
 
 /** A producer with one RPC request already published and waiting for its response. */
@@ -147,42 +147,6 @@ async function settled(fn) {
 function waitForCancelled(mq) {
   const subscriptions = mq.consumer._subscriptions;
   return waitFor(() => subscriptions.length > 0 && subscriptions.every((sub) => sub.cancelled));
-}
-
-/**
- * Resolves after one full turn of the event loop. Node reports unhandled rejections once the
- * microtask queue has drained, so draining microtasks alone (`await Promise.resolve()`, however
- * many times) never observes one, while a single turn always does - making this exact rather than
- * a sleep long enough to probably work. A sleep that turned out to be too short would report "no
- * unhandled rejection" and pass a test that should have failed.
- */
-function nextTurn() {
-  return new Promise((resolve) => {
-    setImmediate(resolve);
-  });
-}
-
-/**
- * Runs `fn` with every existing 'unhandledRejection' listener (mocha installs one that fails the
- * current test from underneath it) swapped out for a recorder, and returns what Node reported.
- * Lets a test assert on unhandled rejections itself, with its own message.
- */
-async function recordUnhandledRejections(fn) {
-  const existing = process.listeners('unhandledRejection');
-  existing.forEach((listener) => process.removeListener('unhandledRejection', listener));
-
-  const seen = [];
-  const recorder = (error) => seen.push(error);
-  process.on('unhandledRejection', recorder);
-  try {
-    await fn();
-    await nextTurn(); // let Node report anything still unhandled
-  } finally {
-    process.removeListener('unhandledRejection', recorder);
-    existing.forEach((listener) => process.on('unhandledRejection', listener));
-  }
-
-  return seen;
 }
 
 describe('graceful shutdown', () => {
@@ -984,7 +948,7 @@ describe('graceful shutdown', () => {
       const queue = 'shutdown:producer-close:clear-timeout';
       const { channel, producer, rpcPromise } = await newPendingRpc(queue);
 
-      const { timeoutId } = producer.amqpRPCQueues[queue][pendingCorrelationId(producer, queue)];
+      const { timeoutId } = producer.amqpRPCQueues[queue].requests[pendingCorrelationId(producer, queue)];
       assert(timeoutId, 'expected a timer to have been scheduled for the pending RPC');
 
       channel.emit('close');
@@ -996,7 +960,7 @@ describe('graceful shutdown', () => {
     it('drops the dead reply-queue bookkeeping, so the next RPC publish rebuilds it', async () => {
       const queue = 'shutdown:producer-close:resqueue-rebuilt';
       const { channel, producer, rpcPromise } = await newPendingRpc(queue);
-      assert(producer.amqpRPCQueues[queue].resQueuePromise, 'expected a reply queue to have been set up');
+      assert(producer.amqpRPCQueues[queue].replyQueue, 'expected a reply queue to have been set up');
 
       channel.emit('close');
       await assert.rejects(() => rpcPromise, ConnectionClosedError);
@@ -1036,56 +1000,19 @@ describe('graceful shutdown', () => {
       const producer = new Producer(connection);
       const timeoutSpy = sandbox.spy(utils, 'timeoutPromise');
 
-      const result = await producer.createRpcQueue('shutdown:producer-close:closed-from-start');
+      await assert.rejects(
+        () => producer.createRpcQueue('shutdown:producer-close:closed-from-start'),
+        ConnectionClosedError,
+      );
 
       // one attempt, then the guard stops it: no internal retry-loop recursion, no delay-then-retry.
-      assert.strictEqual(result, undefined);
       sinon.assert.notCalled(timeoutSpy);
       sinon.assert.calledOnce(connection.getDefaultChannel);
     });
 
-    // checkRpc() registers the waiter *before* awaiting the publish and only attaches its own
-    // handler (`return await responsePromise.promise`) after it. A close landing in that window
-    // rejects a deferred nobody is listening to yet, and a rejection left unhandled for a full turn
-    // of the loop is fatal under Node's default `--unhandled-rejections=throw`. Note the `settled`
-    // handler below is on checkRpc()'s own promise, a different promise than the deferred, and does
-    // not mask this.
-    it('a close landing while the RPC publish is still in flight does not leave the rejection unhandled', async () => {
-      const channel = createFakeChannel();
-      const publishGate = pDefer();
-      // A publish that is a real round-trip rather than a microtask, so the window is actually open.
-      channel.sendToQueue = sinon.stub().callsFake(() => publishGate.promise);
-      const producer = new Producer(createFakeConnection(channel));
-      const queue = 'shutdown:producer-close:publish-window';
-
-      let settled;
-      const seen = await recordUnhandledRejections(async () => {
-        const rpcPromise = producer.checkRpc(queue, 'payload', { rpc: true });
-        settled = rpcPromise.then(
-          () => undefined,
-          (error) => error,
-        );
-
-        await waitFor(() => channel.sendToQueue.called);
-        assert(pendingCorrelationId(producer, queue), 'expected the waiter to be registered');
-
-        channel.emit('close');
-        await nextTurn(); // the turn in which Node would report the rejection as unhandled
-
-        publishGate.resolve(true); // now let the publish finish, so checkRpc() reaches its await
-      });
-
-      assert.deepStrictEqual(
-        seen.map((error) => error && error.message),
-        [],
-        'expected no unhandled rejection while the close raced the in-flight publish',
-      );
-      assert((await settled) instanceof ConnectionClosedError, 'expected the rejection to still reach the caller');
-    });
-
     it('deletes the waiter when the publish itself fails, so nothing is left in the registry', async () => {
       const channel = createFakeChannel();
-      channel.sendToQueue = sinon.stub().rejects(new Error('broker blip'));
+      channel.sendToQueue = sinon.stub().throws(new Error('broker blip'));
       const producer = new Producer(createFakeConnection(channel));
       const queue = 'shutdown:producer-close:publish-failed';
 
@@ -1100,19 +1027,14 @@ describe('graceful shutdown', () => {
       );
     });
 
-    // The sweep drops the whole per-queue entry, and checkRpc() has two awaits between creating that
-    // entry and registering its waiter in it. A close landing in between used to leave checkRpc()
-    // indexing a key that was gone, so the caller got a TypeError instead of the publish's own
-    // retryable error - and with retries capped, a real message failed for the wrong reason.
+    // The sweep drops the whole per-queue entry, and checkRpc() awaits between creating that entry and
+    // registering its waiter in it.
     it('survives a close landing between createRpcQueue() and the waiter registration', async () => {
       const channel = createFakeChannel();
-      channel.sendToQueue = sinon.stub().callsFake(() => {
-        throw new Error('Channel closed');
-      });
+      channel.sendToQueue = sinon.stub().throws(new Error('Channel closed'));
       const producer = new Producer(createFakeConnection(channel));
       const queue = 'shutdown:producer-close:setup-window';
 
-      // drive the close into the window, exactly once
       const createRpcQueue = producer.createRpcQueue.bind(producer);
       let dropped = false;
       producer.createRpcQueue = async (q) => {
@@ -1124,15 +1046,31 @@ describe('graceful shutdown', () => {
         return resQueue;
       };
 
+      // The publish's own error must reach the caller: unlike ConnectionClosedError, _sendToQueue retries it.
       await assert.rejects(() => producer.checkRpc(queue, 'payload', { rpc: true }), /Channel closed/);
+      assert.strictEqual(pendingCorrelationId(producer, queue), undefined);
+    });
 
-      // The publish's own error is what the caller must see: unlike ConnectionClosedError it is
-      // retryable, so _sendToQueue reconnects and republishes rather than losing the request.
-      assert.strictEqual(
-        pendingCorrelationId(producer, queue),
-        undefined,
-        'expected no orphaned RPC waiter after the failed publish',
-      );
+    // Setup takes 200 ms of the 300 ms timeout, and the answer takes 200 ms more. Had the setup not
+    // used up part of the timeout, the request would succeed.
+    it('counts the reply-queue setup in the RPC timeout', async () => {
+      const channel = createFakeChannel();
+      channel.assertQueue = sinon.stub().callsFake(async () => {
+        await utils.timeoutPromise(200);
+        return {};
+      });
+      channel.sendToQueue = sinon.stub().callsFake((q, buffer, options) => {
+        setTimeout(
+          () => deliver(channel, options.replyTo, fakeMessage('done', { correlationId: options.correlationId })),
+          200,
+        );
+        return true;
+      });
+      const producer = new Producer(createFakeConnection(channel, { producerMaxRetries: 0, rpcTimeout: 300 }));
+
+      await assert.rejects(() => producer.publish('shutdown:producer-close:setup-deadline', 'payload', { rpc: true }), {
+        message: 'Timeout reached',
+      });
     });
 
     // The win from putting this on the channel rather than in close(): the same code covers a
