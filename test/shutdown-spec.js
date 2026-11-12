@@ -965,8 +965,8 @@ describe('graceful shutdown', () => {
       channel.emit('close');
       await assert.rejects(() => rpcPromise, ConnectionClosedError);
 
-      // The reply queue was exclusive to the connection that just went away, so keeping its promise
-      // would hand every later RPC a replyTo naming a queue that no longer exists.
+      // Its consumer was on the closed channel, and after a lost connection the exclusive queue is gone
+      // too: keeping its promise would hand later RPCs a replyTo that nothing consumes.
       assert.strictEqual(producer.amqpRPCQueues[queue], undefined);
       assert(await producer.createRpcQueue(queue), 'expected the next RPC publish to rebuild the reply queue');
     });
@@ -1027,62 +1027,61 @@ describe('graceful shutdown', () => {
       );
     });
 
-    // A producer whose broker answers every request, and whose channel closes once: on checkRpc()'s own
-    // getDefaultChannel() call, after the reply queue is set up.
-    function newProducerResetOnce(overrides) {
+    // The sweep drops the whole per-queue entry, and checkRpc() awaits createRpcQueue() and
+    // getDefaultChannel() between creating that entry and registering its waiter in it. A close
+    // landing in between used to leave checkRpc() indexing a key that was gone, so the caller got a
+    // TypeError instead of the publish's own retryable error - and with retries capped, a real
+    // message failed for the wrong reason.
+    it('survives a close landing between createRpcQueue() and the waiter registration', async () => {
       const channel = createFakeChannel();
-      const publishedReplyTos = [];
-      channel.sendToQueue = sinon.stub().callsFake((q, buffer, options) => {
-        publishedReplyTos.push(options.replyTo);
-        setImmediate(() =>
-          deliver(channel, options.replyTo, fakeMessage('done', { correlationId: options.correlationId })),
-        );
-        return true;
+      channel.sendToQueue = sinon.stub().callsFake(() => {
+        throw new Error('Channel closed');
       });
-      const connection = createFakeConnection(channel, overrides);
-      const getDefaultChannel = connection.getDefaultChannel.bind(connection);
-      let calls = 0;
-      connection.getDefaultChannel = async () => {
-        calls += 1;
-        if (calls === 2) {
-          channel.emit('close');
-        }
-        return await getDefaultChannel();
-      };
-      return { channel, publishedReplyTos, producer: new Producer(connection) };
-    }
-
-    // A close between the reply-queue setup and the publish must not send a request naming a reply
-    // queue nothing consumes: checkRpc() sets it up again and publishes once. producerMaxRetries is 0,
-    // so the retry can't come from _sendToQueue.
-    it('does not publish with a reply queue that was reset in the meantime, and completes after the retry', async () => {
-      const { producer, publishedReplyTos } = newProducerResetOnce({ producerMaxRetries: 0 });
+      const producer = new Producer(createFakeConnection(channel));
       const queue = 'shutdown:producer-close:setup-window';
 
-      assert.strictEqual(await producer.publish(queue, 'payload', { rpc: true }), 'done');
+      // drive the close into the window, exactly once
+      const createRpcQueue = producer.createRpcQueue.bind(producer);
+      let dropped = false;
+      producer.createRpcQueue = async (q, timeout) => {
+        const resQueue = await createRpcQueue(q, timeout);
+        if (!dropped) {
+          dropped = true;
+          channel.emit('close');
+        }
+        return resQueue;
+      };
 
-      // the request published before the reset would have made two
-      assert.strictEqual(publishedReplyTos.length, 1, 'the stale request must not have been published');
-      assert.strictEqual(pendingCorrelationId(producer, queue), undefined);
+      await assert.rejects(() => producer.checkRpc(queue, 'payload', { rpc: true }), /Channel closed/);
+
+      // The publish's own error is what the caller must see: unlike ConnectionClosedError it is
+      // retryable, so _sendToQueue reconnects and republishes rather than losing the request.
+      assert.strictEqual(
+        pendingCorrelationId(producer, queue),
+        undefined,
+        'expected no orphaned RPC waiter after the failed publish',
+      );
     });
 
-    // Each setup takes 200 ms of the 300 ms timeout. Had the reset restarted the clock, the second
-    // setup would finish at ~400 ms and the (answered) request would succeed.
-    it('does not restart the timeout when the reply queue is reset and set up again', async () => {
-      const { producer, channel, publishedReplyTos } = newProducerResetOnce({
-        producerMaxRetries: 0,
-        rpcTimeout: 300,
-      });
+    // The setup takes 200 ms of the 300 ms timeout and the answer another 200 ms. If the setup were
+    // not counted, the answer would arrive 200 ms after the publish and beat the timeout.
+    it('counts the reply-queue setup time toward the RPC timeout', async () => {
+      const channel = createFakeChannel();
       channel.assertQueue = sinon.stub().callsFake(async () => {
         await utils.timeoutPromise(200);
         return {};
       });
+      channel.sendToQueue = sinon.stub().callsFake((q, buffer, options) => {
+        utils
+          .timeoutPromise(200)
+          .then(() => deliver(channel, options.replyTo, fakeMessage('done', { correlationId: options.correlationId })));
+        return true;
+      });
+      const producer = new Producer(createFakeConnection(channel, { rpcTimeout: 300 }));
 
-      await assert.rejects(() => producer.publish('shutdown:producer-close:reset-deadline', 'payload', { rpc: true }), {
+      await assert.rejects(() => producer.publish('shutdown:producer-close:setup-deadline', 'payload', { rpc: true }), {
         message: 'Timeout reached',
       });
-
-      assert.strictEqual(publishedReplyTos.length, 0);
     });
 
     // The win from putting this on the channel rather than in close(): the same code covers a

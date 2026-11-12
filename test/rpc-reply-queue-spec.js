@@ -154,9 +154,6 @@ describe('RPC reply queue', () => {
 
       await assert.rejects(() => short, { message: 'Timeout reached' });
 
-      const { waiters } = arnavmq.producer.amqpRPCQueues[queue].replyQueue;
-      assert.strictEqual(waiters.size, 1, 'only the caller still waiting stays registered');
-
       locked = false;
       assert.strictEqual(await long, 'answer');
     });

@@ -26,18 +26,10 @@ interface RpcWaiter {
   timeoutId: NodeJS.Timeout | null;
 }
 
-/** The reply queue's setup for one target queue. */
-interface ReplyQueueSetup {
-  /** The reply queue name, once it is declared and consumed. */
-  name?: string;
-  /** RPCs waiting for the setup to finish. */
-  waiters: Set<pDefer.DeferredPromise<string>>;
-}
-
 /** The RPC bookkeeping for one target queue. */
 interface RpcQueue {
-  /** The reply queue's setup. */
-  replyQueue?: ReplyQueueSetup;
+  /** The reply queue's setup; resolves with its name. */
+  replyQueue?: Promise<string>;
   /** Correlation ID -> pending request. */
   requests: Record<string, RpcWaiter>;
 }
@@ -62,8 +54,8 @@ declare class Producer {
    */
   private maybeAnswer(queue: string): (msg: amqp.ConsumeMessage | null) => void;
   /**
-   * Create a RPC-ready queue. Every RPC to `queue` shares one setup; a caller that times out is
-   * dropped from it.
+   * Create a RPC-ready queue. Every RPC to `queue` shares one setup promise, and each caller races
+   * it against its own timer.
    * @param  queue the queue name in which we send a RPC request
    * @param  timeout ms to wait; 0 (the default) means no limit
    * @return Resolves with the reply queue name once it's ready to receive messages. Rejects with
@@ -71,8 +63,6 @@ declare class Producer {
    *   `timeout` elapses first.
    */
   private createRpcQueue(queue: string, timeout?: number): Promise<string>;
-  /** Starts the reply-queue setup for `queue` and returns its record. */
-  private _startReplyQueueSetup(queue: string): ReplyQueueSetup;
   /**
    * The reply-queue name for `sourceQueue` on the current connection:
    * `<sourceQueue>:<hostname>:<pid>:<connection id>:res`.
