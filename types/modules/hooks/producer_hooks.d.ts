@@ -34,6 +34,7 @@ type BeforeProduceHook = (this: Producer, e: ProduceInfo) => Promise<void>;
 
 type ProduceSettings = amqp.MessageProperties & {
   routingKey?: string;
+  /** When true, `correlationId` and `replyTo` (`amq.rabbitmq.reply-to`) are already set when `beforeProduce` runs. */
   rpc?: boolean;
 };
 

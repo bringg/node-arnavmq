@@ -27,12 +27,16 @@ function getCorrelationId(options) {
  * @param {Promise} promise
  * @param {number} timeoutMs
  * @param {string} what Described in the timeout error message.
+ * @param {() => Error} [createError] Builds the timeout error instead of the default one.
  * @return {Promise}
  */
-async function withTimeout(promise, timeoutMs, what) {
+async function withTimeout(promise, timeoutMs, what, createError = undefined) {
   let timeoutId;
   const timeout = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(`Timed out after ${timeoutMs}ms waiting for ${what}`)), timeoutMs);
+    timeoutId = setTimeout(
+      () => reject(createError ? createError() : new Error(`Timed out after ${timeoutMs}ms waiting for ${what}`)),
+      timeoutMs,
+    );
   });
 
   try {

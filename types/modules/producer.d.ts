@@ -13,40 +13,27 @@ interface ProduceOptions extends amqp.Options.Publish {
    * When sending to the default exchange, it is the same as not passing the option: `producer.produce('', "message", {routingKey:"my-queue"})` is the same as `producer.produce('my-queue', "message")`
    */
   routingKey?: string;
-  /** When true, will produce the request with RPC settings, waiting for a response on a dedicated response queue after sending the message, and finally returning it. */
+  /**
+   * When true, will produce the request with RPC settings, waiting for the response through RabbitMQ Direct Reply-to after sending the message, and finally returning it.
+   * `replyTo` is set to `amq.rabbitmq.reply-to`. A caller-supplied `correlationId` must be unique among the process's pending RPC requests; a duplicate is rejected.
+   */
   rpc?: boolean;
-  /** Timeout in milliseconds for producing RPC request and waiting for the response. Does not affect non-rpc requests. */
+  /** Timeout in milliseconds for producing RPC request and waiting for the response, including setting up the reply consumer. Does not affect non-rpc requests. */
   timeout?: number;
 }
 
 declare class Producer {
   constructor(connection: Connection);
   hooks: ProducerHooks;
-  /**
-   * Map of rpc queues
-   *
-   * [queue: string] -> [correlationId: string] -> {responsePromise, timeoutId}
-   */
-  private readonly amqpRPCQueues: Record<
-    string,
-    Record<string, { responsePromise: pDefer.DeferredPromise<unknown>; timeoutId: NodeJS.Timeout }>
-  >;
+  /** Pending RPC requests by correlation ID, across every target queue. */
+  private readonly _rpcRequests: Map<string, pDefer.DeferredPromise<unknown>>;
+  /** The Direct Reply-to consumer on the default channel, once the first RPC on it set it up. */
+  private _replyConsumer: { channel: amqp.Channel; ready: Promise<void> } | null;
+  /** The last channel given a 'close' listener, so a re-consumed channel doesn't get a second one. */
+  private _watchedChannel: amqp.Channel | null;
   private _connection: Connection;
   private set connection(value: Connection);
   get connection(): Connection;
-  /**
-   * Get a function to execute on channel consumer incoming message is received
-   * @param queue name of the queue where messages are SENT
-   * @return function executed by an amqp.node channel consume callback method
-   */
-  private maybeAnswer(queue: string): (msg: amqp.Message) => void;
-  /**
-   * Create a RPC-ready queue
-   * @param  queue the queue name in which we send a RPC request
-   * @return Resolves with the response queue name once it's ready to receive messages, or
-   *   undefined if the connection is closed.
-   */
-  private createRpcQueue(queue: string): Promise<string | undefined>;
   /**
    * Produces a message to a queue through the default exchange, or publishes to the given exchange if the options have a `routingKey`, using it for the queue name.
    * @param queue The queue to send or exchange to publish to.
@@ -55,15 +42,7 @@ declare class Producer {
    */
   private publishOrSendToQueue(queue: string, msg: Buffer, options: ProduceOptions): Promise<boolean>;
   /**
-   * Start a timer to reject the pending RPC call if no answer is received within the given timeout
-   * @param queue  The queue where the RPC request was sent
-   * @param corrId The RPC correlation ID
-   * @param time The timeout in ms to wait for an answer before triggering the rejection
-   * @return Nothing
-   */
-  private prepareTimeoutRpc(queue: string, corrId: string, time: number): void;
-  /**
-   * Send message with or without rpc protocol, and check if RPC queues are created
+   * Send message with or without rpc protocol
    * @param queue the queue to send `msg` on
    * @param msg string, object, number.. anything bufferable/serializable
    * @param options contain rpc property (if true, enable rpc for this message)
@@ -91,14 +70,32 @@ declare class Producer {
   ): Promise<unknown>;
 
   private _shouldRetry(error: Error | ProducerError, currentRetryNumber: number): boolean;
+  /** The default channel, with the Direct Reply-to consumer set up on it. Internal. */
+  private _getReplyChannel(): Promise<amqp.Channel>;
+  /** Consumes Direct Reply-to replies on `channel`, and watches it for close. Internal. */
+  private _consumeReplies(channel: amqp.Channel): Promise<void>;
+  /** Delivery callback of the Direct Reply-to consumer; `null` means the broker cancelled it. Internal. */
+  private _onReply(channel: amqp.Channel, msg: amqp.Message | null): void;
   /**
-   * Channel 'close' listener. Rejects every RPC request still pending in `amqpRPCQueues` with
-   * `ConnectionClosedError` and clears its timeout, then drops the registry so the dead reply
-   * queue is rebuilt on the next RPC publish. Fires on a deliberate `close()` and on a connection
-   * lost unexpectedly alike - the rejection's `origin` ('shutdown' vs 'unexpected') tells them
-   * apart. Internal.
+   * `promise`, rejected with the RPC timeout error if `deadline` (epoch ms; `null` = no limit) passes
+   * first. Internal.
    */
-  private _onChannelClose(): void;
+  private _beforeDeadline<T>(promise: Promise<T>, deadline: number | null): Promise<T>;
+  /**
+   * Publishes `msg` on `channel`, through the default exchange or to `queue` as an exchange with
+   * `options.routingKey`. Internal.
+   */
+  private _publishOn(channel: amqp.Channel, queue: string, msg: Buffer, options: ProduceOptions): boolean;
+  /**
+   * Forgets the reply consumer on `channel` (closed, or cancelled by the broker) and rejects the
+   * pending RPC requests. Internal.
+   */
+  private _resetReplyConsumer(channel: amqp.Channel, why: string): void;
+  /**
+   * Rejects every pending RPC request with `ConnectionClosedError`. The rejection's `origin`
+   * ('shutdown' vs 'unexpected') tells a deliberate `close()` from a lost connection. Internal.
+   */
+  private _discardRequests(why: string): void;
 }
 
 declare namespace Producer {

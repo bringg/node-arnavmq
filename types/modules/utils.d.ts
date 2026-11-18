@@ -16,6 +16,12 @@ export declare function timeoutPromise(timer: number): Promise<void>;
 /**
  * Resolves with `promise`, or rejects once `timeoutMs` elapses - whichever happens first.
  * @param what Described in the timeout error message.
+ * @param createError Builds the timeout error instead of the default one.
  */
-export declare function withTimeout<T>(promise: Promise<T>, timeoutMs: number, what: string): Promise<T>;
+export declare function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  what: string,
+  createError?: () => Error,
+): Promise<T>;
 export {};
