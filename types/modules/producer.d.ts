@@ -29,8 +29,6 @@ declare class Producer {
   private readonly _rpcRequests: Map<string, pDefer.DeferredPromise<unknown>>;
   /** The Direct Reply-to consumer on the default channel, once the first RPC on it set it up. */
   private _replyConsumer: { channel: amqp.Channel; ready: Promise<void> } | null;
-  /** The last channel given a 'close' listener, so a re-consumed channel doesn't get a second one. */
-  private _watchedChannel: amqp.Channel | null;
   private _connection: Connection;
   private set connection(value: Connection);
   get connection(): Connection;
@@ -72,10 +70,10 @@ declare class Producer {
   private _shouldRetry(error: Error | ProducerError, currentRetryNumber: number): boolean;
   /** The default channel, with the Direct Reply-to consumer set up on it. Internal. */
   private _getReplyChannel(): Promise<amqp.Channel>;
-  /** Consumes Direct Reply-to replies on `channel`, and watches it for close. Internal. */
+  /** Consumes Direct Reply-to replies on `channel`, and rejects pending requests once it closes. Internal. */
   private _consumeReplies(channel: amqp.Channel): Promise<void>;
-  /** Delivery callback of the Direct Reply-to consumer; `null` means the broker cancelled it. Internal. */
-  private _onReply(channel: amqp.Channel, msg: amqp.Message | null): void;
+  /** Delivery callback of the Direct Reply-to consumer; ignores `null` (a broker cancel). Internal. */
+  private _onReply(msg: amqp.Message | null): void;
   /**
    * `promise`, rejected with the RPC timeout error if `deadline` (epoch ms; `null` = no limit) passes
    * first. Internal.
@@ -87,15 +85,10 @@ declare class Producer {
    */
   private _publishOn(channel: amqp.Channel, queue: string, msg: Buffer, options: ProduceOptions): boolean;
   /**
-   * Forgets the reply consumer on `channel` (closed, or cancelled by the broker) and rejects the
-   * pending RPC requests. Internal.
-   */
-  private _resetReplyConsumer(channel: amqp.Channel, why: string): void;
-  /**
    * Rejects every pending RPC request with `ConnectionClosedError`. The rejection's `origin`
    * ('shutdown' vs 'unexpected') tells a deliberate `close()` from a lost connection. Internal.
    */
-  private _discardRequests(why: string): void;
+  private _discardRequests(): void;
 }
 
 declare namespace Producer {

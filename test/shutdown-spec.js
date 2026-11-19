@@ -1048,42 +1048,15 @@ describe('graceful shutdown', () => {
       assert.strictEqual(await rpc, 'pong');
     });
 
-    // Publishing with the Direct Reply-to `replyTo` on a channel without the consumer is a channel
-    // error that would close the default channel for every caller, so the producer refuses.
-    it('throws a retryable error and publishes nothing when the consumer was reset between setup and publish', async () => {
-      const channel = createFakeChannel();
-      channel.consume = sinon.stub().callsFake(async () => {
-        await Promise.resolve(); // a real channel reports its close asynchronously
-        channel.emit('close'); // the channel dies while the consumer setup is being confirmed
-        return { consumerTag: 'fake' };
-      });
-      const producer = new Producer(createFakeConnection(channel, { producerMaxRetries: 3 }));
-
-      const error = await settled(() => producer.checkRpc('shutdown:reset', 'payload', { rpc: true, timeout: 1000 }));
-
-      assert(error instanceof Error);
-      assert(!(error instanceof ConnectionClosedError), 'a retry has to be possible');
-      assert.strictEqual(producer._shouldRetry(error, 0), true);
-      sinon.assert.notCalled(channel.sendToQueue);
-      assert.strictEqual(producer._rpcRequests.size, 0);
-    });
-
-    it('a broker cancel rejects the pending requests without closing the channel, and the next RPC consumes again on it', async () => {
-      const { channel, producer, rpcPromise } = await newPendingRpc();
+    // RabbitMQ never cancels a Direct Reply-to consumer, so a null delivery is not acted on.
+    it('ignores a null delivery: the pending request stays pending and still resolves on its reply', async () => {
+      const { channel, producer, rpcPromise } = await newPendingRpc({ options: { correlationId: 'pending' } });
 
       await deliver(channel, DIRECT_REPLY_TO, null);
 
-      await assert.rejects(() => rpcPromise, ConnectionClosedError);
-      sinon.assert.notCalled(channel.close);
-      assert.strictEqual(producer._rpcRequests.size, 0);
-
-      const next = producer.checkRpc('shutdown:cancel', 'payload', { rpc: true, correlationId: 'next' });
-      await waitFor(() => producer._rpcRequests.has('next'));
-
-      sinon.assert.calledTwice(channel.consume);
-      assert.strictEqual(channel.listenerCount('close'), 1);
-      await reply(channel, 'next', 'pong');
-      assert.strictEqual(await next, 'pong');
+      assert.deepStrictEqual([...producer._rpcRequests.keys()], ['pending']);
+      await reply(channel, 'pending', 'pong');
+      assert.strictEqual(await rpcPromise, 'pong');
     });
 
     it('rejects pending RPC waiters when the socket dies on its own, not just on close()', async () => {

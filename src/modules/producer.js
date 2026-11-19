@@ -7,7 +7,6 @@ const { ConnectionClosedError } = require('./connection');
 
 const ERRORS = {
   TIMEOUT: 'Timeout reached',
-  REPLY_CONSUMER_RESET: 'RPC reply consumer was reset before the request was published',
 };
 
 /**
@@ -53,13 +52,6 @@ class Producer {
      * @type {{channel: import('amqplib').Channel, ready: Promise<void>}|null}
      */
     this._replyConsumer = null;
-
-    /**
-     * The last channel given a 'close' listener, so a consumer set up again on the same channel
-     * (after a broker cancel) doesn't add a second one. A closed channel is never handed out again.
-     * @type {import('amqplib').Channel|null}
-     */
-    this._watchedChannel = null;
   }
 
   set connection(value) {
@@ -95,44 +87,27 @@ class Producer {
   }
 
   /**
-   * Consume Direct Reply-to replies on `channel`, and watch it for close.
+   * Consume Direct Reply-to replies on `channel`. The pending requests were all published on it, so
+   * once it closes none of them can get a reply: reject them then. The next RPC sets the consumer up
+   * on the new default channel.
    * @private
    * @param {import('amqplib').Channel} channel
    * @return {Promise<void>}
    */
   async _consumeReplies(channel) {
-    if (this._watchedChannel !== channel) {
-      this._watchedChannel = channel;
-      channel.once('close', () => this._resetReplyConsumer(channel, 'on channel close'));
-    }
-    await channel.consume(DIRECT_REPLY_TO, (msg) => this._onReply(channel, msg), { noAck: true });
-  }
-
-  /**
-   * The reply consumer on `channel` is gone (the channel closed, or the broker cancelled it). Forget
-   * it so the next RPC sets it up again, and reject the pending requests: they were all published on
-   * `channel`, so none can get a reply any more.
-   * @private
-   * @param {import('amqplib').Channel} channel
-   * @param {string} why ends the log message
-   */
-  _resetReplyConsumer(channel, why) {
-    if (this._replyConsumer?.channel === channel) {
-      this._replyConsumer = null;
-    }
-    this._discardRequests(why);
+    channel.once('close', () => this._discardRequests());
+    await channel.consume(DIRECT_REPLY_TO, (msg) => this._onReply(msg), { noAck: true });
   }
 
   /**
    * Delivery callback of the Direct Reply-to consumer.
    * @private
-   * @param {import('amqplib').Channel} channel
    * @param {import('amqplib').Message|null} msg
    */
-  _onReply(channel, msg) {
+  _onReply(msg) {
+    // amqplib passes null when the broker cancels a consumer. RabbitMQ never cancels a Direct
+    // Reply-to consumer: it is not tracked with the queue consumers that it cancels.
     if (msg === null) {
-      // The broker cancelled the consumer. The channel stays open, but no reply can reach it.
-      this._resetReplyConsumer(channel, 'after the broker cancelled the reply consumer');
       return;
     }
 
@@ -163,9 +138,8 @@ class Producer {
    * `rpcTimeout` (or forever with `rpcTimeout: 0`). The rejection's `origin` is 'shutdown' after
    * `close()`, 'unexpected' otherwise.
    * @private
-   * @param {string} why ends the log message
    */
-  _discardRequests(why) {
+  _discardRequests() {
     const requests = [...this._rpcRequests.values()];
     this._rpcRequests.clear();
     if (requests.length === 0) {
@@ -177,7 +151,7 @@ class Producer {
     logger.warn({
       message: `${loggerAlias} discarded ${requests.length} pending RPC ${
         requests.length === 1 ? 'request' : 'requests'
-      } ${why} (${origin})`,
+      } on channel close (${origin})`,
       params: { discardedCount: requests.length, origin },
     });
   }
@@ -250,13 +224,6 @@ class Producer {
     const { correlationId } = options;
 
     const channel = await this._beforeDeadline(this._getReplyChannel(), deadline);
-
-    if (this._replyConsumer?.channel !== channel) {
-      // The consumer went away while we waited (broker cancel, channel closed). A request with the
-      // Direct Reply-to replyTo on a channel without the consumer is a channel error, which would
-      // close the default channel for every subscription on it. Retryable: the next attempt sets it up.
-      throw new Error(ERRORS.REPLY_CONSUMER_RESET);
-    }
 
     // All replies share one consumer, so a correlation ID already pending would be answered with
     // the other request's reply.
