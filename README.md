@@ -108,7 +108,8 @@ Replies use RabbitMQ's [Direct Reply-to](https://www.rabbitmq.com/docs/direct-re
 
 1.0 replaces the per-target `<queue>:<hostname>:<pid>:res` reply queues with Direct Reply-to. The calling API, options, errors and hooks are unchanged. What changes:
 
-- No `:res` reply queues are declared any more.- `properties.replyTo` is `amq.rabbitmq.reply-to` in producer hooks, and `amq.rabbitmq.reply-to.<suffix>` on the responder.
+- No `:res` reply queues are declared any more.
+- `properties.replyTo` is `amq.rabbitmq.reply-to` in producer hooks, and `amq.rabbitmq.reply-to.<suffix>` on the responder.
 - Replies are not buffered in a queue. A requester whose event loop stalls lets replies back up in broker memory instead.
 - A duplicate pending `correlationId` is rejected instead of overwriting the earlier request.
 - The producer's internal reply-queue members (`amqpRPCQueues`, `createRpcQueue`, `maybeAnswer`, `prepareTimeoutRpc`) are gone.
