@@ -98,6 +98,24 @@ The optional `timeout` option results in a rejection when no answer has been rec
 When '0' is given, there will be no timeout for this call.
 This value will overwrite the default timeout set in the config in `rpcTimeout`.
 
+Replies use RabbitMQ's [Direct Reply-to](https://www.rabbitmq.com/docs/direct-reply-to): the producer consumes the `amq.rabbitmq.reply-to` pseudo-queue on its default channel, and publishes RPC requests on that channel with `replyTo: 'amq.rabbitmq.reply-to'`. No reply queue is declared. The responder sees `replyTo` rewritten to `amq.rabbitmq.reply-to.<suffix>` and only has to publish its reply to the default exchange with that routing key, which arnavmq consumers do.
+
+- Replies are not queued: a reply whose requester channel has closed is dropped by the broker. The request was already rejected with `ConnectionClosedError` when the channel closed.
+- All replies arrive on one consumer and are matched by `correlationId`. If you pass your own `correlationId`, it must be unique among the RPC requests pending in the process; a duplicate is rejected.
+- The connecting user must be allowed to consume `amq.rabbitmq.reply-to`.
+
+### Upgrading to 1.0
+
+1.0 replaces the per-target `<queue>:<hostname>:<pid>:res` reply queues with Direct Reply-to. The calling API, options, errors and hooks are unchanged. What changes:
+
+- No `:res` reply queues are declared any more.
+- `properties.replyTo` is `amq.rabbitmq.reply-to` in producer hooks, and `amq.rabbitmq.reply-to.<suffix>` on the responder.
+- Replies are not buffered in a queue. A requester whose event loop stalls lets replies back up in broker memory instead.
+- A duplicate pending `correlationId` is rejected instead of overwriting the earlier request.
+- The producer's internal reply-queue members (`amqpRPCQueues`, `createRpcQueue`, `maybeAnswer`, `prepareTimeoutRpc`) are gone.
+
+Old and new versions work together: responders reply to whatever `replyTo` they receive.
+
 ## Routing keys
 
 You can send publish commands with routing keys (thanks to @nekrasoft)
